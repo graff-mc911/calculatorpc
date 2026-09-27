@@ -5,7 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, ChevronRight, AlertCircle, FileText, ScanLine } from 'lucide-react';
+import { Plus, Users, ChevronRight, AlertCircle, FileText, ScanLine, Tag } from 'lucide-react';
 import { computeHomeMoney, type MonthData } from '../lib/homeMoney';
 
 // ---------------------------------------------------------
@@ -271,6 +271,12 @@ export const Home: React.FC = () => {
       color: 'text-green-400',
       onClick: () => navigate('/clients/new'),
     },
+    {
+      label: t('pricesNav') || 'Ціни',
+      icon: Tag,
+      color: 'text-amber-400',
+      onClick: () => navigate('/prices'),
+    },
   ];
 
   return (
@@ -378,7 +384,7 @@ export const Home: React.FC = () => {
           {t('quickActions') || 'Швидкі дії'}
         </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {quickActions.map((action) => (
             <button
               key={action.label}
