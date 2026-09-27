@@ -149,6 +149,22 @@ export default function Settings() {
       <div className="space-y-4">
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
           <h2 className="text-lg font-medium text-white mb-4">
+            {t('account') || 'Акаунт'}
+          </h2>
+          <button
+            type="button"
+            onClick={() => navigate('/account')}
+            className="flex items-center justify-between w-full py-3 px-2 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <span className="text-white">
+              {t('companyProfile') || t('account') || 'Профіль компанії'}
+            </span>
+            <span className="text-white/40">›</span>
+          </button>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+          <h2 className="text-lg font-medium text-white mb-4">
             {t('appearance') || 'Зовнішній вигляд'}
           </h2>
 

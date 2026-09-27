@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { LogOut, Globe, Settings } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
@@ -7,10 +7,14 @@ import { languages } from '../lib/languages';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Logo } from './Logo';
 
+/**
+ * App header: logo (→ Home), language, settings, logout.
+ * Page-link nav (Home / Invoices / Contacts / Receipts / Scan / Account) removed —
+ * navigation is via Home cards + logo.
+ */
 export const TopNav: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { t, language, setLanguage } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -27,26 +31,9 @@ export const TopNav: React.FC = () => {
     }
   }, [isDark]);
 
-  const navItems = React.useMemo(
-    () => [
-      { path: '/', label: t('home') },
-      { path: '/invoices', label: t('invoices') },
-      { path: '/clients', label: t('clients') },
-      { path: '/receipts', label: t('receipts') },
-      { path: '/scan', label: t('scanReceiptTitle') },
-      { path: '/account', label: t('account') },
-    ],
-    [t],
-  );
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
-  };
-
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
   };
 
   const currentLanguage = languages.find((lang) => lang.code === language) || languages[0];
@@ -55,29 +42,7 @@ export const TopNav: React.FC = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-xl border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-6">
-            <Logo variant="glass" size="md" />
-
-            <div className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => {
-                const active = isActive(item.path);
-                return (
-                  <button
-                    key={item.path}
-                    type="button"
-                    onClick={() => navigate(item.path)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
-                      active
-                        ? 'text-white bg-orange-500/20 border border-orange-500/30'
-                        : 'text-white/70 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <Logo variant="glass" size="md" />
 
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -126,6 +91,7 @@ export const TopNav: React.FC = () => {
               type="button"
               onClick={() => navigate('/settings')}
               className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+              aria-label="Settings"
             >
               <Settings className="h-4 w-4" />
             </button>
@@ -134,6 +100,7 @@ export const TopNav: React.FC = () => {
               type="button"
               onClick={() => void handleLogout()}
               className="p-2 text-white/70 hover:text-red-400 hover:bg-white/10 rounded-lg transition-all"
+              aria-label="Logout"
             >
               <LogOut className="h-4 w-4" />
             </button>
