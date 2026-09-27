@@ -4,15 +4,45 @@ import {
   CATALOG_UPDATED_AT,
   CATALOG_WORKS,
   PRICE_COUNTRIES,
+  catalogWorksByCategory,
   type CatalogMaterial,
   type CatalogSupplier,
   type CatalogWork,
   type CountryMoney,
   type PriceCountryCode,
+  type WorkCategory,
   type YoutubeLink,
 } from '../data/priceCatalogSeed';
 
-export type { PriceCountryCode, CatalogWork, CatalogMaterial, CountryMoney, YoutubeLink };
+export type {
+  PriceCountryCode,
+  CatalogWork,
+  CatalogMaterial,
+  CountryMoney,
+  YoutubeLink,
+  WorkCategory,
+};
+
+export { catalogWorksByCategory };
+
+const CATEGORY_LABELS: Record<WorkCategory, { en: string; uk: string; de: string; es: string }> = {
+  tiling: { en: 'Tiling', uk: 'Плитка', de: 'Fliesen', es: 'Alicatado' },
+  plaster: { en: 'Plaster', uk: 'Штукатурка', de: 'Putz', es: 'Enlucido' },
+  paint: { en: 'Painting', uk: 'Малярка', de: 'Malerarbeiten', es: 'Pintura' },
+  drywall: { en: 'Drywall', uk: 'Гіпсокартон', de: 'Trockenbau', es: 'Pladur' },
+  masonry: { en: 'Masonry', uk: 'Мурування', de: 'Mauerwerk', es: 'Albañilería' },
+  concrete: { en: 'Concrete', uk: 'Бетон', de: 'Beton', es: 'Hormigón' },
+  flooring: { en: 'Flooring', uk: 'Підлога', de: 'Bodenbelag', es: 'Suelos' },
+  plumbing: { en: 'Plumbing', uk: 'Сантехніка', de: 'Sanitär', es: 'Fontanería' },
+  electrical: { en: 'Electrical', uk: 'Електрика', de: 'Elektro', es: 'Electricidad' },
+  roofing: { en: 'Roofing', uk: 'Покрівля', de: 'Dach', es: 'Cubierta' },
+  insulation: { en: 'Insulation', uk: 'Утеплення', de: 'Dämmung', es: 'Aislamiento' },
+  facade: { en: 'Facade', uk: 'Фасад', de: 'Fassade', es: 'Fachada' },
+  demolition: { en: 'Demolition', uk: 'Демонтаж', de: 'Abbruch', es: 'Demolición' },
+  doors_windows: { en: 'Doors & windows', uk: 'Двері / вікна', de: 'Türen & Fenster', es: 'Puertas y ventanas' },
+  outdoor: { en: 'Outdoor', uk: 'Двір / вулиця', de: 'Außenanlagen', es: 'Exterior' },
+  other: { en: 'Other', uk: 'Інше', de: 'Sonstiges', es: 'Otros' },
+};
 
 const COUNTRY_STORAGE_KEY = 'scblight_work_price_country';
 const DEFAULT_COUNTRY: PriceCountryCode = 'DE';
@@ -123,7 +153,7 @@ function catalogSuppliersById(): Map<string, CatalogSupplier> {
 export function searchWorksLocal(
   query: string,
   country: PriceCountryCode,
-  limit = 40
+  limit = 120
 ): WorkSearchHit[] {
   const normalized = normalizePriceQuery(query);
   const tokens = tokenize(query);
@@ -225,6 +255,15 @@ export function localizedCountryName(code: PriceCountryCode, lang: string): stri
   return c.name.en;
 }
 
+export function localizedCategoryName(category: WorkCategory | string, lang: string): string {
+  const labels = CATEGORY_LABELS[category as WorkCategory];
+  if (!labels) return category;
+  if (lang === 'uk') return labels.uk;
+  if (lang === 'de') return labels.de;
+  if (lang === 'es') return labels.es;
+  return labels.en;
+}
+
 /**
  * Load catalog works for a country.
  * Tries Supabase `works` / `work_prices` when available; falls back to curated local seed.
@@ -265,5 +304,7 @@ export function catalogStats() {
     suppliers: CATALOG_SUPPLIERS.length,
     countries: PRICE_COUNTRIES.map((c) => c.code),
     updatedAt: CATALOG_UPDATED_AT,
+    byCategory: catalogWorksByCategory(),
+    allHaveYoutube: CATALOG_WORKS.every((w) => w.youtube.length > 0),
   };
 }

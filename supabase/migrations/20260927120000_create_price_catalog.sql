@@ -6,7 +6,9 @@
   until this migration is applied in Supabase.
 
   Countries: DE, UA, ES
-  Categories: tiling, plaster, paint, drywall, other
+  Categories: tiling, plaster, paint, drywall, masonry, concrete, flooring,
+    plumbing, electrical, roofing, insulation, facade, demolition,
+    doors_windows, outdoor, other
 */
 
 -- Countries
@@ -184,7 +186,8 @@ ON CONFLICT (slug) DO UPDATE SET
   country_code = EXCLUDED.country_code;
 
 -- Note: Full works/materials/BOM/YouTube seed lives in the app bootstrap
--- (src/data/priceCatalogSeed.ts — 35 works, 20 materials, DE/UA/ES).
+-- (src/data/priceCatalogSeed.ts — ~110 works, ~50 materials, DE/UA/ES,
+-- every work has ≥1 curated YouTube how-to).
 -- Import into these tables via admin CSV or a follow-up seed migration
 -- once Supabase MCP / service role is available for this project.
 -- Schema + RLS + countries + suppliers are ready for that sync.

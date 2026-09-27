@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -16,6 +16,7 @@ import {
   formatMoney,
   getStoredPriceCountry,
   getWorkDetailLocal,
+  localizedCategoryName,
   localizedCountryName,
   localizedMaterialName,
   localizedWorkName,
@@ -173,8 +174,8 @@ export default function Prices() {
                   <h2 className="text-lg font-semibold text-white leading-snug">
                     {localizedWorkName(detail.work, language)}
                   </h2>
-                  <p className="text-white/40 text-xs mt-1 capitalize">
-                    {detail.work.category} · {detail.work.unit}
+                  <p className="text-white/40 text-xs mt-1">
+                    {localizedCategoryName(detail.work.category, language)} · {detail.work.unit}
                   </p>
                 </div>
               </div>
@@ -258,8 +259,8 @@ export default function Prices() {
               {detail.youtube.length > 0 && (
                 <div>
                   <h3 className="text-white/70 text-sm font-medium mb-2 flex items-center gap-1.5">
-                    <PlayCircle size={14} />
-                    YouTube
+                    <PlayCircle size={14} className="text-red-400" />
+                    {t('pricesYoutube') || 'YouTube — how to'}
                   </h3>
                   <div className="flex flex-col gap-2">
                     {detail.youtube.map((yt) => (
@@ -268,13 +269,19 @@ export default function Prices() {
                         href={yt.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm text-white/80"
+                        className="flex items-center justify-between gap-2 px-3.5 py-3 rounded-xl bg-red-500/15 border border-red-500/30 hover:bg-red-500/25 text-sm text-white font-medium"
                       >
-                        <span className="truncate">
-                          {yt.title}
-                          <span className="text-white/35"> · {yt.lang.toUpperCase()}</span>
+                        <span className="flex items-center gap-2 min-w-0">
+                          <PlayCircle size={18} className="text-red-400 shrink-0" />
+                          <span className="truncate">
+                            {yt.title}
+                            <span className="text-white/40 font-normal"> · {yt.lang.toUpperCase()}</span>
+                          </span>
                         </span>
-                        <ExternalLink size={14} className="text-white/35 shrink-0" />
+                        <span className="text-red-300/90 text-xs shrink-0 flex items-center gap-1">
+                          YouTube
+                          <ExternalLink size={14} />
+                        </span>
                       </a>
                     ))}
                   </div>
@@ -295,34 +302,56 @@ export default function Prices() {
                 {t('pricesNoResults') || 'Нічого не знайдено. Спробуйте інший запит.'}
               </p>
             ) : (
-              hits.map((hit, i) => (
-                <motion.button
+              hits.map((hit, i) => {
+                const primaryYt = hit.work.youtube[0];
+                return (
+                <motion.div
                   key={hit.work.id}
-                  type="button"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                  onClick={() => setSelectedId(hit.work.id)}
-                  className="w-full text-left px-4 py-3.5 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/15 hover:border-orange-500/30 transition-all"
+                  className="rounded-2xl bg-white/10 border border-white/10 hover:border-orange-500/30 transition-all overflow-hidden"
                 >
-                  <div className="flex justify-between gap-3 items-start">
-                    <div className="min-w-0">
-                      <p className="text-white font-medium truncate">
-                        {localizedWorkName(hit.work, language)}
-                      </p>
-                      <p className="text-white/35 text-xs mt-0.5 capitalize">
-                        {hit.work.category} · {hit.work.unit}
-                      </p>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(hit.work.id)}
+                    className="w-full text-left px-4 py-3.5 hover:bg-white/5 transition-all"
+                  >
+                    <div className="flex justify-between gap-3 items-start">
+                      <div className="min-w-0">
+                        <p className="text-white font-medium truncate">
+                          {localizedWorkName(hit.work, language)}
+                        </p>
+                        <p className="text-white/35 text-xs mt-0.5">
+                          {localizedCategoryName(hit.work.category, language)} · {hit.work.unit}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-green-400 font-semibold tabular-nums">
+                          {formatMoney(hit.labor.price, hit.labor.currency, locale)}
+                        </p>
+                        <p className="text-white/30 text-[11px]">/ {hit.work.unit}</p>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-green-400 font-semibold tabular-nums">
-                        {formatMoney(hit.labor.price, hit.labor.currency, locale)}
-                      </p>
-                      <p className="text-white/30 text-[11px]">/ {hit.work.unit}</p>
+                  </button>
+                  {primaryYt && (
+                    <div className="px-4 pb-3 -mt-1">
+                      <a
+                        href={primaryYt.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/15 border border-red-500/25 text-red-300 text-xs font-medium hover:bg-red-500/25"
+                      >
+                        <PlayCircle size={14} />
+                        YouTube
+                        <ExternalLink size={12} className="opacity-70" />
+                      </a>
                     </div>
-                  </div>
-                </motion.button>
-              ))
+                  )}
+                </motion.div>
+                );
+              })
             )}
           </motion.div>
         )}

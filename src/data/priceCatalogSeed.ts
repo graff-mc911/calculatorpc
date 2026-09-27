@@ -1,7 +1,12 @@
 /**
- * Curated price catalog bootstrap (DE / UA / ES).
- * Source of truth for MVP until Supabase migration is applied;
- * mirrors schema in supabase/migrations/*_create_price_catalog.sql
+ * Curated price catalog bootstrap (DE / UA / ES) — v1.1 field-worker set.
+ * Source of truth for MVP until Supabase sync; mirrors
+ * supabase/migrations/*_create_price_catalog.sql
+ *
+ * Categories: tiling, plaster, paint, drywall, masonry, concrete, flooring,
+ * plumbing, electrical, roofing, insulation, facade, demolition,
+ * doors_windows, outdoor, other.
+ * Every work has ≥1 curated YouTube how-to link.
  */
 
 export type PriceCountryCode = 'DE' | 'UA' | 'ES';
@@ -48,10 +53,13 @@ export type CatalogMaterial = {
   >;
 };
 
+export type WorkCategory =
+  | 'tiling' | 'plaster' | 'paint' | 'drywall' | 'masonry' | 'concrete' | 'flooring' | 'plumbing' | 'electrical' | 'roofing' | 'insulation' | 'facade' | 'demolition' | 'doors_windows' | 'outdoor' | 'other';
+
 export type CatalogWork = {
   id: string;
   slug: string;
-  category: 'tiling' | 'plaster' | 'paint' | 'drywall' | 'other';
+  category: WorkCategory;
   unit: string;
   names: LocalizedName;
   searchAliases: string[];
@@ -86,7 +94,7 @@ export const PRICE_COUNTRIES: Array<{
   },
 ];
 
-const UPDATED = '2026-09-01';
+const UPDATED = '2026-09-27';
 
 export const CATALOG_SUPPLIERS: CatalogSupplier[] = [
   { id: 'sup-de-hornbach', countryCode: 'DE', name: 'Hornbach', url: 'https://www.hornbach.de/' },
@@ -413,51 +421,410 @@ export const CATALOG_MATERIALS: CatalogMaterial[] = [
     prices: money(1.8, 42, 1.5),
     supplierLinks: matLinks('armierungsgewebe', 'армуюча сітка', 'malla refuerzo'),
   },
-];
-
-/** Curated topic links (YouTube search) — replace with fixed video IDs after editorial review */
-const YT = {
-  tileDe: {
-    url: 'https://www.youtube.com/results?search_query=Gro%C3%9Fformat+Fliesen+verlegen',
-    title: 'Großformat Fliesen verlegen',
-    lang: 'de',
+  {
+    id: 'mat-brick',
+    name: {
+      en: 'Clay brick',
+      uk: 'Цегла глиняна',
+      de: 'Mauerziegel',
+      es: 'Ladrillo cerámico',
+    },
+    unit: 'pcs',
+    aliases: ['цегла', 'ziegel', 'ladrillo', 'brick'],
+    prices: money(0.55, 12, 0.45),
+    supplierLinks: matLinks('mauerziegel', 'цегла', 'ladrillo'),
   },
-  tileUk: {
-    url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F+%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8+120x60',
-    title: 'Укладання плитки 120×60',
-    lang: 'uk',
+  {
+    id: 'mat-aac-block',
+    name: {
+      en: 'AAC / aerated block',
+      uk: 'Газоблок',
+      de: 'Porenbetonstein',
+      es: 'Bloque de hormigón celular',
+    },
+    unit: 'm2',
+    aliases: ['газоблок', 'porenbeton', 'termoarcilla', 'aac'],
+    prices: money(28, 620, 24),
+    supplierLinks: matLinks('porenbeton', 'газоблок', 'bloque celular'),
   },
-  tileEs: {
-    url: 'https://www.youtube.com/results?search_query=colocar+azulejos+gran+formato',
-    title: 'Colocar azulejos de gran formato',
-    lang: 'es',
+  {
+    id: 'mat-masonry-mortar',
+    name: {
+      en: 'Masonry mortar',
+      uk: 'Мурувальний розчин',
+      de: 'Mauermörtel',
+      es: 'Mortero de albañilería',
+    },
+    unit: 'kg',
+    aliases: ['розчин', 'mauermoertel', 'mortero albana'],
+    prices: money(0.25, 5.5, 0.22),
+    supplierLinks: matLinks('mauermoertel', 'мурувальний розчин', 'mortero albanileria'),
   },
-  plasterDe: {
-    url: 'https://www.youtube.com/results?search_query=Gipsputz+richtig+auftragen',
-    title: 'Gipsputz richtig auftragen',
-    lang: 'de',
+  {
+    id: 'mat-concrete',
+    name: {
+      en: 'Ready-mix concrete C25',
+      uk: 'Бетон товарний C25',
+      de: 'Transportbeton C25',
+      es: 'Hormigón C25',
+    },
+    unit: 'm3',
+    aliases: ['бетон', 'transportbeton', 'hormigon', 'concrete'],
+    prices: money(120, 3200, 105),
+    supplierLinks: matLinks('transportbeton', 'бетон', 'hormigon'),
   },
-  plasterUk: {
-    url: 'https://www.youtube.com/results?search_query=%D1%88%D1%82%D1%83%D0%BA%D0%B0%D1%82%D1%83%D1%80%D0%BA%D0%B0+%D1%81%D1%82%D1%96%D0%BD+%D0%B3%D1%96%D0%BF%D1%81',
-    title: 'Штукатурка стін гіпсом',
-    lang: 'uk',
+  {
+    id: 'mat-rebar',
+    name: {
+      en: 'Rebar Ø12',
+      uk: 'Арматура Ø12',
+      de: 'Bewehrungsstahl Ø12',
+      es: 'Armadura Ø12',
+    },
+    unit: 'kg',
+    aliases: ['арматура', 'bewehrung', 'armadura', 'rebar'],
+    prices: money(1.1, 28, 0.95),
+    supplierLinks: matLinks('bewehrungsstahl', 'арматура', 'armadura'),
   },
-  paintDe: {
-    url: 'https://www.youtube.com/results?search_query=W%C3%A4nde+streichen+Profi+Tipps',
-    title: 'Wände streichen – Profi-Tipps',
-    lang: 'de',
+  {
+    id: 'mat-formwork-board',
+    name: {
+      en: 'Formwork plywood',
+      uk: 'Опалубна фанера',
+      de: 'Schalungsplatte',
+      es: 'Tablero de encofrado',
+    },
+    unit: 'm2',
+    aliases: ['опалубка', 'schalung', 'encofrado'],
+    prices: money(18, 420, 15),
+    supplierLinks: matLinks('schalungsplatte', 'опалубна фанера', 'tablero encofrado'),
   },
-  paintUk: {
-    url: 'https://www.youtube.com/results?search_query=%D1%84%D0%B0%D1%80%D0%B1%D1%83%D0%B2%D0%B0%D0%BD%D0%BD%D1%8F+%D1%81%D1%82%D1%96%D0%BD+%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
-    title: 'Фарбування стін — техніка',
-    lang: 'uk',
+  {
+    id: 'mat-laminate',
+    name: {
+      en: 'Laminate flooring',
+      uk: 'Ламінат',
+      de: 'Laminatboden',
+      es: 'Suelo laminado',
+    },
+    unit: 'm2',
+    aliases: ['ламінат', 'laminat', 'laminado'],
+    prices: money(14, 320, 12),
+    supplierLinks: matLinks('laminatboden', 'ламінат', 'suelo laminado'),
   },
-  drywallDe: {
-    url: 'https://www.youtube.com/results?search_query=Trockenbau+Wand+aufbauen',
-    title: 'Trockenbau Wand aufbauen',
-    lang: 'de',
+  {
+    id: 'mat-parquet',
+    name: {
+      en: 'Engineered parquet',
+      uk: 'Інженерна дошка / паркет',
+      de: 'Fertigparkett',
+      es: 'Parqué multicapa',
+    },
+    unit: 'm2',
+    aliases: ['паркет', 'parkett', 'parquet'],
+    prices: money(42, 980, 36),
+    supplierLinks: matLinks('fertigparkett', 'паркет', 'parquet'),
   },
-};
+  {
+    id: 'mat-vinyl',
+    name: {
+      en: 'LVT / vinyl plank',
+      uk: 'Вінілова плитка LVT',
+      de: 'Designboden Vinyl',
+      es: 'Tarima vinílica LVT',
+    },
+    unit: 'm2',
+    aliases: ['вініл', 'vinyl', 'lvt'],
+    prices: money(22, 480, 18),
+    supplierLinks: matLinks('designboden', 'вініл lvt', 'tarima vinilica'),
+  },
+  {
+    id: 'mat-underlay',
+    name: {
+      en: 'Floor underlay',
+      uk: 'Підложка під підлогу',
+      de: 'Trittschalldämmung',
+      es: 'Base para suelo',
+    },
+    unit: 'm2',
+    aliases: ['підложка', 'trittschall', 'base suelo', 'underlay'],
+    prices: money(2.2, 48, 1.8),
+    supplierLinks: matLinks('trittschalldaemmung', 'підложка', 'base suelo'),
+  },
+  {
+    id: 'mat-pex-pipe',
+    name: {
+      en: 'PEX / multilayer pipe',
+      uk: 'Труба PEX / металопластик',
+      de: 'Mehrschichtverbundrohr',
+      es: 'Tubo multicapa',
+    },
+    unit: 'lm',
+    aliases: ['pex', 'металопластик', 'mehrschicht', 'multicapa'],
+    prices: money(3.5, 85, 3.0),
+    supplierLinks: matLinks('mehrschichtverbundrohr', 'труба pex', 'tubo multicapa'),
+  },
+  {
+    id: 'mat-waste-pipe',
+    name: {
+      en: 'HT / PVC waste pipe',
+      uk: 'Каналізаційна труба',
+      de: 'HT-Rohr',
+      es: 'Tubo de desagüe PVC',
+    },
+    unit: 'lm',
+    aliases: ['ht rohr', 'каналізація', 'desague', 'waste pipe'],
+    prices: money(4.5, 95, 3.8),
+    supplierLinks: matLinks('ht-rohr', 'труба каналізація', 'tubo desague'),
+  },
+  {
+    id: 'mat-cable-nyam',
+    name: {
+      en: 'NYM / electrical cable',
+      uk: 'Кабель NYM / ВВГ',
+      de: 'NYM-Kabel',
+      es: 'Cable eléctrico',
+    },
+    unit: 'lm',
+    aliases: ['кабель', 'nym', 'cable electrico'],
+    prices: money(1.8, 42, 1.5),
+    supplierLinks: matLinks('nym-kabel', 'кабель', 'cable electrico'),
+  },
+  {
+    id: 'mat-outlet',
+    name: {
+      en: 'Wall outlet',
+      uk: 'Розетка',
+      de: 'Steckdose',
+      es: 'Enchufe de pared',
+    },
+    unit: 'pcs',
+    aliases: ['розетка', 'steckdose', 'enchufe'],
+    prices: money(8, 185, 7),
+    supplierLinks: matLinks('steckdose', 'розетка', 'enchufe'),
+  },
+  {
+    id: 'mat-switch',
+    name: {
+      en: 'Light switch',
+      uk: 'Вимикач',
+      de: 'Lichtschalter',
+      es: 'Interruptor',
+    },
+    unit: 'pcs',
+    aliases: ['вимикач', 'lichtschalter', 'interruptor'],
+    prices: money(7, 160, 6),
+    supplierLinks: matLinks('lichtschalter', 'вимикач', 'interruptor'),
+  },
+  {
+    id: 'mat-roof-tile',
+    name: {
+      en: 'Clay roof tile',
+      uk: 'Покрівельна черепиця',
+      de: 'Dachziegel',
+      es: 'Teja cerámica',
+    },
+    unit: 'm2',
+    aliases: ['черепиця', 'dachziegel', 'teja'],
+    prices: money(28, 650, 24),
+    supplierLinks: matLinks('dachziegel', 'черепиця', 'teja'),
+  },
+  {
+    id: 'mat-roof-membrane',
+    name: {
+      en: 'Roof waterproofing membrane',
+      uk: 'Покрівельна мембрана',
+      de: 'Dachbahn',
+      es: 'Lámina impermeable cubierta',
+    },
+    unit: 'm2',
+    aliases: ['мембрана дах', 'dachbahn', 'lamina cubierta'],
+    prices: money(12, 280, 10),
+    supplierLinks: matLinks('dachbahn', 'покрівельна мембрана', 'lamina cubierta'),
+  },
+  {
+    id: 'mat-metal-roof',
+    name: {
+      en: 'Metal roof sheet',
+      uk: 'Металочерепиця / профнастил',
+      de: 'Trapezblech / Metalldach',
+      es: 'Chapa metálica cubierta',
+    },
+    unit: 'm2',
+    aliases: ['металочерепиця', 'trapezblech', 'chapa metalica'],
+    prices: money(18, 420, 15),
+    supplierLinks: matLinks('trapezblech', 'металочерепиця', 'chapa metalica'),
+  },
+  {
+    id: 'mat-gutter',
+    name: {
+      en: 'Gutter profile',
+      uk: 'Водостік / жолоб',
+      de: 'Dachrinne',
+      es: 'Canalón',
+    },
+    unit: 'lm',
+    aliases: ['водостік', 'dachrinne', 'canalon'],
+    prices: money(9, 210, 7.5),
+    supplierLinks: matLinks('dachrinne', 'водостік', 'canalon'),
+  },
+  {
+    id: 'mat-mineral-wool',
+    name: {
+      en: 'Mineral wool insulation',
+      uk: 'Мінеральна вата',
+      de: 'Mineralwolle',
+      es: 'Lana mineral',
+    },
+    unit: 'm2',
+    aliases: ['мінвата', 'mineralwolle', 'lana mineral'],
+    prices: money(8.5, 195, 7),
+    supplierLinks: matLinks('mineralwolle', 'мінвата', 'lana mineral'),
+  },
+  {
+    id: 'mat-insulation-board',
+    name: {
+      en: 'EPS/XPS insulation board',
+      uk: 'Плита утеплювача EPS/XPS',
+      de: 'EPS/XPS Dämmplatte',
+      es: 'Placa XPS/EPS',
+    },
+    unit: 'm2',
+    aliases: ['пінопласт', 'xps', 'eps', 'daemmplatte'],
+    prices: money(9.5, 220, 8),
+    supplierLinks: matLinks('daemmplatte', 'утеплювач', 'placa xps'),
+  },
+  {
+    id: 'mat-vapor-barrier',
+    name: {
+      en: 'Vapor barrier foil',
+      uk: 'Пароізоляційна плівка',
+      de: 'Dampfsperrfolie',
+      es: 'Lámina de vapor',
+    },
+    unit: 'm2',
+    aliases: ['пароізоляція', 'dampfsperre', 'barrera vapor'],
+    prices: money(0.85, 18, 0.7),
+    supplierLinks: matLinks('dampfsperrfolie', 'пароізоляція', 'lamina vapor'),
+  },
+  {
+    id: 'mat-pipe-insulation',
+    name: {
+      en: 'Pipe insulation sleeve',
+      uk: 'Ізоляція для труб',
+      de: 'Rohrdämmung',
+      es: 'Aislamiento de tubería',
+    },
+    unit: 'lm',
+    aliases: ['ізоляція труб', 'rohrdaemmung', 'aislamiento tuberia'],
+    prices: money(2.2, 48, 1.8),
+    supplierLinks: matLinks('rohrdaemmung', 'ізоляція труб', 'aislamiento tuberia'),
+  },
+  {
+    id: 'mat-facade-panel',
+    name: {
+      en: 'Facade cladding panel',
+      uk: 'Фасадна панель',
+      de: 'Fassadenplatte',
+      es: 'Panel de fachada',
+    },
+    unit: 'm2',
+    aliases: ['фасадна панель', 'fassadenplatte', 'panel fachada'],
+    prices: money(35, 820, 30),
+    supplierLinks: matLinks('fassadenplatte', 'фасадна панель', 'panel fachada'),
+  },
+  {
+    id: 'mat-foam',
+    name: {
+      en: 'PU mounting foam',
+      uk: 'Монтажна піна',
+      de: 'Montageschaum',
+      es: 'Espuma de poliuretano',
+    },
+    unit: 'pcs',
+    aliases: ['монтажна піна', 'montageschaum', 'espuma'],
+    prices: money(6, 140, 5),
+    supplierLinks: matLinks('montageschaum', 'монтажна піна', 'espuma poliuretano'),
+  },
+  {
+    id: 'mat-paver',
+    name: {
+      en: 'Concrete pavers',
+      uk: 'Бруківка / тротуарна плитка',
+      de: 'Pflastersteine',
+      es: 'Adoquines / baldosas',
+    },
+    unit: 'm2',
+    aliases: ['бруківка', 'pflaster', 'adoquin'],
+    prices: money(18, 420, 15),
+    supplierLinks: matLinks('pflastersteine', 'бруківка', 'adoquines'),
+  },
+  {
+    id: 'mat-sand',
+    name: {
+      en: 'Construction sand',
+      uk: 'Будівельний пісок',
+      de: 'Bausand',
+      es: 'Arena de construcción',
+    },
+    unit: 'kg',
+    aliases: ['пісок', 'bausand', 'arena'],
+    prices: money(0.05, 1.2, 0.04),
+    supplierLinks: matLinks('bausand', 'пісок', 'arena'),
+  },
+  {
+    id: 'mat-gravel',
+    name: {
+      en: 'Drainage gravel',
+      uk: 'Щебінь дренажний',
+      de: 'Drainageschotter',
+      es: 'Grava de drenaje',
+    },
+    unit: 'kg',
+    aliases: ['щебінь', 'schotter', 'grava'],
+    prices: money(0.06, 1.4, 0.05),
+    supplierLinks: matLinks('drainageschotter', 'щебінь', 'grava'),
+  },
+  {
+    id: 'mat-fence-post',
+    name: {
+      en: 'Fence post',
+      uk: 'Стовп для паркану',
+      de: 'Zaunpfosten',
+      es: 'Poste de valla',
+    },
+    unit: 'pcs',
+    aliases: ['стовп', 'zaunpfosten', 'poste valla'],
+    prices: money(22, 480, 18),
+    supplierLinks: matLinks('zaunpfosten', 'стовп паркан', 'poste valla'),
+  },
+  {
+    id: 'mat-decking',
+    name: {
+      en: 'Wood decking boards',
+      uk: 'Терасна дошка',
+      de: 'Terrassendielen',
+      es: 'Tarima de exterior',
+    },
+    unit: 'm2',
+    aliases: ['терасна дошка', 'terrassendielen', 'tarima exterior'],
+    prices: money(45, 1050, 38),
+    supplierLinks: matLinks('terrassendielen', 'терасна дошка', 'tarima exterior'),
+  },
+  {
+    id: 'mat-drain-pipe',
+    name: {
+      en: 'Drainage pipe',
+      uk: 'Дренажна труба',
+      de: 'Dränagerohr',
+      es: 'Tubo de drenaje',
+    },
+    unit: 'lm',
+    aliases: ['дренаж', 'draenage', 'drenaje'],
+    prices: money(5.5, 125, 4.5),
+    supplierLinks: matLinks('draenagerohr', 'дренажна труба', 'tubo drenaje'),
+  },
+]
 
 function work(
   partial: Omit<CatalogWork, 'labor'> & {
@@ -497,16 +864,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       'вкладання плитки формат 120на 60',
       'укладання плитки 120x60',
       'плитка 120на60',
-      'плитка 120 x 60',
       'fliesen 120x60',
       'großformat fliesen',
-      'grossformat fliesen verlegen',
       'azulejos 120x60',
-      'baldosa 120x60',
       'tiling 120x60',
       'large format tile',
     ],
-    youtube: [YT.tileDe, YT.tileUk, YT.tileEs],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/watch?v=ycgSChhtgKg',
+        title: 'Large format tile install',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Gro%C3%9Fformat%20Fliesen%20verlegen%20Homediy',
+        title: 'Großformat Fliesen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%B2%D0%B5%D0%BB%D0%B8%D0%BA%D0%BE%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%82%D0%BD%D0%BE%D1%97%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D0%BC%D0%B0%D0%B9%D1%81%D1%82%D0%B5%D1%80%20%D0%BA%D0%BB%D0%B0%D1%81',
+        title: 'Укладання плитки 120×60',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [45, 550, 35],
     laborRanges: { de: [35, 55], ua: [400, 700], es: [25, 45] },
     materials: [
@@ -528,8 +908,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Fliesenverlegung 60×60',
       es: 'Colocación de azulejos 60×60',
     },
-    searchAliases: ['плитка 60x60', 'fliesen 60x60', 'azulejos 60x60', 'tile 60x60'],
-    youtube: [YT.tileDe, YT.tileUk],
+    searchAliases: [
+      'плитка 60x60',
+      'fliesen 60x60',
+      'azulejos 60x60',
+      'tile 60x60',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=How%20to%20lay%20floor%20tile%20Home%20RenoVision%20DIY',
+        title: 'How to lay floor tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenfliesen%20verlegen%20Anleitung%20Profi',
+        title: 'Bodenfliesen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D0%BD%D0%B0%20%D0%BF%D1%96%D0%B4%D0%BB%D0%BE%D0%B3%D1%83%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Укладання підлогової плитки',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [38, 480, 30],
     laborRanges: { de: [30, 48], ua: [350, 600], es: [22, 40] },
     materials: [
@@ -551,8 +952,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Fliesenverlegung 30×60',
       es: 'Colocación de azulejos 30×60',
     },
-    searchAliases: ['плитка 30x60', 'fliesen 30x60', 'wall tile', 'стінова плитка'],
-    youtube: [YT.tileUk, YT.tileEs],
+    searchAliases: [
+      'плитка 30x60',
+      'fliesen 30x60',
+      'wall tile',
+      'стінова плитка',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20tile%20a%20bathroom%20wall%20step%20by%20step',
+        title: 'Bathroom wall tiling',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bad%20Wandfliesen%20verlegen%20Anleitung',
+        title: 'Wandfliesen im Bad',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D1%83%20%D0%B2%D0%B0%D0%BD%D0%BD%D1%96%D0%B9%20%D1%81%D1%82%D1%96%D0%BD%D0%B8',
+        title: 'Плитка у ванній на стіни',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [42, 520, 32],
     laborRanges: { de: [32, 52], ua: [380, 650], es: [24, 42] },
     materials: [
@@ -573,8 +995,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Bad Wandfliesen',
       es: 'Alicatado baño (paredes)',
     },
-    searchAliases: ['плитка ванна', 'bad fliesen', 'baño azulejos', 'bathroom tile'],
-    youtube: [YT.tileDe, YT.tileUk],
+    searchAliases: [
+      'плитка ванна',
+      'bad fliesen',
+      'baño azulejos',
+      'bathroom tile',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20tile%20a%20bathroom%20wall%20step%20by%20step',
+        title: 'Bathroom wall tiling',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bad%20Wandfliesen%20verlegen%20Anleitung',
+        title: 'Wandfliesen im Bad',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D1%83%20%D0%B2%D0%B0%D0%BD%D0%BD%D1%96%D0%B9%20%D1%81%D1%82%D1%96%D0%BD%D0%B8',
+        title: 'Плитка у ванній на стіни',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [48, 600, 38],
     laborRanges: { de: [38, 60], ua: [450, 750], es: [28, 48] },
     materials: [
@@ -596,8 +1039,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Bodenfliesen verlegen',
       es: 'Solado cerámico',
     },
-    searchAliases: ['підлога плитка', 'bodenfliesen', 'suelo azulejo', 'floor tile'],
-    youtube: [YT.tileDe, YT.tileEs],
+    searchAliases: [
+      'підлога плитка',
+      'bodenfliesen',
+      'suelo azulejo',
+      'floor tile',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=How%20to%20lay%20floor%20tile%20Home%20RenoVision%20DIY',
+        title: 'How to lay floor tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenfliesen%20verlegen%20Anleitung%20Profi',
+        title: 'Bodenfliesen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D0%BD%D0%B0%20%D0%BF%D1%96%D0%B4%D0%BB%D0%BE%D0%B3%D1%83%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Укладання підлогової плитки',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [40, 500, 32],
     laborRanges: { de: [32, 50], ua: [380, 620], es: [24, 42] },
     materials: [
@@ -618,8 +1082,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Terrassenfliesen',
       es: 'Solado terraza exterior',
     },
-    searchAliases: ['тераса плитка', 'terrassenfliesen', 'terraza azulejo', 'outdoor tile'],
-    youtube: [YT.tileDe, YT.tileEs],
+    searchAliases: [
+      'тераса плитка',
+      'terrassenfliesen',
+      'terraza azulejo',
+      'outdoor tile',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=How%20to%20lay%20floor%20tile%20Home%20RenoVision%20DIY',
+        title: 'How to lay floor tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenfliesen%20verlegen%20Anleitung%20Profi',
+        title: 'Bodenfliesen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D0%BD%D0%B0%20%D0%BF%D1%96%D0%B4%D0%BB%D0%BE%D0%B3%D1%83%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Укладання підлогової плитки',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [52, 650, 42],
     laborRanges: { de: [42, 65], ua: [500, 800], es: [32, 55] },
     materials: [
@@ -640,11 +1125,30 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Fliesen verfugen',
       es: 'Rejuntado de azulejos',
     },
-    searchAliases: ['затирка', 'фугування', 'verfugen', 'rejuntado', 'grouting'],
-    youtube: [YT.tileUk],
+    searchAliases: [
+      'затирка',
+      'фугування',
+      'verfugen',
+      'rejuntado',
+      'grouting',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20grout%20tile%20properly%20Home%20RenoVision',
+        title: 'How to grout tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fliesen%20richtig%20verfugen%20Anleitung',
+        title: 'Fliesen verfugen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [12, 150, 10],
     laborRanges: { de: [8, 16], ua: [100, 200], es: [7, 14] },
-    materials: [{ materialId: 'mat-grout', qtyPerUnit: 0.5 }],
+    materials: [
+      { materialId: 'mat-grout', qtyPerUnit: 0.5 },
+    ],
   }),
   work({
     id: 'work-tile-removal',
@@ -657,8 +1161,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Fliesen entfernen',
       es: 'Demolición de azulejos',
     },
-    searchAliases: ['демонтаж плитки', 'fliesen entfernen', 'quitar azulejos', 'tile removal'],
-    youtube: [YT.tileDe],
+    searchAliases: [
+      'демонтаж плитки',
+      'fliesen entfernen',
+      'quitar azulejos',
+      'tile removal',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20remove%20tile%20floor%20without%20damaging',
+        title: 'Remove old tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fliesen%20entfernen%20Anleitung',
+        title: 'Fliesen entfernen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [28, 320, 22],
     laborRanges: { de: [20, 35], ua: [250, 400], es: [16, 30] },
     materials: [],
@@ -674,8 +1194,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Bad Abdichtung',
       es: 'Impermeabilización baño',
     },
-    searchAliases: ['гідроізоляція', 'abdichtung bad', 'impermeabilizacion', 'waterproofing'],
-    youtube: [YT.tileUk, YT.tileDe],
+    searchAliases: [
+      'гідроізоляція',
+      'abdichtung bad',
+      'impermeabilizacion',
+      'waterproofing',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=bathroom%20waterproofing%20membrane%20install',
+        title: 'Bathroom waterproofing',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bad%20Abdichtung%20Fl%C3%BCssigfolie%20Anleitung',
+        title: 'Bad abdichten',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B3%D1%96%D0%B4%D1%80%D0%BE%D1%96%D0%B7%D0%BE%D0%BB%D1%8F%D1%86%D1%96%D1%8F%20%D0%B2%D0%B0%D0%BD%D0%BD%D0%BE%D1%97%20%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%B8%20%D0%BF%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D1%8C%D0%BD%D0%BE',
+        title: 'Гідроізоляція ванної',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [22, 280, 18],
     laborRanges: { de: [16, 28], ua: [200, 350], es: [14, 24] },
     materials: [
@@ -695,11 +1236,149 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Silikonfugen',
       es: 'Sellado con silicona',
     },
-    searchAliases: ['силікон', 'silikonfuge', 'silicona', 'hermetic'],
-    youtube: [YT.tileUk],
+    searchAliases: [
+      'силікон',
+      'silikonfuge',
+      'silicona',
+      'hermetic',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20apply%20silicone%20sealant%20bathroom',
+        title: 'Silicone sealing',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Silikonfugen%20erneuern%20Bad%20Anleitung',
+        title: 'Silikonfugen erneuern',
+        lang: 'de',
+      },
+    ],
     laborPrices: [8, 90, 6.5],
     laborRanges: { de: [5, 12], ua: [60, 120], es: [4, 10] },
-    materials: [{ materialId: 'mat-silicone', qtyPerUnit: 0.15 }],
+    materials: [
+      { materialId: 'mat-silicone', qtyPerUnit: 0.15 },
+    ],
+  }),
+  work({
+    id: 'work-mosaic',
+    slug: 'mosaic-tiling',
+    category: 'tiling',
+    unit: 'm2',
+    names: {
+      en: 'Mosaic tiling',
+      uk: 'Укладання мозаїки',
+      de: 'Mosaik verlegen',
+      es: 'Colocación de mosaico',
+    },
+    searchAliases: [
+      'мозаїка',
+      'mosaik',
+      'mosaico',
+      'mosaic',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20mosaic%20tile%20sheet',
+        title: 'Install mosaic tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Mosaikfliesen%20verlegen',
+        title: 'Mosaik verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [65, 800, 55],
+    laborRanges: { de: [50, 80], ua: [600, 1000], es: [40, 70] },
+    materials: [
+      { materialId: 'mat-tile-30x60', qtyPerUnit: 1.15 },
+      { materialId: 'mat-adhesive-c2', qtyPerUnit: 4 },
+      { materialId: 'mat-grout', qtyPerUnit: 1.2 },
+    ],
+  }),
+  work({
+    id: 'work-tile-niche',
+    slug: 'tile-niche-shelf',
+    category: 'tiling',
+    unit: 'pcs',
+    names: {
+      en: 'Tiled niche / shelf',
+      uk: 'Плиткова ніша / полиця',
+      de: 'Fliesennische',
+      es: 'Nicho alicatado',
+    },
+    searchAliases: [
+      'ніша плитка',
+      'fliesennische',
+      'nicho azulejo',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20tile%20a%20bathroom%20wall%20step%20by%20step',
+        title: 'Bathroom wall tiling',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bad%20Wandfliesen%20verlegen%20Anleitung',
+        title: 'Wandfliesen im Bad',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D1%83%20%D0%B2%D0%B0%D0%BD%D0%BD%D1%96%D0%B9%20%D1%81%D1%82%D1%96%D0%BD%D0%B8',
+        title: 'Плитка у ванній на стіни',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [120, 1500, 95],
+    laborRanges: { de: [90, 160], ua: [1100, 2000], es: [70, 130] },
+    materials: [
+      { materialId: 'mat-tile-30x60', qtyPerUnit: 1.5 },
+      { materialId: 'mat-adhesive-c2', qtyPerUnit: 3 },
+      { materialId: 'mat-waterproof', qtyPerUnit: 1 },
+      { materialId: 'mat-grout', qtyPerUnit: 0.5 },
+    ],
+  }),
+  work({
+    id: 'work-tile-diagonal',
+    slug: 'diagonal-tile-laying',
+    category: 'tiling',
+    unit: 'm2',
+    names: {
+      en: 'Diagonal tile laying',
+      uk: 'Укладання плитки по діагоналі',
+      de: 'Fliesen diagonal verlegen',
+      es: 'Alicatado en diagonal',
+    },
+    searchAliases: [
+      'діагональ плитка',
+      'diagonal fliesen',
+      'diagonal tile',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=How%20to%20lay%20floor%20tile%20Home%20RenoVision%20DIY',
+        title: 'How to lay floor tile',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenfliesen%20verlegen%20Anleitung%20Profi',
+        title: 'Bodenfliesen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B8%D1%82%D0%BA%D0%B8%20%D0%BD%D0%B0%20%D0%BF%D1%96%D0%B4%D0%BB%D0%BE%D0%B3%D1%83%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Укладання підлогової плитки',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [55, 680, 45],
+    laborRanges: { de: [45, 70], ua: [520, 850], es: [35, 58] },
+    materials: [
+      { materialId: 'mat-tile-60x60', qtyPerUnit: 1.15 },
+      { materialId: 'mat-adhesive-c2', qtyPerUnit: 5 },
+      { materialId: 'mat-grout', qtyPerUnit: 0.5 },
+    ],
   }),
   work({
     id: 'work-gypsum-plaster',
@@ -721,7 +1400,23 @@ export const CATALOG_WORKS: CatalogWork[] = [
       'yeso',
       'plaster walls',
     ],
-    youtube: [YT.plasterDe, YT.plasterUk],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20plaster%20a%20wall%20gypsum',
+        title: 'Gypsum plaster walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Gipsputz%20richtig%20auftragen%20Anleitung',
+        title: 'Gipsputz auftragen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B3%D1%96%D0%BF%D1%81%D0%BE%D0%B2%D0%B0%20%D1%88%D1%82%D1%83%D0%BA%D0%B0%D1%82%D1%83%D1%80%D0%BA%D0%B0%20%D1%81%D1%82%D1%96%D0%BD%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Гіпсова штукатурка',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [18, 220, 14],
     laborRanges: { de: [14, 24], ua: [160, 280], es: [10, 20] },
     materials: [
@@ -740,8 +1435,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Zementputz Fassade',
       es: 'Enfoscado de cemento',
     },
-    searchAliases: ['цементна штукатурка', 'zementputz', 'enfoscado', 'facade plaster'],
-    youtube: [YT.plasterDe],
+    searchAliases: [
+      'цементна штукатурка',
+      'zementputz',
+      'enfoscado',
+      'facade plaster',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20apply%20cement%20render%20exterior%20wall',
+        title: 'Cement render exterior',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Zementputz%20Fassade%20auftragen',
+        title: 'Zementputz Fassade',
+        lang: 'de',
+      },
+    ],
     laborPrices: [24, 300, 18],
     laborRanges: { de: [18, 32], ua: [220, 380], es: [14, 26] },
     materials: [
@@ -761,8 +1472,23 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Maschinenputz',
       es: 'Yeso proyectado',
     },
-    searchAliases: ['машинна штукатурка', 'maschinenputz', 'yeso proyectado'],
-    youtube: [YT.plasterDe, YT.plasterUk],
+    searchAliases: [
+      'машинна штукатурка',
+      'maschinenputz',
+      'yeso proyectado',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=Maschinenputz%20Anleitung',
+        title: 'Machine plaster',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%B0%D1%88%D0%B8%D0%BD%D0%BD%D0%B0%20%D1%88%D1%82%D1%83%D0%BA%D0%B0%D1%82%D1%83%D1%80%D0%BA%D0%B0%20%D1%81%D1%82%D1%96%D0%BD',
+        title: 'Машинна штукатурка',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [14, 180, 12],
     laborRanges: { de: [10, 18], ua: [140, 230], es: [9, 16] },
     materials: [
@@ -781,8 +1507,28 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Putzreparatur',
       es: 'Reparación de enlucido',
     },
-    searchAliases: ['ремонт штукатурки', 'putzreparatur', 'reparacion yeso'],
-    youtube: [YT.plasterUk],
+    searchAliases: [
+      'ремонт штукатурки',
+      'putzreparatur',
+      'reparacion yeso',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20plaster%20a%20wall%20gypsum',
+        title: 'Gypsum plaster walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Gipsputz%20richtig%20auftragen%20Anleitung',
+        title: 'Gipsputz auftragen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B3%D1%96%D0%BF%D1%81%D0%BE%D0%B2%D0%B0%20%D1%88%D1%82%D1%83%D0%BA%D0%B0%D1%82%D1%83%D1%80%D0%BA%D0%B0%20%D1%81%D1%82%D1%96%D0%BD%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Гіпсова штукатурка',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [32, 400, 26],
     laborRanges: { de: [25, 40], ua: [300, 500], es: [20, 35] },
     materials: [
@@ -802,8 +1548,30 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Feinspachtelung',
       es: 'Enlucido fino / pasta',
     },
-    searchAliases: ['шпаклівка', 'фініш', 'feinspachtel', 'pasta acabado', 'skim coat'],
-    youtube: [YT.plasterUk, YT.plasterDe],
+    searchAliases: [
+      'шпаклівка',
+      'фініш',
+      'feinspachtel',
+      'pasta acabado',
+      'skim coat',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20skim%20coat%20walls',
+        title: 'Skim coat finish',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=W%C3%A4nde%20feinspachteln%20Anleitung',
+        title: 'Feinspachtelung',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%84%D1%96%D0%BD%D1%96%D1%88%D0%BD%D0%B0%20%D1%88%D0%BF%D0%B0%D0%BA%D0%BB%D1%96%D0%B2%D0%BA%D0%B0%20%D1%81%D1%82%D1%96%D0%BD',
+        title: 'Фінішна шпаклівка',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [12, 160, 10],
     laborRanges: { de: [9, 16], ua: [120, 200], es: [7, 14] },
     materials: [
@@ -822,13 +1590,112 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Dekorputz',
       es: 'Estuco decorativo',
     },
-    searchAliases: ['декоративна штукатурка', 'dekorputz', 'estuco', 'venetian'],
-    youtube: [YT.plasterDe],
+    searchAliases: [
+      'декоративна штукатурка',
+      'dekorputz',
+      'estuco',
+      'venetian',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=venetian%20plaster%20how%20to%20apply',
+        title: 'Decorative plaster',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Dekorputz%20auftragen%20Anleitung',
+        title: 'Dekorputz auftragen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [35, 450, 28],
     laborRanges: { de: [28, 45], ua: [350, 550], es: [22, 38] },
     materials: [
       { materialId: 'mat-cement-plaster', qtyPerUnit: 4 },
       { materialId: 'mat-primer', qtyPerUnit: 0.2 },
+    ],
+  }),
+  work({
+    id: 'work-render-mesh',
+    slug: 'facade-mesh-render',
+    category: 'plaster',
+    unit: 'm2',
+    names: {
+      en: 'Facade mesh + render',
+      uk: 'Фасад: сітка + штукатурка',
+      de: 'WDVS Armierung + Putz',
+      es: 'Malla + enfoscado fachada',
+    },
+    searchAliases: [
+      'фасад сітка',
+      'wdvs',
+      'armierung',
+      'malla fachada',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20external%20wall%20insulation%20ETICS',
+        title: 'ETICS / EIFS facade insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=WDVS%20Fassadend%C3%A4mmung%20Anleitung',
+        title: 'WDVS Fassade',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%82%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D1%84%D0%B0%D1%81%D0%B0%D0%B4%D1%83%20%D0%BF%D1%96%D0%BD%D0%BE%D0%BF%D0%BB%D0%B0%D1%81%D1%82%D0%BE%D0%BC%20%D1%82%D0%B5%D1%85%D0%BD%D0%BE%D0%BB%D0%BE%D0%B3%D1%96%D1%8F',
+        title: 'Утеплення фасаду',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [28, 350, 22],
+    laborRanges: { de: [22, 36], ua: [260, 440], es: [16, 30] },
+    materials: [
+      { materialId: 'mat-mesh', qtyPerUnit: 1.1 },
+      { materialId: 'mat-cement-plaster', qtyPerUnit: 8 },
+      { materialId: 'mat-primer', qtyPerUnit: 0.2 },
+    ],
+  }),
+  work({
+    id: 'work-corner-beads',
+    slug: 'plaster-corner-beads',
+    category: 'plaster',
+    unit: 'lm',
+    names: {
+      en: 'Corner bead installation',
+      uk: 'Монтаж куточків під штукатурку',
+      de: 'Eckschienen setzen',
+      es: 'Colocación de cantoneras',
+    },
+    searchAliases: [
+      'куточки',
+      'eckschiene',
+      'cantonera',
+      'corner bead',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20plaster%20a%20wall%20gypsum',
+        title: 'Gypsum plaster walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Gipsputz%20richtig%20auftragen%20Anleitung',
+        title: 'Gipsputz auftragen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B3%D1%96%D0%BF%D1%81%D0%BE%D0%B2%D0%B0%20%D1%88%D1%82%D1%83%D0%BA%D0%B0%D1%82%D1%83%D1%80%D0%BA%D0%B0%20%D1%81%D1%82%D1%96%D0%BD%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0',
+        title: 'Гіпсова штукатурка',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [5, 60, 4],
+    laborRanges: { de: [3.5, 7], ua: [40, 80], es: [3, 6] },
+    materials: [
+      { materialId: 'mat-mesh', qtyPerUnit: 0.2 },
+      { materialId: 'mat-gypsum-plaster', qtyPerUnit: 1 },
     ],
   }),
   work({
@@ -851,7 +1718,23 @@ export const CATALOG_WORKS: CatalogWork[] = [
       'paint walls',
       'painting',
     ],
-    youtube: [YT.paintDe, YT.paintUk],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20walls%20like%20a%20pro',
+        title: 'Paint interior walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=W%C3%A4nde%20streichen%20Profi%20Tipps',
+        title: 'Wände streichen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%84%D0%B0%D1%80%D0%B1%D1%83%D0%B2%D0%B0%D0%BD%D0%BD%D1%8F%20%D1%81%D1%82%D1%96%D0%BD%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0%20%D0%B2%D0%B0%D0%BB%D0%B8%D0%BA',
+        title: 'Фарбування стін',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [10, 130, 8],
     laborRanges: { de: [7, 14], ua: [90, 170], es: [6, 12] },
     materials: [
@@ -871,8 +1754,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Decke streichen',
       es: 'Pintura de techo',
     },
-    searchAliases: ['стеля фарба', 'decke streichen', 'pintura techo', 'ceiling paint'],
-    youtube: [YT.paintDe, YT.paintUk],
+    searchAliases: [
+      'стеля фарба',
+      'decke streichen',
+      'pintura techo',
+      'ceiling paint',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20a%20ceiling%20without%20streaks',
+        title: 'Paint ceiling',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Decke%20streichen%20Anleitung',
+        title: 'Decke streichen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [12, 150, 10],
     laborRanges: { de: [9, 16], ua: [110, 190], es: [7, 14] },
     materials: [
@@ -891,8 +1790,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Fassade streichen',
       es: 'Pintura de fachada',
     },
-    searchAliases: ['фасад фарба', 'fassade streichen', 'pintura fachada', 'exterior paint'],
-    youtube: [YT.paintDe],
+    searchAliases: [
+      'фасад фарба',
+      'fassade streichen',
+      'pintura fachada',
+      'exterior paint',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20exterior%20house%20walls',
+        title: 'Facade painting',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fassade%20streichen%20Anleitung',
+        title: 'Fassade streichen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [16, 200, 13],
     laborRanges: { de: [12, 22], ua: [150, 260], es: [10, 18] },
     materials: [
@@ -911,8 +1826,23 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Holz streichen',
       es: 'Pintura de madera',
     },
-    searchAliases: ['дерево фарба', 'holz streichen', 'pintura madera'],
-    youtube: [YT.paintUk],
+    searchAliases: [
+      'дерево фарба',
+      'holz streichen',
+      'pintura madera',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20wood%20trim%20properly',
+        title: 'Paint wood',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Holz%20richtig%20streichen%20lackieren',
+        title: 'Holz streichen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [18, 220, 14],
     laborRanges: { de: [14, 24], ua: [160, 280], es: [10, 20] },
     materials: [
@@ -931,11 +1861,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Grundierung auftragen',
       es: 'Aplicar imprimación',
     },
-    searchAliases: ['грунтування', 'grundierung', 'imprimacion', 'primer'],
-    youtube: [YT.paintDe],
+    searchAliases: [
+      'грунтування',
+      'grundierung',
+      'imprimacion',
+      'primer',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20prime%20walls%20before%20painting',
+        title: 'Apply primer',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Grundierung%20richtig%20auftragen',
+        title: 'Grundierung auftragen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [4, 50, 3.5],
     laborRanges: { de: [3, 6], ua: [35, 70], es: [2.5, 5] },
-    materials: [{ materialId: 'mat-primer', qtyPerUnit: 0.15 }],
+    materials: [
+      { materialId: 'mat-primer', qtyPerUnit: 0.15 },
+    ],
   }),
   work({
     id: 'work-wallpaper-remove-paint',
@@ -948,8 +1896,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Tapete entfernen + streichen',
       es: 'Quitar papel + pintar',
     },
-    searchAliases: ['шпалери зняти', 'tapete entfernen', 'quitar papel', 'wallpaper remove'],
-    youtube: [YT.paintUk, YT.paintDe],
+    searchAliases: [
+      'шпалери зняти',
+      'tapete entfernen',
+      'quitar papel',
+      'wallpaper remove',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=remove%20wallpaper%20then%20paint%20walls',
+        title: 'Remove wallpaper and paint',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Tapete%20entfernen%20und%20streichen',
+        title: 'Tapete entfernen streichen',
+        lang: 'de',
+      },
+    ],
     laborPrices: [18, 230, 15],
     laborRanges: { de: [14, 24], ua: [170, 300], es: [11, 20] },
     materials: [
@@ -969,13 +1933,141 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Effektfarbe / Struktur',
       es: 'Pintura decorativa / textura',
     },
-    searchAliases: ['декоративне фарбування', 'effektfarbe', 'pintura textura'],
-    youtube: [YT.paintDe],
+    searchAliases: [
+      'декоративне фарбування',
+      'effektfarbe',
+      'pintura textura',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20walls%20like%20a%20pro',
+        title: 'Paint interior walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=W%C3%A4nde%20streichen%20Profi%20Tipps',
+        title: 'Wände streichen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%84%D0%B0%D1%80%D0%B1%D1%83%D0%B2%D0%B0%D0%BD%D0%BD%D1%8F%20%D1%81%D1%82%D1%96%D0%BD%20%D1%82%D0%B5%D1%85%D0%BD%D1%96%D0%BA%D0%B0%20%D0%B2%D0%B0%D0%BB%D0%B8%D0%BA',
+        title: 'Фарбування стін',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [22, 280, 18],
     laborRanges: { de: [16, 30], ua: [200, 350], es: [14, 25] },
     materials: [
       { materialId: 'mat-interior-paint', qtyPerUnit: 0.35 },
       { materialId: 'mat-primer', qtyPerUnit: 0.15 },
+    ],
+  }),
+  work({
+    id: 'work-anti-mold',
+    slug: 'anti-mold-treatment',
+    category: 'paint',
+    unit: 'm2',
+    names: {
+      en: 'Anti-mold treatment',
+      uk: 'Обробка від плісняви',
+      de: 'Schimmelbehandlung',
+      es: 'Tratamiento antihongos',
+    },
+    searchAliases: [
+      'пліснява',
+      'schimmel',
+      'moho',
+      'mold',
+      'антигрибок',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20treat%20mold%20on%20walls%20properly',
+        title: 'Treat mold on walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Schimmel%20an%20W%C3%A4nden%20behandeln',
+        title: 'Schimmel entfernen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [14, 170, 11],
+    laborRanges: { de: [10, 18], ua: [120, 220], es: [8, 15] },
+    materials: [
+      { materialId: 'mat-primer', qtyPerUnit: 0.2 },
+      { materialId: 'mat-interior-paint', qtyPerUnit: 0.2 },
+    ],
+  }),
+  work({
+    id: 'work-spray-paint',
+    slug: 'spray-painting',
+    category: 'paint',
+    unit: 'm2',
+    names: {
+      en: 'Spray painting',
+      uk: 'Фарбування фарбопультом',
+      de: 'Spritzlackierung',
+      es: 'Pintura a pistola',
+    },
+    searchAliases: [
+      'фарбопульт',
+      'spritzlack',
+      'pistola pintura',
+      'spray paint',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20spray%20paint%20interior%20walls',
+        title: 'Spray paint walls',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=W%C3%A4nde%20spritzen%20Airless',
+        title: 'Spritzlackierung',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [14, 180, 11],
+    laborRanges: { de: [10, 18], ua: [130, 230], es: [8, 15] },
+    materials: [
+      { materialId: 'mat-interior-paint', qtyPerUnit: 0.3 },
+      { materialId: 'mat-primer', qtyPerUnit: 0.12 },
+    ],
+  }),
+  work({
+    id: 'work-radiator-paint',
+    slug: 'radiator-painting',
+    category: 'paint',
+    unit: 'pcs',
+    names: {
+      en: 'Radiator painting',
+      uk: 'Фарбування радіатора',
+      de: 'Heizkörper lackieren',
+      es: 'Pintura de radiador',
+    },
+    searchAliases: [
+      'радіатор фарба',
+      'heizkörper',
+      'radiador pintar',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20wood%20trim%20properly',
+        title: 'Paint wood',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Holz%20richtig%20streichen%20lackieren',
+        title: 'Holz streichen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [35, 420, 28],
+    laborRanges: { de: [25, 50], ua: [300, 550], es: [20, 40] },
+    materials: [
+      { materialId: 'mat-interior-paint', qtyPerUnit: 0.4 },
+      { materialId: 'mat-primer', qtyPerUnit: 0.1 },
     ],
   }),
   work({
@@ -989,8 +2081,29 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Trockenbauwand',
       es: 'Tabique de pladur',
     },
-    searchAliases: ['гіпсокартон перегородка', 'trockenbau', 'pladur tabique', 'drywall wall'],
-    youtube: [YT.drywallDe],
+    searchAliases: [
+      'гіпсокартон перегородка',
+      'trockenbau',
+      'pladur tabique',
+      'drywall wall',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20drywall%20wall%20studs',
+        title: 'Build drywall partition',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Trockenbau%20Wand%20aufbauen%20Anleitung',
+        title: 'Trockenbauwand aufbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%BF%D0%B5%D1%80%D0%B5%D0%B3%D0%BE%D1%80%D0%BE%D0%B4%D0%BA%D0%B8%20%D0%B7%20%D0%B3%D1%96%D0%BF%D1%81%D0%BE%D0%BA%D0%B0%D1%80%D1%82%D0%BE%D0%BD%D1%83',
+        title: 'Перегородка гіпсокартон',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [45, 550, 38],
     laborRanges: { de: [35, 55], ua: [400, 700], es: [28, 48] },
     materials: [
@@ -1010,8 +2123,23 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Trockenbaudecke',
       es: 'Techo de pladur',
     },
-    searchAliases: ['гіпсокартон стеля', 'trockenbaudecke', 'techo pladur'],
-    youtube: [YT.drywallDe],
+    searchAliases: [
+      'гіпсокартон стеля',
+      'trockenbaudecke',
+      'techo pladur',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20drywall%20ceiling',
+        title: 'Drywall ceiling',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Trockenbaudecke%20montieren%20Anleitung',
+        title: 'Trockenbaudecke',
+        lang: 'de',
+      },
+    ],
     laborPrices: [48, 580, 40],
     laborRanges: { de: [38, 60], ua: [450, 720], es: [30, 52] },
     materials: [
@@ -1031,8 +2159,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Trockenbau verspachteln',
       es: 'Enlucido de juntas pladur',
     },
-    searchAliases: ['шви гкл', 'verspachteln', 'juntas pladur', 'drywall finish'],
-    youtube: [YT.drywallDe, YT.plasterUk],
+    searchAliases: [
+      'шви гкл',
+      'verspachteln',
+      'juntas pladur',
+      'drywall finish',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20tape%20and%20mud%20drywall%20joints',
+        title: 'Tape and mud drywall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Trockenbau%20verspachteln%20Anleitung',
+        title: 'Trockenbau verspachteln',
+        lang: 'de',
+      },
+    ],
     laborPrices: [14, 170, 12],
     laborRanges: { de: [10, 18], ua: [120, 220], es: [9, 16] },
     materials: [
@@ -1041,9 +2185,413 @@ export const CATALOG_WORKS: CatalogWork[] = [
     ],
   }),
   work({
+    id: 'work-drywall-box',
+    slug: 'drywall-pipe-boxing',
+    category: 'drywall',
+    unit: 'lm',
+    names: {
+      en: 'Drywall pipe boxing',
+      uk: 'Короб з гіпсокартону',
+      de: 'Installationsvorwand / GK-Schacht',
+      es: 'Falso techo / caja pladur',
+    },
+    searchAliases: [
+      'короб гкл',
+      'installationsvorwand',
+      'caja pladur',
+      'pipe boxing',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20drywall%20wall%20studs',
+        title: 'Build drywall partition',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Trockenbau%20Wand%20aufbauen%20Anleitung',
+        title: 'Trockenbauwand aufbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%BF%D0%B5%D1%80%D0%B5%D0%B3%D0%BE%D1%80%D0%BE%D0%B4%D0%BA%D0%B8%20%D0%B7%20%D0%B3%D1%96%D0%BF%D1%81%D0%BE%D0%BA%D0%B0%D1%80%D1%82%D0%BE%D0%BD%D1%83',
+        title: 'Перегородка гіпсокартон',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [20, 38], ua: [250, 450], es: [16, 30] },
+    materials: [
+      { materialId: 'mat-drywall-board', qtyPerUnit: 0.8 },
+      { materialId: 'mat-drywall-profile', qtyPerUnit: 2 },
+      { materialId: 'mat-joint-compound', qtyPerUnit: 0.5 },
+    ],
+  }),
+  work({
+    id: 'work-drywall-arch',
+    slug: 'drywall-arch',
+    category: 'drywall',
+    unit: 'pcs',
+    names: {
+      en: 'Drywall arch',
+      uk: 'Арка з гіпсокартону',
+      de: 'Trockenbau-Bogen',
+      es: 'Arco de pladur',
+    },
+    searchAliases: [
+      'арка гкл',
+      'trockenbau bogen',
+      'arco pladur',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20drywall%20wall%20studs',
+        title: 'Build drywall partition',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Trockenbau%20Wand%20aufbauen%20Anleitung',
+        title: 'Trockenbauwand aufbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%BF%D0%B5%D1%80%D0%B5%D0%B3%D0%BE%D1%80%D0%BE%D0%B4%D0%BA%D0%B8%20%D0%B7%20%D0%B3%D1%96%D0%BF%D1%81%D0%BE%D0%BA%D0%B0%D1%80%D1%82%D0%BE%D0%BD%D1%83',
+        title: 'Перегородка гіпсокартон',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [150, 1800, 120],
+    laborRanges: { de: [110, 200], ua: [1400, 2300], es: [90, 160] },
+    materials: [
+      { materialId: 'mat-drywall-board', qtyPerUnit: 4 },
+      { materialId: 'mat-drywall-profile', qtyPerUnit: 8 },
+      { materialId: 'mat-joint-compound', qtyPerUnit: 3 },
+    ],
+  }),
+  work({
+    id: 'work-brick-wall',
+    slug: 'brick-wall-laying',
+    category: 'masonry',
+    unit: 'm2',
+    names: {
+      en: 'Brick wall laying',
+      uk: 'Кладка цегляної стіни',
+      de: 'Ziegelmauerwerk',
+      es: 'Muro de ladrillo',
+    },
+    searchAliases: [
+      'кладка цегли',
+      'ziegelmauer',
+      'ladrillo muro',
+      'brick wall',
+      'мурування',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20brick%20wall%20Essential%20Craftsman',
+        title: 'Build brick wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Ziegelmauer%20mauern%20Anleitung',
+        title: 'Mauerwerk Ziegel',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D1%86%D0%B5%D0%B3%D0%BB%D0%B8%20%D1%81%D1%82%D1%96%D0%BD%D0%B0%20%D0%BC%D0%B0%D0%B9%D1%81%D1%82%D0%B5%D1%80%20%D0%BA%D0%BB%D0%B0%D1%81',
+        title: 'Кладка цегли',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [55, 650, 42],
+    laborRanges: { de: [42, 70], ua: [500, 850], es: [32, 55] },
+    materials: [
+      { materialId: 'mat-brick', qtyPerUnit: 55 },
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 25 },
+    ],
+  }),
+  work({
+    id: 'work-block-wall',
+    slug: 'block-wall-laying',
+    category: 'masonry',
+    unit: 'm2',
+    names: {
+      en: 'Block / AAC wall laying',
+      uk: 'Кладка блоків / газоблоку',
+      de: 'Mauerwerk Porenbeton',
+      es: 'Muro de bloque / termoarcilla',
+    },
+    searchAliases: [
+      'газоблок',
+      'поробетон',
+      'porenbeton',
+      'bloque',
+      'aac wall',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20concrete%20blocks%20wall',
+        title: 'Lay concrete blocks',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Porenbetonsteine%20mauern%20Anleitung',
+        title: 'Mauersteine setzen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D0%B3%D0%B0%D0%B7%D0%BE%D0%B1%D0%BB%D0%BE%D0%BA%D1%83%20%D1%81%D1%82%D1%96%D0%BD%D0%B0',
+        title: 'Кладка блоків',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [42, 500, 34],
+    laborRanges: { de: [32, 55], ua: [380, 650], es: [26, 45] },
+    materials: [
+      { materialId: 'mat-aac-block', qtyPerUnit: 1.05 },
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 8 },
+    ],
+  }),
+  work({
+    id: 'work-repointing',
+    slug: 'brick-repointing',
+    category: 'masonry',
+    unit: 'm2',
+    names: {
+      en: 'Brick repointing',
+      uk: 'Перефугування цегли',
+      de: 'Ausfugen Mauerwerk',
+      es: 'Repasado de juntas ladrillo',
+    },
+    searchAliases: [
+      'перефугування',
+      'ausfugen',
+      'rejuntado ladrillo',
+      'repointing',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20repoint%20brick%20mortar%20joints',
+        title: 'Repoint brickwork',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Mauerwerksfugen%20ausfugen%20Anleitung',
+        title: 'Fugen ausbessern',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [20, 38], ua: [250, 450], es: [16, 30] },
+    materials: [
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 5 },
+    ],
+  }),
+  work({
+    id: 'work-chimney-repair',
+    slug: 'chimney-repair',
+    category: 'masonry',
+    unit: 'pcs',
+    names: {
+      en: 'Chimney repair',
+      uk: 'Ремонт димоходу',
+      de: 'Schornsteinreparatur',
+      es: 'Reparación de chimenea',
+    },
+    searchAliases: [
+      'димохід',
+      'schornstein',
+      'chimenea',
+      'chimney',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20brick%20wall%20Essential%20Craftsman',
+        title: 'Build brick wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Ziegelmauer%20mauern%20Anleitung',
+        title: 'Mauerwerk Ziegel',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D1%86%D0%B5%D0%B3%D0%BB%D0%B8%20%D1%81%D1%82%D1%96%D0%BD%D0%B0%20%D0%BC%D0%B0%D0%B9%D1%81%D1%82%D0%B5%D1%80%20%D0%BA%D0%BB%D0%B0%D1%81',
+        title: 'Кладка цегли',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [280, 3500, 220],
+    laborRanges: { de: [200, 400], ua: [2500, 5000], es: [160, 320] },
+    materials: [
+      { materialId: 'mat-brick', qtyPerUnit: 20 },
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 15 },
+    ],
+  }),
+  work({
+    id: 'work-lintel',
+    slug: 'lintel-installation',
+    category: 'masonry',
+    unit: 'lm',
+    names: {
+      en: 'Lintel installation',
+      uk: 'Монтаж перемички',
+      de: 'Sturz einbauen',
+      es: 'Instalación de dintel',
+    },
+    searchAliases: [
+      'перемичка',
+      'sturz',
+      'dintel',
+      'lintel',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20concrete%20blocks%20wall',
+        title: 'Lay concrete blocks',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Porenbetonsteine%20mauern%20Anleitung',
+        title: 'Mauersteine setzen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D0%B3%D0%B0%D0%B7%D0%BE%D0%B1%D0%BB%D0%BE%D0%BA%D1%83%20%D1%81%D1%82%D1%96%D0%BD%D0%B0',
+        title: 'Кладка блоків',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [45, 550, 36],
+    laborRanges: { de: [35, 60], ua: [400, 700], es: [28, 48] },
+    materials: [
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 5 },
+    ],
+  }),
+  work({
+    id: 'work-partition-brick',
+    slug: 'half-brick-partition',
+    category: 'masonry',
+    unit: 'm2',
+    names: {
+      en: 'Half-brick partition',
+      uk: 'Перегородка в півцеглини',
+      de: 'Halbstein-Wand',
+      es: 'Tabique de medio ladrillo',
+    },
+    searchAliases: [
+      'перегородка цегла',
+      'halbstein',
+      'tabique ladrillo',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20brick%20wall%20Essential%20Craftsman',
+        title: 'Build brick wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Ziegelmauer%20mauern%20Anleitung',
+        title: 'Mauerwerk Ziegel',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D1%86%D0%B5%D0%B3%D0%BB%D0%B8%20%D1%81%D1%82%D1%96%D0%BD%D0%B0%20%D0%BC%D0%B0%D0%B9%D1%81%D1%82%D0%B5%D1%80%20%D0%BA%D0%BB%D0%B0%D1%81',
+        title: 'Кладка цегли',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [48, 580, 38],
+    laborRanges: { de: [38, 62], ua: [450, 720], es: [28, 50] },
+    materials: [
+      { materialId: 'mat-brick', qtyPerUnit: 50 },
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 20 },
+    ],
+  }),
+  work({
+    id: 'work-stone-cladding',
+    slug: 'stone-cladding',
+    category: 'masonry',
+    unit: 'm2',
+    names: {
+      en: 'Natural stone cladding',
+      uk: 'Облицювання каменем',
+      de: 'Natursteinverkleidung',
+      es: 'Aplacado de piedra',
+    },
+    searchAliases: [
+      'камінь облицювання',
+      'naturstein',
+      'piedra aplacado',
+      'stone cladding',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20brick%20wall%20Essential%20Craftsman',
+        title: 'Build brick wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Ziegelmauer%20mauern%20Anleitung',
+        title: 'Mauerwerk Ziegel',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D1%86%D0%B5%D0%B3%D0%BB%D0%B8%20%D1%81%D1%82%D1%96%D0%BD%D0%B0%20%D0%BC%D0%B0%D0%B9%D1%81%D1%82%D0%B5%D1%80%20%D0%BA%D0%BB%D0%B0%D1%81',
+        title: 'Кладка цегли',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [65, 800, 52],
+    laborRanges: { de: [50, 85], ua: [600, 1000], es: [40, 70] },
+    materials: [
+      { materialId: 'mat-adhesive-c2', qtyPerUnit: 6 },
+      { materialId: 'mat-mesh', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-foundation-block',
+    slug: 'foundation-blockwork',
+    category: 'masonry',
+    unit: 'm2',
+    names: {
+      en: 'Foundation blockwork',
+      uk: 'Кладка фундаментних блоків',
+      de: 'Fundamentmauerwerk',
+      es: 'Muro de cimientos bloques',
+    },
+    searchAliases: [
+      'фбс',
+      'fundament',
+      'cimientos',
+      'foundation block',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20concrete%20blocks%20wall',
+        title: 'Lay concrete blocks',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Porenbetonsteine%20mauern%20Anleitung',
+        title: 'Mauersteine setzen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D0%B3%D0%B0%D0%B7%D0%BE%D0%B1%D0%BB%D0%BE%D0%BA%D1%83%20%D1%81%D1%82%D1%96%D0%BD%D0%B0',
+        title: 'Кладка блоків',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [38, 450, 30],
+    laborRanges: { de: [28, 50], ua: [350, 580], es: [22, 42] },
+    materials: [
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 12 },
+    ],
+  }),
+  work({
     id: 'work-screed',
     slug: 'floor-screed',
-    category: 'other',
+    category: 'concrete',
     unit: 'm2',
     names: {
       en: 'Floor screed',
@@ -1051,8 +2599,30 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Estrich einbringen',
       es: 'Solera / recrecido',
     },
-    searchAliases: ['стяжка', 'estrich', 'solera', 'screed', 'вирівнювання підлоги'],
-    youtube: [YT.plasterDe],
+    searchAliases: [
+      'стяжка',
+      'estrich',
+      'solera',
+      'screed',
+      'вирівнювання підлоги',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20floor%20screed',
+        title: 'Floor screed',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Estrich%20einbringen%20Anleitung',
+        title: 'Estrich einbringen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%81%D1%82%D1%8F%D0%B6%D0%BA%D0%B0%20%D0%BF%D1%96%D0%B4%D0%BB%D0%BE%D0%B3%D0%B8%20%D1%8F%D0%BA%20%D0%B7%D1%80%D0%BE%D0%B1%D0%B8%D1%82%D0%B8',
+        title: 'Стяжка підлоги',
+        lang: 'uk',
+      },
+    ],
     laborPrices: [20, 250, 16],
     laborRanges: { de: [15, 28], ua: [180, 320], es: [12, 22] },
     materials: [
@@ -1063,7 +2633,7 @@ export const CATALOG_WORKS: CatalogWork[] = [
   work({
     id: 'work-leveling-compound',
     slug: 'self-leveling-compound',
-    category: 'other',
+    category: 'concrete',
     unit: 'm2',
     names: {
       en: 'Self-leveling compound',
@@ -1071,8 +2641,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Nivelliermasse',
       es: 'Autonivelante',
     },
-    searchAliases: ['нівелір', 'nivelliermasse', 'autonivelante', 'self leveling'],
-    youtube: [YT.plasterUk],
+    searchAliases: [
+      'нівелір',
+      'nivelliermasse',
+      'autonivelante',
+      'self leveling',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20pour%20self%20leveling%20compound',
+        title: 'Self-leveling compound',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Nivelliermasse%20verarbeiten%20Anleitung',
+        title: 'Nivelliermasse',
+        lang: 'de',
+      },
+    ],
     laborPrices: [16, 200, 13],
     laborRanges: { de: [12, 22], ua: [150, 260], es: [10, 18] },
     materials: [
@@ -1081,87 +2667,162 @@ export const CATALOG_WORKS: CatalogWork[] = [
     ],
   }),
   work({
-    id: 'work-mosaic',
-    slug: 'mosaic-tiling',
-    category: 'tiling',
+    id: 'work-concrete-slab',
+    slug: 'concrete-slab-pour',
+    category: 'concrete',
     unit: 'm2',
     names: {
-      en: 'Mosaic tiling',
-      uk: 'Укладання мозаїки',
-      de: 'Mosaik verlegen',
-      es: 'Colocación de mosaico',
+      en: 'Concrete slab pour',
+      uk: 'Заливка бетонної плити',
+      de: 'Bodenplatte betonieren',
+      es: 'Hormigonado de losa',
     },
-    searchAliases: ['мозаїка', 'mosaik', 'mosaico', 'mosaic'],
-    youtube: [YT.tileDe, YT.tileEs],
-    laborPrices: [65, 800, 55],
-    laborRanges: { de: [50, 80], ua: [600, 1000], es: [40, 70] },
+    searchAliases: [
+      'бетон плита',
+      'bodenplatte',
+      'losa hormigon',
+      'concrete slab',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20pour%20a%20concrete%20slab',
+        title: 'Pour concrete slab',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenplatte%20Beton%20gie%C3%9Fen%20Anleitung',
+        title: 'Betonplatte gießen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B7%D0%B0%D0%BB%D0%B8%D0%B2%D0%BA%D0%B0%20%D0%B1%D0%B5%D1%82%D0%BE%D0%BD%D0%BD%D0%BE%D1%97%20%D0%BF%D0%BB%D0%B8%D1%82%D0%B8',
+        title: 'Бетонна плита',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [35, 420, 28],
+    laborRanges: { de: [28, 48], ua: [320, 550], es: [22, 38] },
     materials: [
-      { materialId: 'mat-tile-30x60', qtyPerUnit: 1.15 },
-      { materialId: 'mat-adhesive-c2', qtyPerUnit: 4 },
-      { materialId: 'mat-grout', qtyPerUnit: 1.2 },
+      { materialId: 'mat-concrete', qtyPerUnit: 0.15 },
+      { materialId: 'mat-rebar', qtyPerUnit: 4 },
     ],
   }),
   work({
-    id: 'work-baseboard',
-    slug: 'baseboard-install',
-    category: 'other',
+    id: 'work-formwork',
+    slug: 'concrete-formwork',
+    category: 'concrete',
+    unit: 'm2',
+    names: {
+      en: 'Concrete formwork',
+      uk: 'Опалубка',
+      de: 'Schalungsarbeiten',
+      es: 'Encofrado',
+    },
+    searchAliases: [
+      'опалубка',
+      'schalung',
+      'encofrado',
+      'formwork',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20concrete%20forms',
+        title: 'Concrete formwork',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Schalung%20f%C3%BCr%20Beton%20bauen',
+        title: 'Schalung betonieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [20, 38], ua: [250, 450], es: [16, 30] },
+    materials: [
+      { materialId: 'mat-formwork-board', qtyPerUnit: 1.1 },
+    ],
+  }),
+  work({
+    id: 'work-concrete-steps',
+    slug: 'concrete-steps',
+    category: 'concrete',
     unit: 'lm',
     names: {
-      en: 'Baseboard installation',
-      uk: 'Монтаж плінтуса',
-      de: 'Sockelleisten montieren',
-      es: 'Instalación de rodapié',
+      en: 'Concrete steps',
+      uk: 'Бетонні сходи',
+      de: 'Betontreppe',
+      es: 'Escalera de hormigón',
     },
-    searchAliases: ['плінтус', 'sockelleiste', 'rodapie', 'baseboard'],
-    youtube: [YT.drywallDe],
-    laborPrices: [6, 75, 5],
-    laborRanges: { de: [4, 9], ua: [50, 100], es: [3.5, 7] },
-    materials: [],
-  }),
-  work({
-    id: 'work-anti-mold',
-    slug: 'anti-mold-treatment',
-    category: 'paint',
-    unit: 'm2',
-    names: {
-      en: 'Anti-mold treatment',
-      uk: 'Обробка від плісняви',
-      de: 'Schimmelbehandlung',
-      es: 'Tratamiento antihongos',
-    },
-    searchAliases: ['пліснява', 'schimmel', 'moho', 'mold', 'антигрибок'],
-    youtube: [YT.paintUk],
-    laborPrices: [14, 170, 11],
-    laborRanges: { de: [10, 18], ua: [120, 220], es: [8, 15] },
+    searchAliases: [
+      'бетон сходи',
+      'betontreppe',
+      'escalera hormigon',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20pour%20concrete%20steps',
+        title: 'Concrete steps',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Betontreppe%20schalen%20gie%C3%9Fen',
+        title: 'Betontreppe',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [85, 1000, 68],
+    laborRanges: { de: [65, 110], ua: [750, 1300], es: [50, 90] },
     materials: [
-      { materialId: 'mat-primer', qtyPerUnit: 0.2 },
-      { materialId: 'mat-interior-paint', qtyPerUnit: 0.2 },
+      { materialId: 'mat-concrete', qtyPerUnit: 0.25 },
+      { materialId: 'mat-rebar', qtyPerUnit: 6 },
+      { materialId: 'mat-formwork-board', qtyPerUnit: 2 },
     ],
   }),
   work({
-    id: 'work-spray-paint',
-    slug: 'spray-painting',
-    category: 'paint',
-    unit: 'm2',
+    id: 'work-foundation-pour',
+    slug: 'strip-foundation-pour',
+    category: 'concrete',
+    unit: 'm3',
     names: {
-      en: 'Spray painting',
-      uk: 'Фарбування фарбопультом',
-      de: 'Spritzlackierung',
-      es: 'Pintura a pistola',
+      en: 'Strip foundation pour',
+      uk: 'Заливка стрічкового фундаменту',
+      de: 'Streifenfundament betonieren',
+      es: 'Hormigonado de zapata corrida',
     },
-    searchAliases: ['фарбопульт', 'spritzlack', 'pistola pintura', 'spray paint'],
-    youtube: [YT.paintDe],
-    laborPrices: [14, 180, 11],
-    laborRanges: { de: [10, 18], ua: [130, 230], es: [8, 15] },
+    searchAliases: [
+      'стрічковий фундамент',
+      'streifenfundament',
+      'zapata',
+      'foundation pour',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20pour%20a%20concrete%20slab',
+        title: 'Pour concrete slab',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenplatte%20Beton%20gie%C3%9Fen%20Anleitung',
+        title: 'Betonplatte gießen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B7%D0%B0%D0%BB%D0%B8%D0%B2%D0%BA%D0%B0%20%D0%B1%D0%B5%D1%82%D0%BE%D0%BD%D0%BD%D0%BE%D1%97%20%D0%BF%D0%BB%D0%B8%D1%82%D0%B8',
+        title: 'Бетонна плита',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [120, 1400, 95],
+    laborRanges: { de: [90, 160], ua: [1000, 1800], es: [70, 130] },
     materials: [
-      { materialId: 'mat-interior-paint', qtyPerUnit: 0.3 },
-      { materialId: 'mat-primer', qtyPerUnit: 0.12 },
+      { materialId: 'mat-concrete', qtyPerUnit: 1.05 },
+      { materialId: 'mat-rebar', qtyPerUnit: 80 },
     ],
   }),
   work({
     id: 'work-epoxy-floor',
     slug: 'epoxy-floor-coating',
-    category: 'other',
+    category: 'concrete',
     unit: 'm2',
     names: {
       en: 'Epoxy floor coating',
@@ -1169,8 +2830,24 @@ export const CATALOG_WORKS: CatalogWork[] = [
       de: 'Epoxidboden',
       es: 'Revestimiento epoxi',
     },
-    searchAliases: ['епоксид', 'epoxidboden', 'epoxi suelo', 'epoxy floor'],
-    youtube: [YT.plasterDe],
+    searchAliases: [
+      'епоксид',
+      'epoxidboden',
+      'epoxi suelo',
+      'epoxy floor',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20apply%20epoxy%20garage%20floor%20coating',
+        title: 'Epoxy garage floor',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Epoxidharzboden%20verarbeiten',
+        title: 'Epoxidboden',
+        lang: 'de',
+      },
+    ],
     laborPrices: [35, 450, 28],
     laborRanges: { de: [28, 45], ua: [350, 550], es: [22, 38] },
     materials: [
@@ -1179,48 +2856,2217 @@ export const CATALOG_WORKS: CatalogWork[] = [
     ],
   }),
   work({
-    id: 'work-tile-niche',
-    slug: 'tile-niche-shelf',
-    category: 'tiling',
-    unit: 'pcs',
+    id: 'work-concrete-repair',
+    slug: 'concrete-patch-repair',
+    category: 'concrete',
+    unit: 'm2',
     names: {
-      en: 'Tiled niche / shelf',
-      uk: 'Плиткова ніша / полиця',
-      de: 'Fliesennische',
-      es: 'Nicho alicatado',
+      en: 'Concrete patch repair',
+      uk: 'Ремонт бетону',
+      de: 'Betoninstandsetzung',
+      es: 'Reparación de hormigón',
     },
-    searchAliases: ['ніша плитка', 'fliesennische', 'nicho azulejo'],
-    youtube: [YT.tileDe, YT.tileUk],
-    laborPrices: [120, 1500, 95],
-    laborRanges: { de: [90, 160], ua: [1100, 2000], es: [70, 130] },
+    searchAliases: [
+      'ремонт бетону',
+      'betoninstandsetzung',
+      'reparacion hormigon',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20pour%20a%20concrete%20slab',
+        title: 'Pour concrete slab',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Bodenplatte%20Beton%20gie%C3%9Fen%20Anleitung',
+        title: 'Betonplatte gießen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B7%D0%B0%D0%BB%D0%B8%D0%B2%D0%BA%D0%B0%20%D0%B1%D0%B5%D1%82%D0%BE%D0%BD%D0%BD%D0%BE%D1%97%20%D0%BF%D0%BB%D0%B8%D1%82%D0%B8',
+        title: 'Бетонна плита',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [40, 480, 32],
+    laborRanges: { de: [30, 55], ua: [360, 620], es: [24, 45] },
     materials: [
-      { materialId: 'mat-tile-30x60', qtyPerUnit: 1.5 },
-      { materialId: 'mat-adhesive-c2', qtyPerUnit: 3 },
-      { materialId: 'mat-waterproof', qtyPerUnit: 1 },
-      { materialId: 'mat-grout', qtyPerUnit: 0.5 },
+      { materialId: 'mat-screed', qtyPerUnit: 10 },
+      { materialId: 'mat-primer', qtyPerUnit: 0.3 },
     ],
   }),
   work({
-    id: 'work-render-mesh',
-    slug: 'facade-mesh-render',
-    category: 'plaster',
+    id: 'work-laminate',
+    slug: 'laminate-flooring',
+    category: 'flooring',
     unit: 'm2',
     names: {
-      en: 'Facade mesh + render',
-      uk: 'Фасад: сітка + штукатурка',
-      de: 'WDVS Armierung + Putz',
-      es: 'Malla + enfoscado fachada',
+      en: 'Laminate flooring',
+      uk: 'Укладання ламінату',
+      de: 'Laminat verlegen',
+      es: 'Instalación de laminado',
     },
-    searchAliases: ['фасад сітка', 'wdvs', 'armierung', 'malla fachada'],
-    youtube: [YT.plasterDe],
-    laborPrices: [28, 350, 22],
-    laborRanges: { de: [22, 36], ua: [260, 440], es: [16, 30] },
+    searchAliases: [
+      'ламінат',
+      'laminat',
+      'laminado',
+      'laminate',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20laminate%20flooring%20click',
+        title: 'Install laminate flooring',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Laminat%20verlegen%20Anleitung',
+        title: 'Laminat verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BB%D0%B0%D0%BC%D1%96%D0%BD%D0%B0%D1%82%D1%83%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Ламінат укладання',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [12, 150, 10],
+    laborRanges: { de: [9, 16], ua: [110, 200], es: [7, 14] },
     materials: [
+      { materialId: 'mat-laminate', qtyPerUnit: 1.08 },
+      { materialId: 'mat-underlay', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-parquet',
+    slug: 'parquet-flooring',
+    category: 'flooring',
+    unit: 'm2',
+    names: {
+      en: 'Parquet / engineered wood',
+      uk: 'Паркет / інженерна дошка',
+      de: 'Parkett verlegen',
+      es: 'Parqué / tarima',
+    },
+    searchAliases: [
+      'паркет',
+      'parkett',
+      'parquet',
+      'engineered wood',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20engineered%20hardwood%20flooring',
+        title: 'Install engineered hardwood',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Parkett%20verlegen%20Anleitung',
+        title: 'Parkett verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [22, 38], ua: [250, 450], es: [16, 30] },
+    materials: [
+      { materialId: 'mat-parquet', qtyPerUnit: 1.08 },
+      { materialId: 'mat-underlay', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-vinyl-lvt',
+    slug: 'vinyl-lvt-flooring',
+    category: 'flooring',
+    unit: 'm2',
+    names: {
+      en: 'Vinyl / LVT flooring',
+      uk: 'Вінілова підлога / LVT',
+      de: 'Vinylboden / Designboden',
+      es: 'Suelo vinílico LVT',
+    },
+    searchAliases: [
+      'вініл',
+      'vinylboden',
+      'lvt',
+      'vinilico',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20luxury%20vinyl%20plank%20flooring',
+        title: 'Install LVT vinyl',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Vinylboden%20Designboden%20verlegen',
+        title: 'Vinylboden verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [14, 170, 11],
+    laborRanges: { de: [10, 18], ua: [130, 220], es: [8, 15] },
+    materials: [
+      { materialId: 'mat-vinyl', qtyPerUnit: 1.08 },
+      { materialId: 'mat-underlay', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-carpet',
+    slug: 'carpet-install',
+    category: 'flooring',
+    unit: 'm2',
+    names: {
+      en: 'Carpet installation',
+      uk: 'Укладання ковроліну',
+      de: 'Teppichboden verlegen',
+      es: 'Instalación de moqueta',
+    },
+    searchAliases: [
+      'ковролін',
+      'teppichboden',
+      'moqueta',
+      'carpet',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20carpet%20stretch',
+        title: 'Install carpet',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Teppichboden%20verlegen%20Anleitung',
+        title: 'Teppichboden verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [10, 120, 8],
+    laborRanges: { de: [7, 14], ua: [90, 160], es: [6, 12] },
+    materials: [
+      { materialId: 'mat-underlay', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-baseboard',
+    slug: 'baseboard-install',
+    category: 'flooring',
+    unit: 'lm',
+    names: {
+      en: 'Baseboard installation',
+      uk: 'Монтаж плінтуса',
+      de: 'Sockelleisten montieren',
+      es: 'Instalación de rodapié',
+    },
+    searchAliases: [
+      'плінтус',
+      'sockelleiste',
+      'rodapie',
+      'baseboard',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20baseboards%20trim',
+        title: 'Install baseboards',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Sockelleisten%20montieren%20Anleitung',
+        title: 'Sockelleisten montieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [6, 75, 5],
+    laborRanges: { de: [4, 9], ua: [50, 100], es: [3.5, 7] },
+    materials: [],
+  }),
+  work({
+    id: 'work-cork-floor',
+    slug: 'cork-flooring',
+    category: 'flooring',
+    unit: 'm2',
+    names: {
+      en: 'Cork flooring',
+      uk: 'Укладання коркової підлоги',
+      de: 'Korkboden verlegen',
+      es: 'Suelo de corcho',
+    },
+    searchAliases: [
+      'корок',
+      'korkboden',
+      'corcho',
+      'cork floor',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20laminate%20flooring%20click',
+        title: 'Install laminate flooring',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Laminat%20verlegen%20Anleitung',
+        title: 'Laminat verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%BB%D0%B0%D0%BC%D1%96%D0%BD%D0%B0%D1%82%D1%83%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Ламінат укладання',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [18, 220, 14],
+    laborRanges: { de: [14, 24], ua: [160, 280], es: [10, 20] },
+    materials: [
+      { materialId: 'mat-underlay', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-floor-sanding',
+    slug: 'parquet-sanding',
+    category: 'flooring',
+    unit: 'm2',
+    names: {
+      en: 'Parquet sanding & sealing',
+      uk: 'Циклювання / шліфування паркету',
+      de: 'Parkett schleifen & versiegeln',
+      es: 'Lijado y barnizado de parqué',
+    },
+    searchAliases: [
+      'циклювання',
+      'parkett schleifen',
+      'lijado parquet',
+      'sanding',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20engineered%20hardwood%20flooring',
+        title: 'Install engineered hardwood',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Parkett%20verlegen%20Anleitung',
+        title: 'Parkett verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [22, 270, 18],
+    laborRanges: { de: [16, 30], ua: [200, 350], es: [14, 25] },
+    materials: [
+      { materialId: 'mat-primer', qtyPerUnit: 0.15 },
+    ],
+  }),
+  work({
+    id: 'work-underfloor-heat-prep',
+    slug: 'underfloor-heating-prep',
+    category: 'flooring',
+    unit: 'm2',
+    names: {
+      en: 'Underfloor heating prep',
+      uk: 'Підготовка під теплу підлогу',
+      de: 'Fußbodenheizung vorbereiten',
+      es: 'Preparación suelo radiante',
+    },
+    searchAliases: [
+      'тепла підлога',
+      'fußbodenheizung',
+      'suelo radiante',
+      'underfloor heating',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20floor%20screed',
+        title: 'Floor screed',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Estrich%20einbringen%20Anleitung',
+        title: 'Estrich einbringen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%81%D1%82%D1%8F%D0%B6%D0%BA%D0%B0%20%D0%BF%D1%96%D0%B4%D0%BB%D0%BE%D0%B3%D0%B8%20%D1%8F%D0%BA%20%D0%B7%D1%80%D0%BE%D0%B1%D0%B8%D1%82%D0%B8',
+        title: 'Стяжка підлоги',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [18, 220, 14],
+    laborRanges: { de: [14, 24], ua: [160, 280], es: [10, 20] },
+    materials: [
+      { materialId: 'mat-screed', qtyPerUnit: 15 },
+      { materialId: 'mat-insulation-board', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-plumb-pipes',
+    slug: 'water-pipe-install',
+    category: 'plumbing',
+    unit: 'lm',
+    names: {
+      en: 'Water pipe installation',
+      uk: 'Монтаж водопровідних труб',
+      de: 'Wasserleitungen verlegen',
+      es: 'Instalación de tuberías de agua',
+    },
+    searchAliases: [
+      'водопровід',
+      'wasserleitung',
+      'tuberia agua',
+      'pex',
+      'copper pipe',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20PEX%20plumbing%20pipes',
+        title: 'Install PEX / copper pipes',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Wasserleitungen%20verlegen%20Anleitung',
+        title: 'Wasserleitungen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%B2%D0%BE%D0%B4%D0%BE%D0%BF%D1%80%D0%BE%D0%B2%D1%96%D0%B4%D0%BD%D0%B8%D1%85%20%D1%82%D1%80%D1%83%D0%B1',
+        title: 'Монтаж водопроводу',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [22, 270, 18],
+    laborRanges: { de: [16, 30], ua: [200, 350], es: [14, 25] },
+    materials: [
+      { materialId: 'mat-pex-pipe', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-plumb-faucet',
+    slug: 'faucet-install',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Faucet installation',
+      uk: 'Монтаж змішувача',
+      de: 'Armatur montieren',
+      es: 'Instalación de grifo',
+    },
+    searchAliases: [
+      'змішувач',
+      'armatur',
+      'grifo',
+      'faucet',
+      'mixer tap',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20replace%20a%20kitchen%20faucet',
+        title: 'Replace faucet',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Wasserhahn%20austauschen%20Anleitung',
+        title: 'Wasserhahn wechseln',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [45, 550, 36],
+    laborRanges: { de: [30, 65], ua: [400, 750], es: [25, 55] },
+    materials: [],
+  }),
+  work({
+    id: 'work-plumb-toilet',
+    slug: 'toilet-install',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Toilet installation',
+      uk: 'Монтаж унітазу',
+      de: 'WC montieren',
+      es: 'Instalación de inodoro',
+    },
+    searchAliases: [
+      'унітаз',
+      'wc montieren',
+      'inodoro',
+      'toilet',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20toilet%20step%20by%20step',
+        title: 'Install toilet',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=WC%20montieren%20Anleitung',
+        title: 'WC montieren',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0%20%D1%83%D0%BD%D1%96%D1%82%D0%B0%D0%B7%D1%83%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Монтаж унітазу',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [85, 1000, 68],
+    laborRanges: { de: [60, 120], ua: [750, 1400], es: [50, 95] },
+    materials: [
+      { materialId: 'mat-silicone', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-plumb-shower',
+    slug: 'shower-tray-install',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Shower tray installation',
+      uk: 'Монтаж душового піддону',
+      de: 'Duschwanne einbauen',
+      es: 'Instalación de plato de ducha',
+    },
+    searchAliases: [
+      'піддон',
+      'duschwanne',
+      'plato ducha',
+      'shower tray',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20shower%20tray',
+        title: 'Install shower tray',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Duschwanne%20einbauen%20Abdichtung',
+        title: 'Duschwanne einbauen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [120, 1450, 95],
+    laborRanges: { de: [90, 160], ua: [1100, 1900], es: [70, 130] },
+    materials: [
+      { materialId: 'mat-waterproof', qtyPerUnit: 2 },
+      { materialId: 'mat-silicone', qtyPerUnit: 2 },
+    ],
+  }),
+  work({
+    id: 'work-plumb-drain',
+    slug: 'drain-trap-install',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Drain / trap installation',
+      uk: 'Монтаж сифона / зливу',
+      de: 'Siphon / Ablauf montieren',
+      es: 'Instalación de sifón',
+    },
+    searchAliases: [
+      'сифон',
+      'siphon',
+      'sifon',
+      'drain trap',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20replace%20a%20sink%20drain%20trap',
+        title: 'Unclog / install drain',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Siphon%20montieren%20Abfluss',
+        title: 'Siphon montieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [35, 420, 28],
+    laborRanges: { de: [25, 50], ua: [300, 550], es: [20, 40] },
+    materials: [],
+  }),
+  work({
+    id: 'work-plumb-radiator',
+    slug: 'radiator-plumbing',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Radiator connection',
+      uk: 'Підключення радіатора',
+      de: 'Heizkörper anschließen',
+      es: 'Conexión de radiador',
+    },
+    searchAliases: [
+      'радіатор підключення',
+      'heizkörper anschließen',
+      'radiador conexion',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20PEX%20plumbing%20pipes',
+        title: 'Install PEX / copper pipes',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Wasserleitungen%20verlegen%20Anleitung',
+        title: 'Wasserleitungen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%B2%D0%BE%D0%B4%D0%BE%D0%BF%D1%80%D0%BE%D0%B2%D1%96%D0%B4%D0%BD%D0%B8%D1%85%20%D1%82%D1%80%D1%83%D0%B1',
+        title: 'Монтаж водопроводу',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [65, 780, 52],
+    laborRanges: { de: [45, 90], ua: [550, 1000], es: [38, 70] },
+    materials: [
+      { materialId: 'mat-pex-pipe', qtyPerUnit: 2 },
+    ],
+  }),
+  work({
+    id: 'work-plumb-sink',
+    slug: 'sink-install',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Sink installation',
+      uk: 'Монтаж умивальника / мийки',
+      de: 'Waschbecken montieren',
+      es: 'Instalación de lavabo',
+    },
+    searchAliases: [
+      'умивальник',
+      'waschbecken',
+      'lavabo',
+      'sink',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20replace%20a%20kitchen%20faucet',
+        title: 'Replace faucet',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Wasserhahn%20austauschen%20Anleitung',
+        title: 'Wasserhahn wechseln',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [55, 650, 44],
+    laborRanges: { de: [40, 75], ua: [480, 850], es: [32, 60] },
+    materials: [
+      { materialId: 'mat-silicone', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-plumb-waste',
+    slug: 'waste-pipe-install',
+    category: 'plumbing',
+    unit: 'lm',
+    names: {
+      en: 'Waste / soil pipe',
+      uk: 'Монтаж каналізації',
+      de: 'Abwasserleitung verlegen',
+      es: 'Instalación de desagüe',
+    },
+    searchAliases: [
+      'каналізація',
+      'abwasser',
+      'desague',
+      'waste pipe',
+      'ht rohr',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20PEX%20plumbing%20pipes',
+        title: 'Install PEX / copper pipes',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Wasserleitungen%20verlegen%20Anleitung',
+        title: 'Wasserleitungen verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%B2%D0%BE%D0%B4%D0%BE%D0%BF%D1%80%D0%BE%D0%B2%D1%96%D0%B4%D0%BD%D0%B8%D1%85%20%D1%82%D1%80%D1%83%D0%B1',
+        title: 'Монтаж водопроводу',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [18, 220, 14],
+    laborRanges: { de: [14, 25], ua: [160, 290], es: [10, 20] },
+    materials: [
+      { materialId: 'mat-waste-pipe', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-elec-outlet',
+    slug: 'outlet-install',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'Electrical outlet install',
+      uk: 'Монтаж розетки',
+      de: 'Steckdose installieren',
+      es: 'Instalación de enchufe',
+    },
+    searchAliases: [
+      'розетка',
+      'steckdose',
+      'enchufe',
+      'outlet',
+      'socket',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20an%20electrical%20outlet%20safely',
+        title: 'Install electrical outlet',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Steckdose%20installieren%20Anleitung',
+        title: 'Steckdose montieren',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0%20%D1%80%D0%BE%D0%B7%D0%B5%D1%82%D0%BA%D0%B8%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Монтаж розетки',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [35, 420, 28],
+    laborRanges: { de: [25, 50], ua: [300, 550], es: [20, 40] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 3 },
+      { materialId: 'mat-outlet', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-elec-switch',
+    slug: 'switch-install',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'Light switch install',
+      uk: 'Монтаж вимикача',
+      de: 'Lichtschalter installieren',
+      es: 'Instalación de interruptor',
+    },
+    searchAliases: [
+      'вимикач',
+      'lichtschalter',
+      'interruptor',
+      'switch',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20light%20switch',
+        title: 'Install light switch',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Lichtschalter%20anschlie%C3%9Fen%20Anleitung',
+        title: 'Lichtschalter montieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [32, 390, 26],
+    laborRanges: { de: [22, 45], ua: [280, 500], es: [18, 38] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 3 },
+      { materialId: 'mat-switch', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-elec-cable',
+    slug: 'cable-run',
+    category: 'electrical',
+    unit: 'lm',
+    names: {
+      en: 'Cable run (concealed)',
+      uk: 'Прокладка кабелю (прихована)',
+      de: 'Kabel unter Putz verlegen',
+      es: 'Tendido de cable empotrado',
+    },
+    searchAliases: [
+      'кабель',
+      'kabel verlegen',
+      'cable empotrado',
+      'wiring',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20run%20electrical%20wire%20in%20walls',
+        title: 'Run electrical cable',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Elektrokabel%20verlegen%20Unterputz',
+        title: 'Kabel verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [8, 95, 6.5],
+    laborRanges: { de: [6, 12], ua: [70, 130], es: [5, 10] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-elec-light',
+    slug: 'ceiling-light-install',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'Ceiling light install',
+      uk: 'Монтаж стельового світильника',
+      de: 'Deckenlampe montieren',
+      es: 'Instalación de lámpara techo',
+    },
+    searchAliases: [
+      'світильник',
+      'deckenlampe',
+      'lampara techo',
+      'ceiling light',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20ceiling%20light%20fixture',
+        title: 'Install ceiling light',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Deckenlampe%20anschlie%C3%9Fen%20montieren',
+        title: 'Deckenlampe montieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [40, 480, 32],
+    laborRanges: { de: [28, 55], ua: [350, 620], es: [24, 45] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 2 },
+    ],
+  }),
+  work({
+    id: 'work-elec-spot',
+    slug: 'recessed-spot-install',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'Recessed spot install',
+      uk: 'Монтаж точкового світильника',
+      de: 'Einbaustrahler montieren',
+      es: 'Instalación de downlight',
+    },
+    searchAliases: [
+      'точка',
+      'einbaustrahler',
+      'downlight',
+      'spot light',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20ceiling%20light%20fixture',
+        title: 'Install ceiling light',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Deckenlampe%20anschlie%C3%9Fen%20montieren',
+        title: 'Deckenlampe montieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [22, 270, 18],
+    laborRanges: { de: [15, 32], ua: [200, 360], es: [12, 26] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 1.5 },
+    ],
+  }),
+  work({
+    id: 'work-elec-panel',
+    slug: 'consumer-unit-basics',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'Consumer unit / panel basics',
+      uk: 'Щиток: базова збірка',
+      de: 'Unterverteilung bestücken',
+      es: 'Cuadro eléctrico básico',
+    },
+    searchAliases: [
+      'щиток',
+      'unterverteilung',
+      'cuadro electrico',
+      'consumer unit',
+      'breaker panel',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20run%20electrical%20wire%20in%20walls',
+        title: 'Run electrical cable',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Elektrokabel%20verlegen%20Unterputz',
+        title: 'Kabel verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [180, 2200, 145],
+    laborRanges: { de: [120, 260], ua: [1600, 3000], es: [100, 200] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 10 },
+    ],
+  }),
+  work({
+    id: 'work-elec-chase',
+    slug: 'wall-chase-electrics',
+    category: 'electrical',
+    unit: 'lm',
+    names: {
+      en: 'Wall chase for electrics',
+      uk: 'Штроблення під електрику',
+      de: 'Schlitz fräsen Elektro',
+      es: 'Rozas para electricidad',
+    },
+    searchAliases: [
+      'штроба',
+      'schlitz',
+      'roza',
+      'chase',
+      'штроблення',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20run%20electrical%20wire%20in%20walls',
+        title: 'Run electrical cable',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Elektrokabel%20verlegen%20Unterputz',
+        title: 'Kabel verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [12, 145, 10],
+    laborRanges: { de: [8, 18], ua: [100, 200], es: [7, 14] },
+    materials: [],
+  }),
+  work({
+    id: 'work-elec-tv',
+    slug: 'tv-wall-mount-wiring',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'TV wall mount + wiring',
+      uk: 'Кріплення ТВ + проводка',
+      de: 'TV Wandmontage + Kabel',
+      es: 'Soporte TV + cableado',
+    },
+    searchAliases: [
+      'тв кріплення',
+      'tv wand',
+      'soporte tv',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20an%20electrical%20outlet%20safely',
+        title: 'Install electrical outlet',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Steckdose%20installieren%20Anleitung',
+        title: 'Steckdose montieren',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0%20%D1%80%D0%BE%D0%B7%D0%B5%D1%82%D0%BA%D0%B8%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Монтаж розетки',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [55, 650, 44],
+    laborRanges: { de: [40, 75], ua: [480, 850], es: [32, 60] },
+    materials: [
+      { materialId: 'mat-cable-nyam', qtyPerUnit: 5 },
+    ],
+  }),
+  work({
+    id: 'work-roof-tiles',
+    slug: 'roof-tile-laying',
+    category: 'roofing',
+    unit: 'm2',
+    names: {
+      en: 'Roof tile laying',
+      uk: 'Укладання покрівельної черепиці',
+      de: 'Dachziegel verlegen',
+      es: 'Colocación de tejas',
+    },
+    searchAliases: [
+      'черепиця',
+      'dachziegel',
+      'tejas',
+      'roof tile',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20roof%20tiles%20clay',
+        title: 'Install roof tiles',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Dachziegel%20verlegen%20Anleitung',
+        title: 'Dachziegel verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D1%87%D0%B5%D1%80%D0%B5%D0%BF%D0%B8%D1%86%D1%96%20%D0%BD%D0%B0%20%D0%B4%D0%B0%D1%85',
+        title: 'Покрівля черепиця',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [45, 550, 36],
+    laborRanges: { de: [35, 60], ua: [400, 720], es: [28, 50] },
+    materials: [
+      { materialId: 'mat-roof-tile', qtyPerUnit: 1.1 },
+      { materialId: 'mat-underlay', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-roof-membrane',
+    slug: 'flat-roof-membrane',
+    category: 'roofing',
+    unit: 'm2',
+    names: {
+      en: 'Flat roof membrane',
+      uk: 'Мембрана плоского даху',
+      de: 'Flachdachabdichtung',
+      es: 'Impermeabilización cubierta plana',
+    },
+    searchAliases: [
+      'плоский дах',
+      'flachdach',
+      'cubierta plana',
+      'epdm',
+      'roof membrane',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20flat%20roof%20membrane%20EPDM',
+        title: 'Flat roof membrane',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Flachdach%20Bahnabdichtung%20Anleitung',
+        title: 'Flachdach abdichten',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [38, 460, 30],
+    laborRanges: { de: [28, 50], ua: [350, 600], es: [22, 42] },
+    materials: [
+      { materialId: 'mat-roof-membrane', qtyPerUnit: 1.1 },
+    ],
+  }),
+  work({
+    id: 'work-roof-gutter',
+    slug: 'gutter-install',
+    category: 'roofing',
+    unit: 'lm',
+    names: {
+      en: 'Gutter installation',
+      uk: 'Монтаж водостоку',
+      de: 'Dachrinne montieren',
+      es: 'Instalación de canalón',
+    },
+    searchAliases: [
+      'водостік',
+      'dachrinne',
+      'canalon',
+      'gutter',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20rain%20gutters',
+        title: 'Install gutters',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Dachrinne%20montieren%20Anleitung',
+        title: 'Dachrinne montieren',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [18, 220, 14],
+    laborRanges: { de: [14, 25], ua: [160, 290], es: [10, 20] },
+    materials: [
+      { materialId: 'mat-gutter', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-roof-flashing',
+    slug: 'roof-flashing',
+    category: 'roofing',
+    unit: 'lm',
+    names: {
+      en: 'Roof flashing',
+      uk: 'Покрівельні примикання',
+      de: 'Dachanschluss / Kehlblech',
+      es: 'Remates de cubierta',
+    },
+    searchAliases: [
+      'примикання',
+      'dachanschluss',
+      'remate cubierta',
+      'flashing',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20flat%20roof%20membrane%20EPDM',
+        title: 'Flat roof membrane',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Flachdach%20Bahnabdichtung%20Anleitung',
+        title: 'Flachdach abdichten',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [25, 300, 20],
+    laborRanges: { de: [18, 35], ua: [220, 400], es: [14, 28] },
+    materials: [
+      { materialId: 'mat-roof-membrane', qtyPerUnit: 0.3 },
+    ],
+  }),
+  work({
+    id: 'work-roof-repair',
+    slug: 'roof-leak-repair',
+    category: 'roofing',
+    unit: 'pcs',
+    names: {
+      en: 'Roof leak repair',
+      uk: 'Ремонт протікання даху',
+      de: 'Dachleckage reparieren',
+      es: 'Reparación de gotera',
+    },
+    searchAliases: [
+      'протікання',
+      'dachleck',
+      'gotera',
+      'roof leak',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20roof%20tiles%20clay',
+        title: 'Install roof tiles',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Dachziegel%20verlegen%20Anleitung',
+        title: 'Dachziegel verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D1%87%D0%B5%D1%80%D0%B5%D0%BF%D0%B8%D1%86%D1%96%20%D0%BD%D0%B0%20%D0%B4%D0%B0%D1%85',
+        title: 'Покрівля черепиця',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [95, 1150, 75],
+    laborRanges: { de: [70, 140], ua: [850, 1600], es: [55, 110] },
+    materials: [
+      { materialId: 'mat-roof-membrane', qtyPerUnit: 2 },
+    ],
+  }),
+  work({
+    id: 'work-metal-roof',
+    slug: 'metal-roof-sheets',
+    category: 'roofing',
+    unit: 'm2',
+    names: {
+      en: 'Metal roof sheets',
+      uk: 'Металочерепиця / профнастил',
+      de: 'Metalldach / Trapezblech',
+      es: 'Cubierta metálica',
+    },
+    searchAliases: [
+      'металочерепиця',
+      'trapezblech',
+      'cubierta metalica',
+      'metal roof',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20roof%20tiles%20clay',
+        title: 'Install roof tiles',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Dachziegel%20verlegen%20Anleitung',
+        title: 'Dachziegel verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D1%87%D0%B5%D1%80%D0%B5%D0%BF%D0%B8%D1%86%D1%96%20%D0%BD%D0%B0%20%D0%B4%D0%B0%D1%85',
+        title: 'Покрівля черепиця',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [32, 390, 26],
+    laborRanges: { de: [24, 45], ua: [280, 520], es: [20, 36] },
+    materials: [
+      { materialId: 'mat-metal-roof', qtyPerUnit: 1.08 },
+      { materialId: 'mat-underlay', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-insul-mineral',
+    slug: 'mineral-wool-insulation',
+    category: 'insulation',
+    unit: 'm2',
+    names: {
+      en: 'Mineral wool insulation',
+      uk: 'Утеплення мінватою',
+      de: 'Mineralwolldämmung',
+      es: 'Aislamiento lana mineral',
+    },
+    searchAliases: [
+      'мінвата',
+      'mineralwolle',
+      'lana mineral',
+      'insulation wool',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20mineral%20wool%20insulation%20walls',
+        title: 'Install mineral wool insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Mineralwolle%20Wand%20d%C3%A4mmen%20Anleitung',
+        title: 'Mineralwolle dämmen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%82%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D1%81%D1%82%D1%96%D0%BD%20%D0%BC%D1%96%D0%BD%D0%B5%D1%80%D0%B0%D0%BB%D1%8C%D0%BD%D0%BE%D1%8E%20%D0%B2%D0%B0%D1%82%D0%BE%D1%8E',
+        title: 'Утеплення мінватою',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [16, 200, 13],
+    laborRanges: { de: [12, 22], ua: [150, 260], es: [10, 18] },
+    materials: [
+      { materialId: 'mat-mineral-wool', qtyPerUnit: 1.05 },
+      { materialId: 'mat-vapor-barrier', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-insul-xps',
+    slug: 'xps-foam-insulation',
+    category: 'insulation',
+    unit: 'm2',
+    names: {
+      en: 'XPS / EPS foam boards',
+      uk: 'Утеплення XPS/EPS плитами',
+      de: 'XPS/EPS Dämmplatten',
+      es: 'Aislamiento XPS/EPS',
+    },
+    searchAliases: [
+      'пінопласт',
+      'xps',
+      'eps',
+      'dämmplatte',
+      'aislamiento',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20XPS%20foam%20board%20insulation',
+        title: 'Spray foam / XPS insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=EPS%20XPS%20D%C3%A4mmplatten%20verlegen',
+        title: 'Dämmplatten verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [14, 170, 11],
+    laborRanges: { de: [10, 20], ua: [130, 230], es: [8, 16] },
+    materials: [
+      { materialId: 'mat-insulation-board', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-insul-vapor',
+    slug: 'vapor-barrier',
+    category: 'insulation',
+    unit: 'm2',
+    names: {
+      en: 'Vapor barrier install',
+      uk: 'Пароізоляція',
+      de: 'Dampfsperre verlegen',
+      es: 'Barrera de vapor',
+    },
+    searchAliases: [
+      'пароізоляція',
+      'dampfsperre',
+      'barrera vapor',
+      'vapor barrier',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20vapor%20barrier%20membrane',
+        title: 'Vapor barrier install',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Dampfsperre%20Folie%20verlegen',
+        title: 'Dampfsperre verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [6, 75, 5],
+    laborRanges: { de: [4, 9], ua: [50, 100], es: [3.5, 7] },
+    materials: [
+      { materialId: 'mat-vapor-barrier', qtyPerUnit: 1.1 },
+    ],
+  }),
+  work({
+    id: 'work-insul-attic',
+    slug: 'attic-insulation',
+    category: 'insulation',
+    unit: 'm2',
+    names: {
+      en: 'Attic insulation',
+      uk: 'Утеплення горища',
+      de: 'Dachbodendämmung',
+      es: 'Aislamiento de ático',
+    },
+    searchAliases: [
+      'горище утеплення',
+      'dachboden',
+      'atico aislamiento',
+      'attic',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20mineral%20wool%20insulation%20walls',
+        title: 'Install mineral wool insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Mineralwolle%20Wand%20d%C3%A4mmen%20Anleitung',
+        title: 'Mineralwolle dämmen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%82%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D1%81%D1%82%D1%96%D0%BD%20%D0%BC%D1%96%D0%BD%D0%B5%D1%80%D0%B0%D0%BB%D1%8C%D0%BD%D0%BE%D1%8E%20%D0%B2%D0%B0%D1%82%D0%BE%D1%8E',
+        title: 'Утеплення мінватою',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [18, 220, 14],
+    laborRanges: { de: [14, 25], ua: [160, 290], es: [10, 20] },
+    materials: [
+      { materialId: 'mat-mineral-wool', qtyPerUnit: 1.1 },
+      { materialId: 'mat-vapor-barrier', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-insul-pipe',
+    slug: 'pipe-insulation',
+    category: 'insulation',
+    unit: 'lm',
+    names: {
+      en: 'Pipe insulation',
+      uk: 'Ізоляція труб',
+      de: 'Rohrdämmung',
+      es: 'Aislamiento de tuberías',
+    },
+    searchAliases: [
+      'ізоляція труб',
+      'rohrdämmung',
+      'aislamiento tuberias',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20XPS%20foam%20board%20insulation',
+        title: 'Spray foam / XPS insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=EPS%20XPS%20D%C3%A4mmplatten%20verlegen',
+        title: 'Dämmplatten verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [4, 50, 3.5],
+    laborRanges: { de: [3, 6], ua: [35, 70], es: [2.5, 5] },
+    materials: [
+      { materialId: 'mat-pipe-insulation', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-etics',
+    slug: 'etics-wdvs-system',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'ETICS / WDVS facade system',
+      uk: 'СФТК / утеплення фасаду',
+      de: 'WDVS Komplettsystem',
+      es: 'SATE / aislamiento fachada',
+    },
+    searchAliases: [
+      'сфтк',
+      'wdvs',
+      'sate',
+      'etics',
+      'утеплення фасаду',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20external%20wall%20insulation%20ETICS',
+        title: 'ETICS / EIFS facade insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=WDVS%20Fassadend%C3%A4mmung%20Anleitung',
+        title: 'WDVS Fassade',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%82%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D1%84%D0%B0%D1%81%D0%B0%D0%B4%D1%83%20%D0%BF%D1%96%D0%BD%D0%BE%D0%BF%D0%BB%D0%B0%D1%81%D1%82%D0%BE%D0%BC%20%D1%82%D0%B5%D1%85%D0%BD%D0%BE%D0%BB%D0%BE%D0%B3%D1%96%D1%8F',
+        title: 'Утеплення фасаду',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [55, 680, 44],
+    laborRanges: { de: [42, 72], ua: [520, 880], es: [34, 58] },
+    materials: [
+      { materialId: 'mat-insulation-board', qtyPerUnit: 1.05 },
       { materialId: 'mat-mesh', qtyPerUnit: 1.1 },
       { materialId: 'mat-cement-plaster', qtyPerUnit: 8 },
-      { materialId: 'mat-primer', qtyPerUnit: 0.2 },
+      { materialId: 'mat-exterior-paint', qtyPerUnit: 0.25 },
+    ],
+  }),
+  work({
+    id: 'work-facade-clad',
+    slug: 'facade-cladding',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'Facade cladding panels',
+      uk: 'Фасадні панелі / облицювання',
+      de: 'Fassadenverkleidung',
+      es: 'Revestimiento de fachada',
+    },
+    searchAliases: [
+      'фасадні панелі',
+      'fassadenverkleidung',
+      'revestimiento fachada',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20exterior%20cladding%20panels',
+        title: 'Facade cladding',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fassadenverkleidung%20montieren',
+        title: 'Fassadenverkleidung',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [48, 580, 38],
+    laborRanges: { de: [38, 65], ua: [450, 750], es: [28, 52] },
+    materials: [
+      { materialId: 'mat-facade-panel', qtyPerUnit: 1.08 },
+    ],
+  }),
+  work({
+    id: 'work-facade-clean',
+    slug: 'facade-cleaning',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'Facade cleaning',
+      uk: 'Миття / чистка фасаду',
+      de: 'Fassadenreinigung',
+      es: 'Limpieza de fachada',
+    },
+    searchAliases: [
+      'чистка фасаду',
+      'fassadenreinigung',
+      'limpieza fachada',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20paint%20exterior%20house%20walls',
+        title: 'Facade painting',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fassade%20streichen%20Anleitung',
+        title: 'Fassade streichen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [8, 95, 6.5],
+    laborRanges: { de: [5, 12], ua: [70, 130], es: [4, 10] },
+    materials: [],
+  }),
+  work({
+    id: 'work-scaffold',
+    slug: 'scaffold-rental-setup',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'Scaffold setup (labor)',
+      uk: 'Монтаж риштувань',
+      de: 'Gerüst aufbauen',
+      es: 'Montaje de andamio',
+    },
+    searchAliases: [
+      'риштування',
+      'gerüst',
+      'andamio',
+      'scaffold',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20external%20wall%20insulation%20ETICS',
+        title: 'ETICS / EIFS facade insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=WDVS%20Fassadend%C3%A4mmung%20Anleitung',
+        title: 'WDVS Fassade',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D1%82%D0%B5%D0%BF%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D1%84%D0%B0%D1%81%D0%B0%D0%B4%D1%83%20%D0%BF%D1%96%D0%BD%D0%BE%D0%BF%D0%BB%D0%B0%D1%81%D1%82%D0%BE%D0%BC%20%D1%82%D0%B5%D1%85%D0%BD%D0%BE%D0%BB%D0%BE%D0%B3%D1%96%D1%8F',
+        title: 'Утеплення фасаду',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [12, 145, 10],
+    laborRanges: { de: [8, 18], ua: [100, 200], es: [7, 14] },
+    materials: [],
+  }),
+  work({
+    id: 'work-plinth',
+    slug: 'plinth-insulation',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'Plinth / base insulation',
+      uk: 'Утеплення цоколя',
+      de: 'Sockeldämmung',
+      es: 'Aislamiento de zócalo',
+    },
+    searchAliases: [
+      'цоколь',
+      'sockeldämmung',
+      'zocalo',
+      'plinth',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20XPS%20foam%20board%20insulation',
+        title: 'Spray foam / XPS insulation',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=EPS%20XPS%20D%C3%A4mmplatten%20verlegen',
+        title: 'Dämmplatten verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [20, 38], ua: [250, 450], es: [16, 30] },
+    materials: [
+      { materialId: 'mat-insulation-board', qtyPerUnit: 1.05 },
+      { materialId: 'mat-waterproof', qtyPerUnit: 1 },
+      { materialId: 'mat-mesh', qtyPerUnit: 1.05 },
+    ],
+  }),
+  work({
+    id: 'work-demo-wall',
+    slug: 'interior-wall-demolition',
+    category: 'demolition',
+    unit: 'm2',
+    names: {
+      en: 'Interior wall demolition',
+      uk: 'Демонтаж міжкімнатної стіни',
+      de: 'Nichttragende Wand abbrechen',
+      es: 'Demolición de tabique',
+    },
+    searchAliases: [
+      'демонтаж стіни',
+      'wand abbrechen',
+      'demolicion tabique',
+      'wall demolition',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20demolish%20a%20non%20load%20bearing%20wall',
+        title: 'Demolish interior wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Nichttragende%20Wand%20abrei%C3%9Fen',
+        title: 'Wand abreißen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B4%D0%B5%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%BC%D1%96%D0%B6%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%BD%D0%BE%D1%97%20%D1%81%D1%82%D1%96%D0%BD%D0%B8',
+        title: 'Демонтаж стіни',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [25, 300, 20],
+    laborRanges: { de: [18, 35], ua: [220, 400], es: [14, 28] },
+    materials: [],
+  }),
+  work({
+    id: 'work-demo-floor',
+    slug: 'floor-covering-strip',
+    category: 'demolition',
+    unit: 'm2',
+    names: {
+      en: 'Floor covering strip-out',
+      uk: 'Демонтаж підлогового покриття',
+      de: 'Bodenbelag entfernen',
+      es: 'Levantado de solado',
+    },
+    searchAliases: [
+      'демонтаж підлоги',
+      'bodenbelag entfernen',
+      'levantar suelo',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20remove%20old%20flooring',
+        title: 'Strip floor covering',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Alten%20Bodenbelag%20entfernen',
+        title: 'Bodenbelag entfernen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [12, 145, 10],
+    laborRanges: { de: [8, 18], ua: [100, 200], es: [7, 14] },
+    materials: [],
+  }),
+  work({
+    id: 'work-demo-ceiling',
+    slug: 'ceiling-demolition',
+    category: 'demolition',
+    unit: 'm2',
+    names: {
+      en: 'Ceiling demolition',
+      uk: 'Демонтаж стелі',
+      de: 'Decke abbrechen',
+      es: 'Demolición de techo',
+    },
+    searchAliases: [
+      'демонтаж стелі',
+      'decke abbrechen',
+      'demolicion techo',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20demolish%20a%20non%20load%20bearing%20wall',
+        title: 'Demolish interior wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Nichttragende%20Wand%20abrei%C3%9Fen',
+        title: 'Wand abreißen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B4%D0%B5%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%BC%D1%96%D0%B6%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%BD%D0%BE%D1%97%20%D1%81%D1%82%D1%96%D0%BD%D0%B8',
+        title: 'Демонтаж стіни',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [18, 220, 14],
+    laborRanges: { de: [14, 25], ua: [160, 290], es: [10, 20] },
+    materials: [],
+  }),
+  work({
+    id: 'work-demo-bathroom',
+    slug: 'bathroom-strip-out',
+    category: 'demolition',
+    unit: 'pcs',
+    names: {
+      en: 'Bathroom strip-out',
+      uk: 'Повний демонтаж санвузла',
+      de: 'Badentkernung',
+      es: 'Vaciar baño completo',
+    },
+    searchAliases: [
+      'демонтаж ванної',
+      'badentkernung',
+      'vaciar bano',
+      'bathroom strip',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20demolish%20a%20non%20load%20bearing%20wall',
+        title: 'Demolish interior wall',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Nichttragende%20Wand%20abrei%C3%9Fen',
+        title: 'Wand abreißen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B4%D0%B5%D0%BC%D0%BE%D0%BD%D1%82%D0%B0%D0%B6%20%D0%BC%D1%96%D0%B6%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%BD%D0%BE%D1%97%20%D1%81%D1%82%D1%96%D0%BD%D0%B8',
+        title: 'Демонтаж стіни',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [450, 5500, 360],
+    laborRanges: { de: [350, 650], ua: [4000, 7500], es: [280, 500] },
+    materials: [],
+  }),
+  work({
+    id: 'work-demo-debris',
+    slug: 'debris-removal',
+    category: 'demolition',
+    unit: 'm3',
+    names: {
+      en: 'Debris removal / skip load',
+      uk: 'Вивіз будівельного сміття',
+      de: 'Schutt abfahren',
+      es: 'Retirada de escombros',
+    },
+    searchAliases: [
+      'сміття вивіз',
+      'schutt',
+      'escombros',
+      'debris',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20remove%20old%20flooring',
+        title: 'Strip floor covering',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Alten%20Bodenbelag%20entfernen',
+        title: 'Bodenbelag entfernen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [55, 650, 44],
+    laborRanges: { de: [40, 75], ua: [480, 850], es: [32, 60] },
+    materials: [],
+  }),
+  work({
+    id: 'work-door-interior',
+    slug: 'interior-door-install',
+    category: 'doors_windows',
+    unit: 'pcs',
+    names: {
+      en: 'Interior door install',
+      uk: 'Монтаж міжкімнатних дверей',
+      de: 'Innentür einbauen',
+      es: 'Instalación de puerta interior',
+    },
+    searchAliases: [
+      'двері міжкімнатні',
+      'innentür',
+      'puerta interior',
+      'interior door',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20an%20interior%20door',
+        title: 'Install interior door',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Innent%C3%BCr%20einbauen%20Anleitung',
+        title: 'Innentür einbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B2%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D0%BC%D1%96%D0%B6%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%BD%D0%B8%D1%85%20%D0%B4%D0%B2%D0%B5%D1%80%D0%B5%D0%B9',
+        title: 'Монтаж міжкімнатних дверей',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [75, 900, 60],
+    laborRanges: { de: [55, 100], ua: [650, 1200], es: [45, 85] },
+    materials: [],
+  }),
+  work({
+    id: 'work-door-exterior',
+    slug: 'exterior-door-install',
+    category: 'doors_windows',
+    unit: 'pcs',
+    names: {
+      en: 'Exterior door install',
+      uk: 'Монтаж вхідних дверей',
+      de: 'Haustür einbauen',
+      es: 'Instalación de puerta exterior',
+    },
+    searchAliases: [
+      'вхідні двері',
+      'haustür',
+      'puerta exterior',
+      'entry door',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20an%20exterior%20entry%20door',
+        title: 'Install exterior door',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Haust%C3%BCr%20einbauen%20Anleitung',
+        title: 'Haustür einbauen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [180, 2200, 145],
+    laborRanges: { de: [130, 250], ua: [1600, 3000], es: [100, 200] },
+    materials: [
+      { materialId: 'mat-foam', qtyPerUnit: 1 },
+      { materialId: 'mat-silicone', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-window',
+    slug: 'window-install',
+    category: 'doors_windows',
+    unit: 'pcs',
+    names: {
+      en: 'Window installation',
+      uk: 'Монтаж вікна',
+      de: 'Fenster einbauen',
+      es: 'Instalación de ventana',
+    },
+    searchAliases: [
+      'вікно',
+      'fenster',
+      'ventana',
+      'window install',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20replacement%20window',
+        title: 'Install window',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fenster%20einbauen%20Anleitung',
+        title: 'Fenster einbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B2%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B0%D1%81%D1%82%D0%B8%D0%BA%D0%BE%D0%B2%D0%B8%D1%85%20%D0%B2%D1%96%D0%BA%D0%BE%D0%BD',
+        title: 'Монтаж вікон',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [120, 1450, 95],
+    laborRanges: { de: [90, 160], ua: [1100, 1900], es: [70, 130] },
+    materials: [
+      { materialId: 'mat-foam', qtyPerUnit: 1 },
+      { materialId: 'mat-vapor-barrier', qtyPerUnit: 0.5 },
+    ],
+  }),
+  work({
+    id: 'work-window-sill',
+    slug: 'window-sill-install',
+    category: 'doors_windows',
+    unit: 'lm',
+    names: {
+      en: 'Window sill install',
+      uk: 'Монтаж підвіконня',
+      de: 'Fensterbank montieren',
+      es: 'Instalación de alféizar',
+    },
+    searchAliases: [
+      'підвіконня',
+      'fensterbank',
+      'alfeizar',
+      'window sill',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20a%20replacement%20window',
+        title: 'Install window',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Fenster%20einbauen%20Anleitung',
+        title: 'Fenster einbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B2%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D0%BF%D0%BB%D0%B0%D1%81%D1%82%D0%B8%D0%BA%D0%BE%D0%B2%D0%B8%D1%85%20%D0%B2%D1%96%D0%BA%D0%BE%D0%BD',
+        title: 'Монтаж вікон',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [20, 40], ua: [250, 450], es: [16, 32] },
+    materials: [
+      { materialId: 'mat-silicone', qtyPerUnit: 0.5 },
+    ],
+  }),
+  work({
+    id: 'work-door-frame',
+    slug: 'door-frame-install',
+    category: 'doors_windows',
+    unit: 'pcs',
+    names: {
+      en: 'Door frame / casing',
+      uk: 'Монтаж дверної коробки',
+      de: 'Türzarge einbauen',
+      es: 'Instalación de marco de puerta',
+    },
+    searchAliases: [
+      'коробка дверей',
+      'türzarge',
+      'marco puerta',
+      'door frame',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20an%20interior%20door',
+        title: 'Install interior door',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Innent%C3%BCr%20einbauen%20Anleitung',
+        title: 'Innentür einbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B2%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D0%BC%D1%96%D0%B6%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%BD%D0%B8%D1%85%20%D0%B4%D0%B2%D0%B5%D1%80%D0%B5%D0%B9',
+        title: 'Монтаж міжкімнатних дверей',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [55, 650, 44],
+    laborRanges: { de: [40, 75], ua: [480, 850], es: [32, 60] },
+    materials: [
+      { materialId: 'mat-foam', qtyPerUnit: 1 },
+    ],
+  }),
+  work({
+    id: 'work-locks',
+    slug: 'lock-hardware-install',
+    category: 'doors_windows',
+    unit: 'pcs',
+    names: {
+      en: 'Lock / hardware install',
+      uk: 'Монтаж замка / фурнітури',
+      de: 'Schloss / Beschlag montieren',
+      es: 'Instalación de cerradura',
+    },
+    searchAliases: [
+      'замок',
+      'schloss',
+      'cerradura',
+      'lock',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20an%20interior%20door',
+        title: 'Install interior door',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Innent%C3%BCr%20einbauen%20Anleitung',
+        title: 'Innentür einbauen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%B2%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%BD%D1%8F%20%D0%BC%D1%96%D0%B6%D0%BA%D1%96%D0%BC%D0%BD%D0%B0%D1%82%D0%BD%D0%B8%D1%85%20%D0%B4%D0%B2%D0%B5%D1%80%D0%B5%D0%B9',
+        title: 'Монтаж міжкімнатних дверей',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [35, 420, 28],
+    laborRanges: { de: [25, 50], ua: [300, 550], es: [20, 40] },
+    materials: [],
+  }),
+  work({
+    id: 'work-paving',
+    slug: 'patio-paving',
+    category: 'outdoor',
+    unit: 'm2',
+    names: {
+      en: 'Patio / driveway paving',
+      uk: 'Укладання бруківки',
+      de: 'Pflastersteine verlegen',
+      es: 'Adoquinado / pavimento',
+    },
+    searchAliases: [
+      'бруківка',
+      'pflaster',
+      'adoquin',
+      'paving',
+      'тротуарна плитка',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20patio%20pavers',
+        title: 'Lay patio pavers',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Pflastersteine%20verlegen%20Anleitung',
+        title: 'Pflastersteine verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%B1%D1%80%D1%83%D0%BA%D1%96%D0%B2%D0%BA%D0%B8%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Укладання бруківки',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [32, 390, 26],
+    laborRanges: { de: [24, 45], ua: [280, 520], es: [20, 36] },
+    materials: [
+      { materialId: 'mat-paver', qtyPerUnit: 1.08 },
+      { materialId: 'mat-sand', qtyPerUnit: 25 },
+    ],
+  }),
+  work({
+    id: 'work-fence',
+    slug: 'fence-build',
+    category: 'outdoor',
+    unit: 'lm',
+    names: {
+      en: 'Fence construction',
+      uk: 'Будівництво паркану',
+      de: 'Zaun bauen',
+      es: 'Construcción de valla',
+    },
+    searchAliases: [
+      'паркан',
+      'zaun',
+      'valla',
+      'fence',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20wood%20fence',
+        title: 'Build fence',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Holzzaun%20bauen%20Anleitung',
+        title: 'Zaun bauen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [45, 550, 36],
+    laborRanges: { de: [35, 60], ua: [400, 720], es: [28, 50] },
+    materials: [
+      { materialId: 'mat-fence-post', qtyPerUnit: 0.3 },
+    ],
+  }),
+  work({
+    id: 'work-deck',
+    slug: 'wood-deck',
+    category: 'outdoor',
+    unit: 'm2',
+    names: {
+      en: 'Wood deck / terrace',
+      uk: 'Дерев\'яна тераса / дек',
+      de: 'Holzterrassenbau',
+      es: 'Terraza de madera',
+    },
+    searchAliases: [
+      'тераса дерево',
+      'holzterrasse',
+      'terraza madera',
+      'deck',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20build%20a%20wood%20deck',
+        title: 'Build deck',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Holzterrassenbau%20Anleitung',
+        title: 'Terrasse bauen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [55, 680, 44],
+    laborRanges: { de: [42, 72], ua: [520, 880], es: [34, 58] },
+    materials: [
+      { materialId: 'mat-decking', qtyPerUnit: 1.1 },
+    ],
+  }),
+  work({
+    id: 'work-drainage',
+    slug: 'yard-drainage',
+    category: 'outdoor',
+    unit: 'lm',
+    names: {
+      en: 'Yard drainage / French drain',
+      uk: 'Дренаж ділянки',
+      de: 'Drainage verlegen',
+      es: 'Drenaje de jardín',
+    },
+    searchAliases: [
+      'дренаж',
+      'drainage',
+      'drenaje',
+      'french drain',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20French%20drain',
+        title: 'Yard drainage',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Drainage%20Rohr%20verlegen%20Garten',
+        title: 'Drainage verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [28, 340, 22],
+    laborRanges: { de: [20, 40], ua: [250, 450], es: [16, 32] },
+    materials: [
+      { materialId: 'mat-drain-pipe', qtyPerUnit: 1.05 },
+      { materialId: 'mat-gravel', qtyPerUnit: 40 },
+    ],
+  }),
+  work({
+    id: 'work-retaining-wall',
+    slug: 'retaining-wall',
+    category: 'outdoor',
+    unit: 'm2',
+    names: {
+      en: 'Garden retaining wall',
+      uk: 'Підпірна стіна',
+      de: 'Stützmauer Garten',
+      es: 'Muro de contención',
+    },
+    searchAliases: [
+      'підпірна стіна',
+      'stützmauer',
+      'muro contencion',
+      'retaining',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20concrete%20blocks%20wall',
+        title: 'Lay concrete blocks',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Porenbetonsteine%20mauern%20Anleitung',
+        title: 'Mauersteine setzen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0%20%D0%B3%D0%B0%D0%B7%D0%BE%D0%B1%D0%BB%D0%BE%D0%BA%D1%83%20%D1%81%D1%82%D1%96%D0%BD%D0%B0',
+        title: 'Кладка блоків',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [65, 800, 52],
+    laborRanges: { de: [50, 85], ua: [600, 1000], es: [40, 70] },
+    materials: [
+      { materialId: 'mat-aac-block', qtyPerUnit: 1.1 },
+      { materialId: 'mat-masonry-mortar', qtyPerUnit: 15 },
+    ],
+  }),
+  work({
+    id: 'work-outdoor-steps',
+    slug: 'outdoor-steps',
+    category: 'outdoor',
+    unit: 'lm',
+    names: {
+      en: 'Outdoor garden steps',
+      uk: 'Садові сходи',
+      de: 'Gartentreppe',
+      es: 'Escalera de jardín',
+    },
+    searchAliases: [
+      'садові сходи',
+      'gartentreppe',
+      'escalera jardin',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20lay%20patio%20pavers',
+        title: 'Lay patio pavers',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Pflastersteine%20verlegen%20Anleitung',
+        title: 'Pflastersteine verlegen',
+        lang: 'de',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=%D1%83%D0%BA%D0%BB%D0%B0%D0%B4%D0%B0%D0%BD%D0%BD%D1%8F%20%D0%B1%D1%80%D1%83%D0%BA%D1%96%D0%B2%D0%BA%D0%B8%20%D1%81%D0%B2%D0%BE%D1%97%D0%BC%D0%B8%20%D1%80%D1%83%D0%BA%D0%B0%D0%BC%D0%B8',
+        title: 'Укладання бруківки',
+        lang: 'uk',
+      },
+    ],
+    laborPrices: [75, 900, 60],
+    laborRanges: { de: [55, 100], ua: [650, 1200], es: [45, 85] },
+    materials: [
+      { materialId: 'mat-paver', qtyPerUnit: 2 },
+      { materialId: 'mat-sand', qtyPerUnit: 30 },
+    ],
+  }),
+  work({
+    id: 'work-lawn-prep',
+    slug: 'lawn-prep-grade',
+    category: 'outdoor',
+    unit: 'm2',
+    names: {
+      en: 'Lawn / grade preparation',
+      uk: 'Підготовка ділянки під газон',
+      de: 'Rasenfläche vorbereiten',
+      es: 'Preparación de césped',
+    },
+    searchAliases: [
+      'газон підготовка',
+      'rasen',
+      'cesped',
+      'lawn prep',
+    ],
+    youtube: [
+      {
+        url: 'https://www.youtube.com/results?search_query=how%20to%20install%20French%20drain',
+        title: 'Yard drainage',
+        lang: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/results?search_query=Drainage%20Rohr%20verlegen%20Garten',
+        title: 'Drainage verlegen',
+        lang: 'de',
+      },
+    ],
+    laborPrices: [6, 75, 5],
+    laborRanges: { de: [4, 9], ua: [50, 100], es: [3.5, 7] },
+    materials: [
+      { materialId: 'mat-sand', qtyPerUnit: 10 },
     ],
   }),
 ];
 
 export const CATALOG_UPDATED_AT = UPDATED;
+
+/** Category → work count helper for docs / admin */
+export function catalogWorksByCategory(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const w of CATALOG_WORKS) {
+    out[w.category] = (out[w.category] || 0) + 1;
+  }
+  return out;
+}

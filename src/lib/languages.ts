@@ -743,6 +743,7 @@ const baseTranslations = {
   pricesWhereToBuy: 'Where to buy',
   pricesNoResults: 'No results. Try another search.',
   pricesBackToResults: 'Back to results',
+  pricesYoutube: 'YouTube — how to',
 };
 
 export const translations: Record<string, Record<string, string>> = {
@@ -1460,6 +1461,7 @@ export const translations: Record<string, Record<string, string>> = {
     pricesWhereToBuy: 'Де купити',
     pricesNoResults: 'Нічого не знайдено. Спробуйте інший запит.',
     pricesBackToResults: 'До результатів',
+    pricesYoutube: 'YouTube — як робити',
   },
   en: baseTranslations,
   de: {
@@ -1877,6 +1879,7 @@ export const translations: Record<string, Record<string, string>> = {
     pricesWhereToBuy: 'Wo kaufen',
     pricesNoResults: 'Keine Treffer. Andere Suche versuchen.',
     pricesBackToResults: 'Zurück zu den Ergebnissen',
+    pricesYoutube: 'YouTube — Anleitung',
   },
   pl: {
     ...baseTranslations,
@@ -2318,6 +2321,7 @@ export const translations: Record<string, Record<string, string>> = {
     pricesWhereToBuy: 'Dónde comprar',
     pricesNoResults: 'Sin resultados. Pruebe otra búsqueda.',
     pricesBackToResults: 'Volver a resultados',
+    pricesYoutube: 'YouTube — cómo hacerlo',
   },
   fr: {
     ...baseTranslations,
