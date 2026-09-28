@@ -36,14 +36,21 @@ import {
   type ContactStatus,
   type ContactThread,
 } from '../lib/contactApi';
+import {
+  fetchChatRooms,
+  fetchOwnerChatMessages,
+  ownerSoftDeleteChatMessage,
+  type ChatRoom,
+} from '../lib/chatApi';
 
-type Tab = 'overview' | 'prices' | 'announce' | 'inbox';
+type Tab = 'overview' | 'prices' | 'announce' | 'inbox' | 'chat';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Огляд' },
   { id: 'prices', label: 'Ціни' },
   { id: 'announce', label: 'Оголошення' },
   { id: 'inbox', label: 'Вхідні' },
+  { id: 'chat', label: 'Чат' },
 ];
 
 const CAT_UA: Record<string, string> = {
@@ -83,7 +90,7 @@ export default function Owner() {
 
       <h1 className="text-2xl font-semibold text-white mb-2">Кабінет власника</h1>
       <p className="text-white/45 text-sm mb-6">
-        Користувачі, ціни каталогу, оголошення та вхідні звернення
+        Користувачі, ціни каталогу, оголошення, вхідні звернення та чат
       </p>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
@@ -112,6 +119,7 @@ export default function Owner() {
       {tab === 'prices' && <PricesTab />}
       {tab === 'announce' && <AnnounceTab />}
       {tab === 'inbox' && <InboxTab />}
+      {tab === 'chat' && <ChatModTab />}
     </div>
   );
 }
@@ -970,6 +978,125 @@ function OwnerThreadDrawer({
         </>
       )}
       {msg && <p className="text-xs text-white/50">{msg}</p>}
+    </div>
+  );
+}
+
+function ChatModTab() {
+  const queryClient = useQueryClient();
+  const [roomId, setRoomId] = useState<string | null>(null);
+
+  const { data: rooms, error: roomsError } = useQuery({
+    queryKey: ['owner-chat-rooms'],
+    queryFn: fetchChatRooms,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!roomId && rooms?.length) {
+      setRoomId(rooms[0].id);
+    }
+  }, [rooms, roomId]);
+
+  const { data: messages, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['owner-chat-messages', roomId],
+    queryFn: () => fetchOwnerChatMessages(roomId!),
+    enabled: !!roomId,
+    retry: false,
+  });
+
+  const softDelete = async (id: string) => {
+    try {
+      await ownerSoftDeleteChatMessage(id);
+      await queryClient.invalidateQueries({ queryKey: ['owner-chat-messages', roomId] });
+    } catch {
+      /* toast-less MVP */
+    }
+  };
+
+  const labelFor = (r: ChatRoom) => {
+    const map: Record<string, string> = {
+      de: 'Німеччина',
+      es: 'Іспанія',
+      ua: 'Україна',
+      intl: 'International',
+    };
+    return map[r.slug] || r.title;
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-white/45 text-sm">
+        Перегляд усіх кімнат і soft-delete повідомлень (модерація MVP).
+      </p>
+      <div className="flex flex-wrap gap-2 items-center">
+        {(rooms ?? []).map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => setRoomId(r.id)}
+            className={`px-3 py-1.5 rounded-xl text-sm border ${
+              roomId === r.id
+                ? 'bg-teal-500/20 border-teal-500/40 text-teal-200'
+                : 'bg-white/5 border-white/10 text-white/60'
+            }`}
+          >
+            {labelFor(r)}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="px-3 py-2 text-sm bg-white/10 border border-white/10 rounded-xl text-white/70 disabled:opacity-50"
+        >
+          {isFetching ? '…' : 'Оновити'}
+        </button>
+      </div>
+
+      {(roomsError || error) && (
+        <p className="text-red-400 text-sm">
+          Чат недоступний — застосуйте міграцію community chat.
+        </p>
+      )}
+      {isLoading && <p className="text-white/40 text-sm">Завантаження…</p>}
+      {!isLoading && !error && (!messages || messages.length === 0) && (
+        <p className="text-white/40 text-sm">Порожньо в цій кімнаті.</p>
+      )}
+
+      <ul className="space-y-2">
+        {(messages ?? []).map((m) => (
+          <li
+            key={m.id}
+            className={`rounded-xl px-4 py-3 border text-sm ${
+              m.is_deleted
+                ? 'bg-white/[0.02] border-white/5 text-white/30'
+                : 'bg-white/5 border-white/10 text-white/85'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-white/40 mb-1">
+                  {m.display_name} · {new Date(m.created_at).toLocaleString()}
+                  {m.is_deleted ? ' · видалено' : ''}
+                </p>
+                <p className="whitespace-pre-wrap break-words">
+                  {m.is_deleted ? '—' : m.body}
+                </p>
+              </div>
+              {!m.is_deleted && (
+                <button
+                  type="button"
+                  onClick={() => void softDelete(m.id)}
+                  className="shrink-0 px-2 py-1 text-xs rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10"
+                >
+                  Видалити
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

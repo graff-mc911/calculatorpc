@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield, MessageCircle } from 'lucide-react';
+import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield, MessageCircle, MessagesSquare } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { languages } from '../lib/languages';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkIsAppOwner } from '../lib/ownerAccess';
+import {
+  COMMUNITY_COUNTRIES,
+  fetchMyAppMeta,
+  setMyCommunityCountry,
+  type CommunityCountryCode,
+} from '../lib/chatApi';
+import { useToastContext } from '../contexts/ToastContext';
 
 const MONTHLY_LINK = 'https://buy.stripe.com/test_bJe14o2ip6Oe99f0N49oc00';
 const YEARLY_LINK = 'https://buy.stripe.com/test_eVq5kEbSZ0pQ5X3dzQ9oc01';
@@ -26,6 +33,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { t, language, setLanguage } = useLanguage();
   const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToastContext();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -59,6 +67,13 @@ export default function Settings() {
     enabled: !!session?.user?.id,
     queryFn: () => checkIsAppOwner(session!.user.id),
     staleTime: 60_000,
+    retry: false,
+  });
+
+  const { data: appMeta } = useQuery({
+    queryKey: ['user-app-meta', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: fetchMyAppMeta,
     retry: false,
   });
 
@@ -181,6 +196,51 @@ export default function Settings() {
             </span>
             <span className="text-white/40">›</span>
           </button>
+          <button
+            type="button"
+            onClick={() => navigate('/chat')}
+            className="flex items-center justify-between w-full py-3 px-2 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-white">
+              <MessagesSquare className="h-4 w-4 text-white/50" />
+              {t('chatNav') || 'Спільнота'}
+            </span>
+            <span className="text-white/40">›</span>
+          </button>
+          <div className="pt-2 px-2">
+            <p className="text-white/50 text-xs mb-2">
+              {t('chatPickCountry') || 'Community country'}
+              {appMeta?.country_code ? ` · ${appMeta.country_code}` : ''}
+            </p>
+            <p className="text-white/30 text-[11px] mb-2">
+              {t('chatCountryChangeWarn') ||
+                'Changing country switches your country chat room. Prefer Contact Us if unsure.'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {COMMUNITY_COUNTRIES.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await setMyCommunityCountry(c.code as CommunityCountryCode);
+                      await queryClient.invalidateQueries({ queryKey: ['user-app-meta'] });
+                      showSuccess(t('chatCountrySaved') || 'Country saved');
+                    } catch {
+                      showError(t('chatCountryFailed') || 'Could not save country');
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs border transition-all ${
+                    appMeta?.country_code === c.code
+                      ? 'bg-teal-500/20 border-teal-500/40 text-teal-200'
+                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                  }`}
+                >
+                  {t(`chatCountry_${c.code}`) || c.code}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {isOwner && (

@@ -47,6 +47,7 @@ const ScanReceipt = lazy(() => import('./pages/ScanReceipt'));
 const Prices = lazy(() => import('./pages/Prices'));
 const Owner = lazy(() => import('./pages/Owner'));
 const Contact = lazy(() => import('./pages/Contact'));
+const Chat = lazy(() => import('./pages/Chat'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -175,6 +176,8 @@ function AppContent() {
             <Route path="/pdf-creator" element={<ProtectedRoute><PdfCreator /></ProtectedRoute>} />
             <Route path="/prices" element={<ProtectedRoute><Prices /></ProtectedRoute>} />
             <Route path="/contact" element={<ProtectedRoute><Contact /></ProtectedRoute>} />
+            <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+            <Route path="/community" element={<Navigate to="/chat" replace />} />
             <Route
               path="/owner"
               element={
