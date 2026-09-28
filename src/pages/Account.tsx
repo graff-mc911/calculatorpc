@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Save, Upload, X, CheckCircle } from 'lucide-react';
+import { Building2, Save, Upload, X, CheckCircle, MessageCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -8,11 +8,13 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 
 export const Account: React.FC = () => {
   const { t } = useLanguage();
   const { showSuccess, showError } = useToastContext();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [billingSuccess, setBillingSuccess] = useState(false);
@@ -304,6 +306,18 @@ export const Account: React.FC = () => {
           <span>Ваш 30-денний пробний період розпочато. Всі функції розблоковано.</span>
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={() => navigate('/contact')}
+        className="mb-4 flex items-center justify-between w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 transition-colors text-left"
+      >
+        <span className="flex items-center gap-2 text-white text-sm">
+          <MessageCircle className="h-4 w-4 text-orange-400" />
+          {t('contactUs') || 'Зв’язатися з нами'}
+        </span>
+        <span className="text-white/40">›</span>
+      </button>
 
       <div className="space-y-4">
         <Card className="p-6">

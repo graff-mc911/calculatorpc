@@ -27,18 +27,48 @@ import {
   type AnnouncementKind,
   type SiteAnnouncement,
 } from '../lib/ownerApi';
+import {
+  closeContactThread,
+  countOpenContactThreads,
+  fetchContactMessages,
+  fetchOwnerContactThreads,
+  ownerReplyContact,
+  type ContactStatus,
+  type ContactThread,
+} from '../lib/contactApi';
 
-type Tab = 'overview' | 'prices' | 'announce';
+type Tab = 'overview' | 'prices' | 'announce' | 'inbox';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Огляд' },
   { id: 'prices', label: 'Ціни' },
   { id: 'announce', label: 'Оголошення' },
+  { id: 'inbox', label: 'Вхідні' },
 ];
+
+const CAT_UA: Record<string, string> = {
+  question: 'Питання',
+  complaint: 'Скарга',
+  suggestion: 'Пропозиція',
+  other: 'Інше',
+};
+
+const STATUS_UA: Record<ContactStatus, string> = {
+  open: 'Відкрито',
+  answered: 'Відповідь є',
+  closed: 'Закрито',
+};
 
 export default function Owner() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('overview');
+
+  const { data: openCount } = useQuery({
+    queryKey: ['owner-contact-open-count'],
+    queryFn: countOpenContactThreads,
+    retry: false,
+    refetchInterval: 60_000,
+  });
 
   return (
     <div className="min-h-screen pt-20 pb-10 px-4 md:px-6 max-w-5xl mx-auto">
@@ -53,7 +83,7 @@ export default function Owner() {
 
       <h1 className="text-2xl font-semibold text-white mb-2">Кабінет власника</h1>
       <p className="text-white/45 text-sm mb-6">
-        Користувачі, ціни каталогу та текст у хедері
+        Користувачі, ціни каталогу, оголошення та вхідні звернення
       </p>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
@@ -69,6 +99,11 @@ export default function Owner() {
             }`}
           >
             {t.label}
+            {t.id === 'inbox' && (openCount ?? 0) > 0 && (
+              <span className="ml-1.5 inline-flex min-w-[1.25rem] justify-center px-1.5 py-0.5 rounded-md bg-orange-500/30 text-orange-200 text-xs">
+                {openCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -76,6 +111,7 @@ export default function Owner() {
       {tab === 'overview' && <OverviewTab />}
       {tab === 'prices' && <PricesTab />}
       {tab === 'announce' && <AnnounceTab />}
+      {tab === 'inbox' && <InboxTab />}
     </div>
   );
 }
@@ -725,6 +761,215 @@ function AnnounceTab() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function InboxTab() {
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<ContactStatus | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const { data: threads, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['owner-contact-threads', filter, search],
+    queryFn: () => fetchOwnerContactThreads({ status: filter, search }),
+    retry: false,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 items-center">
+        {(
+          [
+            ['all', 'Усі'],
+            ['open', 'Відкриті'],
+            ['answered', 'З відповіддю'],
+            ['closed', 'Закриті'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setFilter(id)}
+            className={`px-3 py-1.5 rounded-xl text-sm border ${
+              filter === id
+                ? 'bg-orange-500/20 border-orange-500/40 text-orange-300'
+                : 'bg-white/5 border-white/10 text-white/60'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <div className="relative flex-1 min-w-[12rem]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Пошук по тексту / email"
+            className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="px-3 py-2 text-sm bg-white/10 border border-white/10 rounded-xl text-white/70 disabled:opacity-50"
+        >
+          {isFetching ? '…' : 'Оновити'}
+        </button>
+      </div>
+
+      {isLoading && <p className="text-white/40 text-sm">Завантаження…</p>}
+      {error && (
+        <p className="text-red-400 text-sm">
+          Inbox недоступний — застосуйте міграцію Contact Us.
+        </p>
+      )}
+      {!isLoading && !error && (!threads || threads.length === 0) && (
+        <p className="text-white/40 text-sm">Немає звернень.</p>
+      )}
+
+      <ul className="space-y-2">
+        {(threads ?? []).map((thread) => (
+          <li key={thread.id} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setOpenId(openId === thread.id ? null : thread.id)}
+              className="w-full text-left px-4 py-3 hover:bg-white/5 transition-colors"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-white text-sm">
+                    {CAT_UA[thread.category] || thread.category}
+                    <span className="text-white/40"> · </span>
+                    <span className="text-white/70">{thread.user_email || '—'}</span>
+                    {thread.country_code && (
+                      <span className="text-white/40"> · {thread.country_code}</span>
+                    )}
+                  </p>
+                  <p className="text-white/40 text-xs truncate mt-0.5">
+                    {new Date(thread.last_message_at).toLocaleString()} · {thread.subject || '—'}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-lg border ${
+                    thread.status === 'open'
+                      ? 'border-orange-500/30 text-orange-300'
+                      : thread.status === 'answered'
+                        ? 'border-green-500/30 text-green-300'
+                        : 'border-white/20 text-white/50'
+                  }`}
+                >
+                  {STATUS_UA[thread.status]}
+                </span>
+              </div>
+            </button>
+            {openId === thread.id && (
+              <OwnerThreadDrawer
+                thread={thread}
+                onChanged={() => {
+                  void queryClient.invalidateQueries({ queryKey: ['owner-contact-threads'] });
+                  void queryClient.invalidateQueries({ queryKey: ['owner-contact-open-count'] });
+                }}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function OwnerThreadDrawer({
+  thread,
+  onChanged,
+}: {
+  thread: ContactThread;
+  onChanged: () => void;
+}) {
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const { data: messages, isLoading, refetch } = useQuery({
+    queryKey: ['owner-contact-messages', thread.id],
+    queryFn: () => fetchContactMessages(thread.id),
+  });
+
+  const send = async (close: boolean) => {
+    const trimmed = reply.trim();
+    if (!trimmed && !close) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (trimmed) {
+        await ownerReplyContact(thread.id, trimmed, close);
+      } else if (close) {
+        await closeContactThread(thread.id);
+      }
+      setReply('');
+      await refetch();
+      onChanged();
+      setMsg(close ? 'Закрито' : 'Відповідь надіслано');
+    } catch {
+      setMsg('Помилка відправки');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-4 border-t border-white/10 space-y-3 pt-3">
+      {isLoading && <p className="text-white/40 text-xs">…</p>}
+      {(messages ?? []).map((m) => (
+        <div
+          key={m.id}
+          className={`rounded-xl px-3 py-2 text-sm ${
+            m.author_role === 'owner'
+              ? 'bg-orange-500/10 border border-orange-500/20 text-orange-100'
+              : 'bg-white/5 border border-white/10 text-white/80'
+          }`}
+        >
+          <p className="text-xs text-white/40 mb-1">
+            {m.author_role === 'owner' ? 'Ви (owner)' : 'User'} ·{' '}
+            {new Date(m.created_at).toLocaleString()}
+          </p>
+          <p className="whitespace-pre-wrap">{m.body}</p>
+        </div>
+      ))}
+
+      {thread.status !== 'closed' && (
+        <>
+          <textarea
+            value={reply}
+            onChange={(e) => setReply(e.target.value.slice(0, 2000))}
+            rows={3}
+            maxLength={2000}
+            placeholder="Відповідь…"
+            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy || !reply.trim()}
+              onClick={() => void send(false)}
+              className="flex-1 min-w-[8rem] py-2 rounded-xl bg-orange-500 text-white text-sm font-medium disabled:opacity-50"
+            >
+              Надіслати
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void send(true)}
+              className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-white/70 text-sm disabled:opacity-50"
+            >
+              {reply.trim() ? 'Надіслати і закрити' : 'Закрити звернення'}
+            </button>
+          </div>
+        </>
+      )}
+      {msg && <p className="text-xs text-white/50">{msg}</p>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield } from 'lucide-react';
+import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield, MessageCircle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { languages } from '../lib/languages';
@@ -167,6 +167,17 @@ export default function Settings() {
           >
             <span className="text-white">
               {t('companyProfile') || t('account') || 'Профіль компанії'}
+            </span>
+            <span className="text-white/40">›</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/contact')}
+            className="flex items-center justify-between w-full py-3 px-2 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-white">
+              <MessageCircle className="h-4 w-4 text-white/50" />
+              {t('contactUs') || 'Зв’язатися з нами'}
             </span>
             <span className="text-white/40">›</span>
           </button>
