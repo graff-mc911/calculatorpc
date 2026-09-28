@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -11,20 +11,19 @@ import {
   Tag,
   X,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
   formatMoney,
   getStoredPriceCountry,
-  getWorkDetailLocal,
+  getWorkDetailWithOverrides,
   localizedCategoryName,
   localizedCountryName,
   localizedMaterialName,
   localizedWorkName,
-  searchWorksLocal,
+  searchWorksWithOverrides,
   setStoredPriceCountry,
   type PriceCountryCode,
-  type WorkDetail,
-  type WorkSearchHit,
   getPriceCountries,
   catalogStats,
 } from '../lib/priceCatalog';
@@ -52,15 +51,18 @@ export default function Prices() {
     setSelectedId(null);
   }, [country]);
 
-  const hits: WorkSearchHit[] = useMemo(
-    () => searchWorksLocal(debouncedQuery, country),
-    [debouncedQuery, country]
-  );
+  const { data: hits = [] } = useQuery({
+    queryKey: ['price-search', debouncedQuery, country],
+    queryFn: () => searchWorksWithOverrides(debouncedQuery, country),
+    staleTime: 30_000,
+  });
 
-  const detail: WorkDetail | null = useMemo(
-    () => (selectedId ? getWorkDetailLocal(selectedId, country) : null),
-    [selectedId, country]
-  );
+  const { data: detail = null } = useQuery({
+    queryKey: ['price-detail', selectedId, country],
+    enabled: !!selectedId,
+    queryFn: () => getWorkDetailWithOverrides(selectedId!, country),
+    staleTime: 30_000,
+  });
 
   const countryMeta = countries.find((c) => c.code === country);
   const locale = countryMeta?.locale || 'de-DE';

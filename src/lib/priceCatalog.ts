@@ -92,6 +92,10 @@ export function setStoredPriceCountry(code: PriceCountryCode): void {
   } catch {
     /* ignore */
   }
+  // Best-effort: feed owner country aggregates (no IP geo)
+  void import('./ownerApi')
+    .then(({ syncMyPriceCountry }) => syncMyPriceCountry(code))
+    .catch(() => undefined);
 }
 
 export function getPriceCountries() {
@@ -266,34 +270,156 @@ export function localizedCategoryName(category: WorkCategory | string, lang: str
 
 /**
  * Load catalog works for a country.
- * Tries Supabase `works` / `work_prices` when available; falls back to curated local seed.
+ * Local curated seed + optional Supabase work_prices overlays (owner edits).
  */
 export async function loadWorksForCountry(country: PriceCountryCode): Promise<{
-  source: 'supabase' | 'local';
+  source: 'supabase' | 'local' | 'merged';
   works: CatalogWork[];
   updatedAt: string;
 }> {
-  try {
-    const { supabase } = await import('./supabase');
-    const { data, error } = await supabase
-      .from('work_prices')
-      .select('work_id, labor_price, labor_currency, price_min, price_max, updated_at, works(*)')
-      .eq('country_code', country)
-      .or('valid_to.is.null,valid_to.gte.' + new Date().toISOString().slice(0, 10));
+  let works = CATALOG_WORKS;
+  let source: 'supabase' | 'local' | 'merged' = 'local';
+  let updatedAt = CATALOG_UPDATED_AT;
 
-    if (!error && data && data.length > 0) {
-      // Remote schema present — MVP still uses local seed for full BOM/YouTube
-      // until admin sync lands. Keep probe for future switch-over.
-      void data;
+  try {
+    const { fetchWorkPriceOverrides } = await import('./ownerApi');
+    const overrides = await fetchWorkPriceOverrides(country);
+    if (overrides.size > 0) {
+      works = CATALOG_WORKS.map((work) => {
+        const ov = overrides.get(work.slug);
+        if (!ov) return work;
+        return {
+          ...work,
+          labor: {
+            ...work.labor,
+            [country]: {
+              ...work.labor[country],
+              price: ov.labor_price,
+              currency: ov.labor_currency,
+              min: ov.price_min ?? work.labor[country].min,
+              max: ov.price_max ?? work.labor[country].max,
+              updatedAt: ov.updated_at.slice(0, 10),
+              source: 'owner',
+            },
+          },
+        };
+      });
+      source = 'merged';
+      const latest = [...overrides.values()].sort((a, b) =>
+        b.updated_at.localeCompare(a.updated_at)
+      )[0];
+      if (latest) updatedAt = latest.updated_at.slice(0, 10);
     }
   } catch {
-    /* tables may not exist yet */
+    /* tables / RPCs may not exist yet */
+  }
+
+  return { source, works, updatedAt };
+}
+
+/** Apply owner DB overlays onto local seed hits for the public /prices UI. */
+export async function searchWorksWithOverrides(
+  query: string,
+  country: PriceCountryCode,
+  limit = 120
+): Promise<WorkSearchHit[]> {
+  const { works } = await loadWorksForCountry(country);
+  const normalized = normalizePriceQuery(query);
+  const tokens = tokenize(query);
+
+  const hits: WorkSearchHit[] = works
+    .map((work) => {
+      const score = normalized ? scoreWork(work, tokens, normalized) : 1;
+      return { work, labor: work.labor[country], score };
+    })
+    .filter((h) => (normalized ? h.score > 0 : true));
+
+  hits.sort((a, b) => b.score - a.score || a.work.names.en.localeCompare(b.work.names.en));
+  return hits.slice(0, limit);
+}
+
+export async function getWorkDetailWithOverrides(
+  workId: string,
+  country: PriceCountryCode
+): Promise<WorkDetail | null> {
+  const { works, updatedAt } = await loadWorksForCountry(country);
+  const work = works.find((w) => w.id === workId || w.slug === workId);
+  if (!work) return null;
+
+  let materialsMap = catalogMaterialsById();
+  try {
+    const { fetchMaterialPriceOverrides } = await import('./ownerApi');
+    const matOv = await fetchMaterialPriceOverrides(country);
+    if (matOv.size > 0) {
+      materialsMap = new Map(
+        CATALOG_MATERIALS.map((m) => {
+          const ov = matOv.get(m.id);
+          if (!ov) return [m.id, m] as const;
+          return [
+            m.id,
+            {
+              ...m,
+              prices: {
+                ...m.prices,
+                [country]: {
+                  ...m.prices[country],
+                  price: ov.price,
+                  currency: ov.currency,
+                  updatedAt: ov.updated_at.slice(0, 10),
+                  source: 'owner',
+                },
+              },
+            },
+          ] as const;
+        })
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const suppliers = catalogSuppliersById();
+
+  const bom = work.materials
+    .map((row) => {
+      const material = materialsMap.get(row.materialId);
+      if (!material) return null;
+      const unitPrice = material.prices[country];
+      return {
+        material,
+        qtyPerUnit: row.qtyPerUnit,
+        notes: row.notes,
+        unitPrice,
+        lineTotal: Math.round(row.qtyPerUnit * unitPrice.price * 100) / 100,
+      };
+    })
+    .filter(Boolean) as WorkDetail['bom'];
+
+  const buyLinks: WorkDetail['buyLinks'] = [];
+  const seen = new Set<string>();
+  for (const row of bom) {
+    const links = row.material.supplierLinks[country] || [];
+    for (const link of links) {
+      const key = `${link.supplierId}:${link.productUrl}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const supplier = suppliers.get(link.supplierId);
+      if (!supplier) continue;
+      buyLinks.push({
+        supplier,
+        productUrl: link.productUrl,
+        materialName: row.material.name.en,
+      });
+    }
   }
 
   return {
-    source: 'local',
-    works: CATALOG_WORKS,
-    updatedAt: CATALOG_UPDATED_AT,
+    work,
+    labor: work.labor[country],
+    bom,
+    buyLinks: buyLinks.slice(0, 6),
+    youtube: work.youtube.slice(0, 4),
+    catalogUpdatedAt: updatedAt,
   };
 }
 

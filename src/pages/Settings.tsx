@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown } from 'lucide-react';
+import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { languages } from '../lib/languages';
 import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { checkIsAppOwner } from '../lib/ownerAccess';
 
 const MONTHLY_LINK = 'https://buy.stripe.com/test_bJe14o2ip6Oe99f0N49oc00';
 const YEARLY_LINK = 'https://buy.stripe.com/test_eVq5kEbSZ0pQ5X3dzQ9oc01';
@@ -51,6 +52,14 @@ export default function Settings() {
         .maybeSingle();
       return data;
     },
+  });
+
+  const { data: isOwner } = useQuery({
+    queryKey: ['is-app-owner', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: () => checkIsAppOwner(session!.user.id),
+    staleTime: 60_000,
+    retry: false,
   });
 
   const isActive = !!subscription;
@@ -162,6 +171,25 @@ export default function Settings() {
             <span className="text-white/40">›</span>
           </button>
         </div>
+
+        {isOwner && (
+          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 bg-orange-500/20 rounded-xl flex items-center justify-center">
+                <Shield className="h-4 w-4 text-orange-400" />
+              </div>
+              <h2 className="text-lg font-medium text-white">Власник</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/owner')}
+              className="flex items-center justify-between w-full py-3 px-2 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <span className="text-white">Кабінет власника</span>
+              <span className="text-white/40">›</span>
+            </button>
+          </div>
+        )}
 
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
           <h2 className="text-lg font-medium text-white mb-4">

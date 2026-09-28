@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase';
 import { languages } from '../lib/languages';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Logo } from './Logo';
+import { HeaderAnnouncement } from './HeaderAnnouncement';
 
 /**
- * App header: logo (→ Home), language, settings, logout.
+ * App header: logo (→ Home), optional announcement (middle), language, settings, logout.
  * Page-link nav (Home / Invoices / Contacts / Receipts / Scan / Account) removed —
  * navigation is via Home cards + logo.
  */
@@ -39,12 +40,14 @@ export const TopNav: React.FC = () => {
   const currentLanguage = languages.find((lang) => lang.code === language) || languages[0];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-xl border-b border-white/10">
+    <nav className="hidden lg:block fixed top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-xl border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-16 gap-3">
           <Logo variant="glass" size="md" />
 
-          <div className="flex items-center gap-2">
+          <HeaderAnnouncement />
+
+          <div className="flex items-center gap-2 shrink-0">
             <div className="relative">
               <button
                 type="button"

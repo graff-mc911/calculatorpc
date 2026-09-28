@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { ToastProvider, useToastContext } from './contexts/ToastContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { OwnerRoute } from './components/OwnerRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TopNav } from './components/TopNav';
 import { MobileTopNav } from './components/MobileTopNav';
@@ -44,6 +45,7 @@ const ReceiptForm = lazy(() => import('./pages/ReceiptForm'));
 const PdfCreator = lazy(() => import('./pages/PdfCreator'));
 const ScanReceipt = lazy(() => import('./pages/ScanReceipt'));
 const Prices = lazy(() => import('./pages/Prices'));
+const Owner = lazy(() => import('./pages/Owner'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -171,6 +173,16 @@ function AppContent() {
             <Route path="/receipt/:id" element={<ProtectedRoute><ReceiptForm /></ProtectedRoute>} />
             <Route path="/pdf-creator" element={<ProtectedRoute><PdfCreator /></ProtectedRoute>} />
             <Route path="/prices" element={<ProtectedRoute><Prices /></ProtectedRoute>} />
+            <Route
+              path="/owner"
+              element={
+                <ProtectedRoute>
+                  <OwnerRoute>
+                    <Owner />
+                  </OwnerRoute>
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
             <Route path="/language" element={<ProtectedRoute><Language /></ProtectedRoute>} />
