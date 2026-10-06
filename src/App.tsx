@@ -135,7 +135,8 @@ function AppContent() {
     location.pathname === '/onboarding' ||
     location.pathname === '/privacy' ||
     location.pathname === '/terms' ||
-    location.pathname === '/pdf-creator';
+    location.pathname === '/pdf-creator' ||
+    location.pathname === '/projects/demo';
 
   return (
     <div className="min-h-screen overflow-x-hidden" key={language}>
@@ -178,6 +179,7 @@ function AppContent() {
             <Route path="/pdf-creator" element={<ProtectedRoute><PdfCreator /></ProtectedRoute>} />
             <Route path="/prices" element={<ProtectedRoute><Prices /></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+            <Route path="/projects/demo" element={<ProjectDetail />} />
             <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
             <Route path="/contact" element={<ProtectedRoute><Contact /></ProtectedRoute>} />
             <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />

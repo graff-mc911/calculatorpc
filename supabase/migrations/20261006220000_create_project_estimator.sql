@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS public.projects (
   client_name text,
   address text,
   currency text NOT NULL DEFAULT 'EUR',
-  status text NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active', 'completed', 'archived')),
+  status text NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft', 'in_progress', 'completed', 'paid')),
   expense_budget numeric(14, 2) NOT NULL DEFAULT 0,
   notes text,
   created_at timestamptz NOT NULL DEFAULT now(),

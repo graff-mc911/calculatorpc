@@ -1,7 +1,14 @@
 import { supabase } from './supabase';
 import type { ExpenseCategory } from './expenseCategories';
 
-export type ProjectStatus = 'active' | 'completed' | 'archived';
+export type ProjectStatus = 'draft' | 'in_progress' | 'completed' | 'paid';
+
+export const PROJECT_STATUSES: ProjectStatus[] = [
+  'draft',
+  'in_progress',
+  'completed',
+  'paid',
+];
 
 export type Project = {
   id: string;
@@ -127,7 +134,7 @@ export async function createProject(input: {
       currency: input.currency || 'EUR',
       expense_budget: input.expense_budget ?? 0,
       notes: input.notes?.trim() || null,
-      status: 'active',
+      status: 'draft',
     })
     .select('*')
     .single();
