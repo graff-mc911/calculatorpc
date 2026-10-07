@@ -139,7 +139,7 @@ export async function generateProjectEstimatePdf(options: {
   let y = 14;
 
   doc.setFillColor(30, 39, 46);
-  doc.rect(0, 0, pageWidth, 36, 'F');
+  doc.rect(0, 0, pageWidth, 40, 'F');
 
   const logo = await loadLogo(company.logo_url);
   let logoOk = false;
@@ -158,21 +158,30 @@ export async function generateProjectEstimatePdf(options: {
   }
 
   const textX = logoOk ? left + 26 : left;
+  // Product brand (CPC) — always shown; contractor profile is secondary.
   doc.setTextColor(255, 255, 255);
   doc.setFont(font, 'bold');
-  doc.setFontSize(14);
-  doc.text(company.company_name || 'Construction Project Calculator', textX, 14);
+  doc.setFontSize(13);
+  doc.text('CPC', textX, 12);
+  doc.setFontSize(9);
+  doc.text('Construction Project Calculator', textX, 17);
   doc.setFont(font, 'normal');
   doc.setFontSize(8);
+  doc.text('calculatorpc.com', textX, 21.5);
+  const contractorName = (company.company_name || '').trim();
   const companyLines = [
+    contractorName &&
+    contractorName !== 'Construction Project Calculator' &&
+    contractorName !== 'CPC'
+      ? contractorName
+      : '',
     company.company_address,
     [company.company_phone, company.company_email].filter(Boolean).join(' · '),
-    company.company_tax_number ? `Tax: ${company.company_tax_number}` : '',
   ].filter(Boolean) as string[];
-  let cy = 19;
-  for (const line of companyLines.slice(0, 3)) {
+  let cy = 26;
+  for (const line of companyLines.slice(0, 2)) {
     doc.text(line, textX, cy);
-    cy += 3.5;
+    cy += 3.2;
   }
 
   const title = isInternal
@@ -190,7 +199,7 @@ export async function generateProjectEstimatePdf(options: {
     doc.text(String(project.status).replace('_', ' '), right, 30, { align: 'right' });
   }
 
-  y = 44;
+  y = 48;
   doc.setTextColor(30, 39, 46);
 
   doc.setFillColor(245, 247, 249);
@@ -229,8 +238,8 @@ export async function generateProjectEstimatePdf(options: {
         item.title,
         String(item.quantity).replace('.', ','),
         item.unit,
-        formatMoneyInput(Number(item.unit_price) || 0, 2),
-        formatMoneyInput(lineTotal(item.quantity, item.unit_price), 2),
+        money(Number(item.unit_price) || 0, project.currency || 'EUR'),
+        money(lineTotal(item.quantity, item.unit_price), project.currency || 'EUR'),
       ]);
     }
   }
@@ -243,11 +252,11 @@ export async function generateProjectEstimatePdf(options: {
     headStyles: { fillColor: [30, 39, 46], textColor: 255, font, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
-      0: { cellWidth: 78 },
-      1: { halign: 'right', cellWidth: 18 },
-      2: { halign: 'center', cellWidth: 18 },
-      3: { halign: 'right', cellWidth: 28 },
-      4: { halign: 'right', cellWidth: 28 },
+      0: { cellWidth: 68 },
+      1: { halign: 'right', cellWidth: 16 },
+      2: { halign: 'center', cellWidth: 16 },
+      3: { halign: 'right', cellWidth: 35 },
+      4: { halign: 'right', cellWidth: 35 },
     },
     margin: { left, right: 16 },
     didParseCell(data) {
@@ -273,7 +282,7 @@ export async function generateProjectEstimatePdf(options: {
       body: prepayments.map((p) => [
         formatDate(p.paid_at),
         p.note || '—',
-        formatMoneyInput(Number(p.amount) || 0, 2),
+        money(Number(p.amount) || 0, project.currency || 'EUR'),
       ]),
       styles: { font, fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [30, 39, 46], textColor: 255, font },
@@ -300,7 +309,7 @@ export async function generateProjectEstimatePdf(options: {
         formatDate(e.expense_date),
         e.title,
         String(e.category || ''),
-        formatMoneyInput(Number(e.amount) || 0, 2),
+        money(Number(e.amount) || 0, project.currency || 'EUR'),
       ]),
       styles: { font, fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [120, 40, 40], textColor: 255, font },

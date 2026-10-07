@@ -1246,19 +1246,25 @@ export const Invoices: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-2xl mx-auto">
+    <div className="cpc-page px-3 md:px-6 w-full max-w-[430px] md:max-w-2xl mx-auto">
       {/* Верхній заголовок сторінки */}
       <div className="flex justify-between items-center mb-4">
         <div>
-          <h2 className="text-2xl font-semibold text-white">{t('invoices')}</h2>
-          <p className="text-white/60 text-sm mt-1">{t('manageInvoices')}</p>
+          <h2 className="text-xl font-medium" style={{ color: 'var(--cpc-text)' }}>{t('invoices')}</h2>
+          <p className="cpc-muted text-sm mt-1">{t('manageInvoices')}</p>
         </div>
 
         {/* Persistent header: only + (Add Invoice). Other actions appear on selection. */}
         <div className="flex gap-2">
           <button
             onClick={() => navigate('/invoices/new')}
-            className="p-2.5 rounded-xl bg-white/10 backdrop-blur-xl border border-white/10 text-orange-500 hover:bg-white/20 transition-all active:scale-95"
+            className="p-2.5 transition-all active:scale-95"
+            style={{
+              background: 'rgba(200,121,74,0.22)',
+              border: '1px solid rgba(224,151,95,0.4)',
+              borderRadius: 12,
+              color: 'var(--cpc-copper-light)',
+            }}
             title={t('newInvoice')}
           >
             <Plus size={16} />
@@ -1438,7 +1444,7 @@ export const Invoices: React.FC = () => {
       </div>
 
       {/* Основний блок зі списком рахунків */}
-      <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-lg">
+      <div className="cpc-card overflow-hidden !p-0">
         {isLoading ? (
           <div>
             {[1, 2, 3, 4, 5].map((i) => (

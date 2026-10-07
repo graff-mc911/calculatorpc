@@ -8,23 +8,34 @@ export default {
     extend: {
       colors: {
         primary: {
-          50: '#fff8f0',
-          100: '#ffedd5',
-          200: '#ffd9aa',
-          300: '#ffbb77',
-          400: '#ff9c44',
-          500: '#FF7A00',
-          600: '#E66D00',
-          700: '#CC6100',
-          800: '#B35400',
-          900: '#994800',
+          50: '#faf4ef',
+          100: '#f3e4d6',
+          200: '#e6c4a8',
+          300: '#d9a47a',
+          400: '#e0975f',
+          500: '#c8794a',
+          600: '#a8643c',
+          700: '#884f30',
+          800: '#683b24',
+          900: '#482818',
         },
         brand: {
-          orange: '#FF7A00',
-          anthracite: '#2B2B2B',
-          white: '#FFFFFF',
-          gray: '#F5F5F5',
-          darkGray: '#4A4A4A',
+          orange: '#c8794a',
+          anthracite: '#15181d',
+          white: '#ebe5db',
+          gray: '#20242b',
+          darkGray: '#2f353e',
+        },
+        cpc: {
+          bg: '#15181d',
+          card: '#20242b',
+          line: '#2f353e',
+          copper: '#c8794a',
+          copperLight: '#e0975f',
+          text: '#ebe5db',
+          muted: '#9a958c',
+          onCopper: '#1b120c',
+          page: '#0b0d10',
         },
         dark: {
           50: '#F9FAFB',
@@ -34,9 +45,9 @@ export default {
           400: '#4B5563',
           500: '#374151',
           600: '#3E4651',
-          700: '#1F2937',
-          800: '#111827',
-          900: '#0F172A',
+          700: '#20242b',
+          800: '#15181d',
+          900: '#0b0d10',
         },
         success: {
           500: '#10B981',
@@ -56,7 +67,7 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Inter', 'sans-serif'],
       },
       letterSpacing: {
         tight: '-0.02em',
@@ -65,7 +76,10 @@ export default {
       boxShadow: {
         'premium': '0 4px 20px rgba(0, 0, 0, 0.08)',
         'premium-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
-        'orange': '0 4px 12px rgba(255, 122, 0, 0.3)',
+        'orange': '0 4px 12px rgba(200, 121, 74, 0.3)',
+      },
+      maxWidth: {
+        phone: '430px',
       },
     },
   },

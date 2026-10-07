@@ -1,167 +1,47 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Card } from '../components/ui/Card';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
+import { QuickActionsBar } from '../components/QuickActionsBar';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useToastContext } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, ChevronRight, AlertCircle, FileText, ScanLine, Tag, MessagesSquare, Building2 } from 'lucide-react';
-import { computeHomeMoney, type MonthData } from '../lib/homeMoney';
+import { X } from 'lucide-react';
+import { computeHomeMoney } from '../lib/homeMoney';
+import {
+  createProject,
+  listProjects,
+  ProjectsSchemaMissingError,
+  type Project,
+} from '../lib/projectsApi';
 
-// ---------------------------------------------------------
-// Графік доходів / витрат — same YTD totals as summary cards
-// ---------------------------------------------------------
-function MonthlyChart({
-  months,
-  totalIncome,
-  totalExpenses,
-  t,
-}: {
-  months: MonthData[];
-  totalIncome: number;
-  totalExpenses: number;
-  t: (k: string) => string;
-}) {
-  const now = new Date();
-  const visibleMonths = months.filter((_, i) => i <= now.getMonth());
-  const diff = totalIncome - totalExpenses;
-
-  const maxVal = Math.max(...visibleMonths.flatMap((m) => [m.income, m.expenses]), 1);
-  const chartHeight = 160;
-  const gridLines = [0, 0.25, 0.5, 0.75, 1];
-
-  const formatAmount = (v: number) =>
-    new Intl.NumberFormat('de-DE', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v) + ' €';
-
-  const formatShort = (v: number) =>
-    new Intl.NumberFormat('de-DE', {
-      maximumFractionDigits: 0,
-    }).format(v);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-      className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl shadow-lg overflow-hidden mb-6"
-    >
-      <div className="px-5 pt-5 pb-3">
-        <div className="flex justify-between items-start mb-5">
-          <div>
-            <p className="text-white/40 text-xs uppercase tracking-wider mb-1">
-              {t('totalEarnings') || 'Загальний дохід'}
-            </p>
-            <p className="text-green-400 text-2xl font-bold tracking-tight">
-              {formatAmount(totalIncome)}
-            </p>
-          </div>
-
-          <div className="text-right">
-            <p className="text-white/40 text-xs uppercase tracking-wider mb-1">
-              {t('totalReceipts') || 'Загальні витрати'}
-            </p>
-            <p className="text-red-400 text-2xl font-bold tracking-tight">
-              {formatAmount(totalExpenses)}
-            </p>
-          </div>
-        </div>
-
-        <div className="relative" style={{ height: chartHeight + 24 }}>
-          <div className="absolute inset-0 flex flex-col justify-between" style={{ bottom: 24 }}>
-            {gridLines
-              .slice(1)
-              .reverse()
-              .map((ratio, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-white/25 text-[10px] w-10 text-right shrink-0">
-                    {formatShort(maxVal * ratio)}
-                  </span>
-                  <div className="flex-1 border-t border-dashed border-white/10" />
-                </div>
-              ))}
-          </div>
-
-          <div
-            className="absolute left-12 right-0 flex items-end gap-0.5"
-            style={{ height: chartHeight, bottom: 24 }}
-          >
-            {visibleMonths.map((m, i) => {
-              const hasAnyData = totalIncome > 0 || totalExpenses > 0;
-              const incH =
-                hasAnyData && maxVal > 0
-                  ? Math.max((m.income / maxVal) * chartHeight, m.income > 0 ? 4 : 0)
-                  : 0;
-
-              const expH =
-                hasAnyData && maxVal > 0
-                  ? Math.max((m.expenses / maxVal) * chartHeight, m.expenses > 0 ? 4 : 0)
-                  : 0;
-
-              return (
-                <div key={i} className="flex-1 flex items-end justify-center gap-0.5 px-0.5">
-                  <motion.div
-                    initial={{ scaleY: 0 }}
-                    animate={{ scaleY: 1 }}
-                    transition={{ delay: i * 0.05, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ height: Math.max(incH, 3), transformOrigin: 'bottom' }}
-                    className={`flex-1 rounded-t-sm ${incH > 0 ? 'bg-green-400/70' : 'bg-white/5'}`}
-                  />
-                  <motion.div
-                    initial={{ scaleY: 0 }}
-                    animate={{ scaleY: 1 }}
-                    transition={{ delay: i * 0.05 + 0.05, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-                    style={{ height: Math.max(expH, 3), transformOrigin: 'bottom' }}
-                    className={`flex-1 rounded-t-sm ${expH > 0 ? 'bg-red-400/70' : 'bg-white/5'}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="absolute left-12 right-0 flex" style={{ bottom: 0, height: 24 }}>
-            {visibleMonths.map((m, i) => (
-              <div key={i} className="flex-1 flex items-center justify-center">
-                <span className="text-white/30 text-[10px] text-center">{m.month}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-white/10 px-5 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-green-400/70" />
-            <span className="text-white/40 text-xs">
-              {t('totalEarnings') || 'Дохід'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-red-400/70" />
-            <span className="text-white/40 text-xs">
-              {t('totalReceipts') || 'Витрати'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <span className="text-white/40 text-xs">{t('netProfit')}</span>
-          <span className={`text-sm font-semibold ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {formatAmount(diff)}
-          </span>
-        </div>
-      </div>
-    </motion.div>
-  );
+function invoiceStatusBadge(status: string, t: (k: string) => string) {
+  const label = t(status);
+  const text = label === status ? status : label;
+  if (status === 'paid') {
+    return <span className="cpc-badge cpc-badge-paid">{text}</span>;
+  }
+  if (status === 'sent' || status === 'overdue') {
+    return <span className="cpc-badge cpc-badge-wait">{text}</span>;
+  }
+  return <span className="cpc-badge cpc-badge-draft">{text}</span>;
 }
 
 export const Home: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { showSuccess, showError } = useToastContext();
+
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [address, setAddress] = useState('');
+  const [currency, setCurrency] = useState('EUR');
 
   const { data: session } = useQuery({
     queryKey: ['session'],
@@ -205,8 +85,9 @@ export const Home: React.FC = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('clients')
-        .select('id')
-        .eq('user_id', session?.user?.id || '');
+        .select('id, name, address')
+        .eq('user_id', session?.user?.id || '')
+        .order('name');
 
       if (error) throw error;
       return data || [];
@@ -214,11 +95,18 @@ export const Home: React.FC = () => {
     enabled: !!session?.user?.id,
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: listProjects,
+    retry: false,
+  });
+
   const uploadedInvoices = invoices.filter((inv) => inv.source === 'uploaded' || inv.uploaded_pdf_url);
   const incomeInvoices = invoices.filter((inv) => !(inv.source === 'uploaded' || inv.uploaded_pdf_url));
 
   const expenseInvoiceIds = new Set(
-    expenseDocuments.map((exp: any) => exp.invoice_id).filter((id: string | null | undefined) => !!id)
+    expenseDocuments.map((exp: { invoice_id?: string | null }) => exp.invoice_id).filter((id) => !!id)
   );
 
   const uploadedExpenses = uploadedInvoices
@@ -229,7 +117,6 @@ export const Home: React.FC = () => {
       created_at: inv.created_at,
     }));
 
-  // All expense docs + legacy uploaded costs (no invoice_id filter)
   const mergedExpenses = [...expenseDocuments, ...uploadedExpenses];
   const money = computeHomeMoney(incomeInvoices, mergedExpenses);
 
@@ -237,8 +124,8 @@ export const Home: React.FC = () => {
     .filter((inv) => inv.status === 'sent' || inv.status === 'draft')
     .reduce((sum, inv) => sum + Number(inv.total_gross || 0), 0);
 
-  const overdueInvoices = incomeInvoices.filter((inv) => inv.status === 'overdue');
-  const overdueTotal = overdueInvoices.reduce((sum, inv) => sum + Number(inv.total_gross || 0), 0);
+  const recentInvoices = incomeInvoices.slice(0, 5);
+  const lastProject = (projects as Project[])[0];
 
   const formatAmount = (v: number) =>
     new Intl.NumberFormat('de-DE', {
@@ -246,184 +133,264 @@ export const Home: React.FC = () => {
       maximumFractionDigits: 2,
     }).format(v) + ' €';
 
-  const quickActions = [
-    {
-      label: t('newInvoice') || 'Новий інвойс',
-      icon: Plus,
-      color: 'text-orange-400',
-      onClick: () => navigate('/invoices/new'),
+  const formatAmountShort = (v: number) =>
+    new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(v) + ' €';
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      createProject({
+        name,
+        client_id: clientId || null,
+        client_name: clientName || null,
+        address: address || null,
+        currency,
+      }),
+    onSuccess: (project) => {
+      showSuccess(t('projectCreated') || 'Project created');
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      setProjectOpen(false);
+      setName('');
+      setClientId('');
+      setClientName('');
+      setAddress('');
+      navigate(`/projects/${project.id}`);
     },
-    {
-      label: t('scanReceiptTitle') || 'Scan',
-      icon: ScanLine,
-      color: 'text-teal-400',
-      onClick: () => navigate('/scan'),
+    onError: (err) => {
+      if (err instanceof ProjectsSchemaMissingError) {
+        showError(t('projectsSchemaMissing') || 'Apply Supabase migration for projects');
+        return;
+      }
+      showError(t('projectCreateFailed') || 'Could not create project');
     },
-    {
-      label: t('createPdfBtn') || 'PDF',
-      icon: FileText,
-      color: 'text-cyan-400',
-      onClick: () => navigate('/pdf-creator'),
-    },
-    {
-      label: t('newClient') || 'Новий клієнт',
-      icon: Users,
-      color: 'text-green-400',
-      onClick: () => navigate('/clients/new'),
-    },
-    {
-      label: t('pricesNav') || 'Ціни',
-      icon: Tag,
-      color: 'text-amber-400',
-      onClick: () => navigate('/prices'),
-    },
-    {
-      label: t('projectsNav') || 'Об’єкти',
-      icon: Building2,
-      color: 'text-sky-400',
-      onClick: () => navigate('/projects'),
-    },
-    {
-      label: t('chatNav') || 'Спільнота',
-      icon: MessagesSquare,
-      color: 'text-teal-400',
-      onClick: () => navigate('/chat'),
-    },
-  ];
+  });
+
+  const onPickClient = (id: string) => {
+    setClientId(id);
+    const c = clients.find((x: { id: string }) => x.id === id);
+    if (c) {
+      setClientName(c.name || '');
+      if (c.address) setAddress(c.address);
+    } else {
+      setClientName('');
+    }
+  };
+
+  const balanceLabel = t('totalBalance');
+  const unpaidLabel = t('unpaidInvoices');
+  const receivedLabel = t('totalRevenue');
+  const spentLabel = t('totalExpenses') === 'totalExpenses' ? 'Витрачено' : t('totalExpenses');
+  const profitLabel = t('netProfit');
+  const recentLabel = t('recentInvoices');
+  const allLabel = t('viewAll') === 'viewAll' ? (t('seeAll') === 'seeAll' ? 'Усі' : t('seeAll')) : t('viewAll');
 
   return (
-    <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-white mb-1 leading-snug break-words">
-          <span className="sm:hidden">CPC</span>
-          <span className="hidden sm:inline">{t('appName')}</span>
-        </h1>
-        <p className="text-white/50 text-sm sm:hidden">{t('appName')}</p>
-        <p className="text-white/50 text-sm">{t('appSubtitle')}</p>
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 flex flex-col gap-2">
+      {/* Balance */}
+      <div className="cpc-card">
+        <small className="cpc-card-label">
+          {balanceLabel === 'totalBalance' ? 'Загальний баланс' : balanceLabel}
+        </small>
+        <b className="block text-[20px] font-medium cpc-copper tabular-nums">
+          {formatAmount(money.profit)}
+        </b>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <Card
-          className="p-4"
+      {/* 2×2 stats — mockup Overview */}
+      <div className="grid grid-cols-2 gap-1.5">
+        <button
+          type="button"
+          className="cpc-card text-left"
           onClick={() => navigate('/invoices?status=unpaid')}
         >
-          <p className="text-white/50 text-xs mb-1.5">{t('unpaid') || 'Не оплачено'}</p>
-          <h2 className="text-xl font-semibold text-orange-400 leading-tight">
-            {formatAmount(unpaidTotal)}
-          </h2>
-        </Card>
-
-        <Card className="p-4" onClick={() => navigate('/invoices')}>
-          <p className="text-white/50 text-xs mb-1.5">{t('totalInvoices') || 'Інвойси'}</p>
-          <h2 className="text-xl font-semibold text-white leading-tight">
-            {invoices.length}
-          </h2>
-        </Card>
-
-        <Card className="p-4" onClick={() => navigate('/clients')}>
-          <p className="text-white/50 text-xs mb-1.5">{t('clients') || 'Клієнти'}</p>
-          <h2 className="text-xl font-semibold text-green-400 leading-tight">
-            {clients.length}
-          </h2>
-        </Card>
-
-        <Card className="p-4" onClick={() => navigate('/receipts')}>
-          <p className="text-white/50 text-xs mb-1.5">
-            {t('expenseDocuments') || t('receipts')}
-          </p>
-          <h2 className="text-xl font-semibold text-cyan-400 leading-tight">
-            {mergedExpenses.length}
-          </h2>
-        </Card>
-      </div>
-
-      {/* Received is navigable; Spent / Profit stay display-only */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <Card
-          className="p-4"
+          <small className="cpc-card-label">
+            {unpaidLabel === 'unpaidInvoices' ? 'Неоплачено' : unpaidLabel}
+          </small>
+          <b className="block font-medium cpc-copper tabular-nums">{formatAmountShort(unpaidTotal)}</b>
+        </button>
+        <button
+          type="button"
+          className="cpc-card text-left"
           onClick={() => navigate('/invoices?status=paid')}
         >
-          <p className="text-white/50 text-xs mb-1.5">{t('totalEarnings')}</p>
-          <h2 className="text-xl font-semibold text-green-400 leading-tight">
-            {formatAmount(money.received)}
-          </h2>
-        </Card>
-        <Card className="p-4">
-          <p className="text-white/50 text-xs mb-1.5">{t('totalReceipts')}</p>
-          <h2 className="text-xl font-semibold text-red-400 leading-tight">
-            {formatAmount(money.spent)}
-          </h2>
-        </Card>
-        <Card className="p-4">
-          <p className="text-white/50 text-xs mb-1.5">{t('netProfit')}</p>
-          <h2 className={`text-xl font-semibold leading-tight ${money.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {formatAmount(money.profit)}
-          </h2>
-        </Card>
+          <small className="cpc-card-label">
+            {receivedLabel === 'totalRevenue' ? 'Отримано' : receivedLabel}
+          </small>
+          <b className="block font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+            {formatAmountShort(money.received)}
+          </b>
+        </button>
+        <button
+          type="button"
+          className="cpc-card text-left"
+          onClick={() => navigate('/receipts')}
+        >
+          <small className="cpc-card-label">{spentLabel}</small>
+          <b className="block font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+            {formatAmountShort(money.spent)}
+          </b>
+        </button>
+        <div className="cpc-card text-left">
+          <small className="cpc-card-label">
+            {profitLabel === 'netProfit' ? 'Чистий прибуток' : profitLabel}
+          </small>
+          <b className="block font-medium cpc-copper tabular-nums">
+            {formatAmountShort(money.profit)}
+          </b>
+        </div>
       </div>
 
-      {overdueInvoices.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
+      {/* Recent invoices */}
+      <div className="flex items-center justify-between px-0.5">
+        <b className="font-medium text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+          {recentLabel === 'recentInvoices' ? 'Останні рахунки' : recentLabel}
+        </b>
+        <button
+          type="button"
+          onClick={() => navigate('/invoices')}
+          className="cpc-copper text-[12px] bg-transparent border-0 cursor-pointer"
         >
-          <button
-            onClick={() => navigate('/invoices')}
-            className="w-full flex items-center gap-3 px-4 py-3.5 bg-red-500/10 border border-red-500/25 rounded-2xl hover:bg-red-500/15 transition-all active:scale-[0.99]"
-          >
-            <div className="w-9 h-9 bg-red-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-              <AlertCircle size={18} className="text-red-400" />
-            </div>
+          {allLabel}
+        </button>
+      </div>
 
-            <div className="flex-1 text-left">
-              <p className="text-red-300 font-semibold text-sm">
-                {t('overdueInvoices') || 'Прострочені інвойси'}
-              </p>
-              <p className="text-red-400/70 text-xs mt-0.5">
-                {overdueInvoices.length} {overdueInvoices.length === 1 ? (t('invoice') || 'інвойс') : (t('invoices') || 'інвойсів')} · {formatAmount(overdueTotal)}
-              </p>
-            </div>
-
-            <ChevronRight size={16} className="text-red-400/50" />
+      {recentInvoices.length === 0 ? (
+        <div className="cpc-card text-center py-6">
+          <p className="cpc-muted text-sm mb-3">{t('noInvoicesYet')}</p>
+          <button type="button" className="cpc-btn-primary" onClick={() => navigate('/invoices/new')}>
+            {t('newInvoice')}
           </button>
-        </motion.div>
+        </div>
+      ) : (
+        recentInvoices.map((inv) => {
+          const docNo = inv.document_number || inv.document_no || '—';
+          const client =
+            (inv.clients as { name?: string } | null)?.name ||
+            inv.client_name ||
+            t('noClient');
+          return (
+            <button
+              key={inv.id}
+              type="button"
+              onClick={() => navigate(`/invoices/${inv.id}/preview`)}
+              className="cpc-card w-full text-left"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] truncate" style={{ color: 'var(--cpc-text)' }}>
+                  № {docNo} · {client}
+                </span>
+                <b className="font-medium tabular-nums shrink-0" style={{ color: 'var(--cpc-text)' }}>
+                  {formatAmountShort(Number(inv.total_gross || 0))}
+                </b>
+              </div>
+              <div className="mt-1">{invoiceStatusBadge(inv.status || 'draft', t)}</div>
+            </button>
+          );
+        })
       )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className="mb-6"
-      >
-        <p className="text-white/40 text-xs uppercase tracking-wider mb-3">
-          {t('quickActions') || 'Швидкі дії'}
-        </p>
+      <div className="flex-1 min-h-2" />
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-          {quickActions.map((action) => (
-            <button
-              key={action.label}
-              onClick={action.onClick}
-              className="flex flex-col items-center gap-2 px-3 py-4 rounded-2xl transition-all active:scale-95 hover:brightness-110"
-            >
-              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-                <action.icon size={20} className={action.color} />
-              </div>
-              <span className="text-white/70 text-xs font-medium text-center leading-tight">
-                {action.label}
-              </span>
-            </button>
-          ))}
-        </div>
-      </motion.div>
-
-      <MonthlyChart
-        months={money.months}
-        totalIncome={money.received}
-        totalExpenses={money.spent}
-        t={t}
+      <QuickActionsBar
+        handlers={{
+          onWork: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : setProjectOpen(true)),
+          onExpense: () => navigate('/scan'),
+          onAdvance: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : navigate('/projects')),
+          onPdf: () => navigate('/pdf-creator'),
+        }}
       />
+
+      <AnimatePresence>
+        {projectOpen && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 px-2 pb-2 sm:pb-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setProjectOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[430px] p-4"
+              style={{
+                background: 'var(--cpc-card)',
+                border: '1px solid var(--cpc-line)',
+                borderRadius: 16,
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold" style={{ color: 'var(--cpc-text)' }}>
+                  {t('projectNew') || 'New project'}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setProjectOpen(false)}
+                  className="w-10 h-10 flex items-center justify-center bg-transparent border-0"
+                  style={{ color: 'var(--cpc-muted)' }}
+                  aria-label={t('cancel')}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <Input
+                  label={t('projectName') || 'Name'}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t('projectNamePlaceholder') || 'e.g. Flat renovation'}
+                />
+                {clients.length > 0 && (
+                  <Select
+                    label={t('clients') || 'Client'}
+                    value={clientId}
+                    onChange={(e) => onPickClient(e.target.value)}
+                  >
+                    <option value="">
+                      {t('noClient') || 'No client'} / {t('projectCustomClient') || 'custom'}
+                    </option>
+                    {clients.map((c: { id: string; name: string }) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                <Input
+                  label={t('clientName')}
+                  value={clientName}
+                  onChange={(e) => {
+                    setClientName(e.target.value);
+                    if (clientId) setClientId('');
+                  }}
+                />
+                <Input
+                  label={t('address')}
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+                <Input
+                  label={t('currency')}
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))}
+                />
+                <Button
+                  className="w-full min-h-[48px]"
+                  style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
+                  disabled={!name.trim() || createMut.isPending}
+                  onClick={() => createMut.mutate()}
+                >
+                  {createMut.isPending ? t('saving') || 'Saving…' : t('save')}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

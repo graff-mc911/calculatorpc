@@ -1,0 +1,120 @@
+/* CPC Copper Hybrid — tokens from CPC____________________1a92.html mockup */
+:root {
+  --cpc-bg: #15181d;
+  --cpc-card: #20242b;
+  --cpc-line: #2f353e;
+  --cpc-copper: #c8794a;
+  --cpc-copper-light: #e0975f;
+  --cpc-text: #ebe5db;
+  --cpc-muted: #9a958c;
+  --cpc-on-copper: #1b120c;
+  --cpc-page: #0b0d10;
+  --cpc-badge-wait-bg: #3b2819;
+  --cpc-badge-wait-fg: #e8a56d;
+  --cpc-badge-paid-bg: #1d3326;
+  --cpc-badge-paid-fg: #7ad9a0;
+  --cpc-radius-card: 12px;
+  --cpc-radius-btn: 9px;
+  --cpc-radius-step: 7px;
+}
+
+@layer components {
+  .cpc-page {
+    @apply min-h-screen;
+    background: var(--cpc-bg);
+    color: var(--cpc-text);
+  }
+
+  .cpc-card {
+    background: var(--cpc-card);
+    border: 1px solid var(--cpc-line);
+    border-radius: var(--cpc-radius-card);
+    padding: 9px 10px;
+  }
+
+  .cpc-card-label {
+    display: block;
+    color: var(--cpc-muted);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .cpc-copper {
+    color: var(--cpc-copper-light);
+  }
+
+  .cpc-muted {
+    color: var(--cpc-muted);
+  }
+
+  .cpc-profit {
+    background: var(--cpc-copper);
+    color: var(--cpc-on-copper);
+    border-radius: var(--cpc-radius-card);
+    padding: 10px 12px;
+  }
+
+  .cpc-btn-primary {
+    background: var(--cpc-copper);
+    color: var(--cpc-on-copper);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+  }
+
+  .cpc-btn-primary:hover {
+    background: var(--cpc-copper-light);
+  }
+
+  .cpc-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--cpc-radius-step);
+    background: var(--cpc-line);
+    color: var(--cpc-text);
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+  }
+
+  .cpc-step:active {
+    transform: scale(0.95);
+  }
+
+  .cpc-badge {
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 6px;
+    display: inline-block;
+  }
+
+  .cpc-badge-wait {
+    background: var(--cpc-badge-wait-bg);
+    color: var(--cpc-badge-wait-fg);
+  }
+
+  .cpc-badge-paid {
+    background: var(--cpc-badge-paid-bg);
+    color: var(--cpc-badge-paid-fg);
+  }
+
+  .cpc-badge-draft {
+    background: var(--cpc-line);
+    color: var(--cpc-muted);
+  }
+
+  .cpc-input-pill {
+    background: var(--cpc-bg);
+    border: 1px solid var(--cpc-line);
+    border-radius: 8px;
+    padding: 4px 10px;
+    color: var(--cpc-text);
+  }
+}

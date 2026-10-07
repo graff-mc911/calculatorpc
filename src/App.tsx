@@ -8,6 +8,7 @@ import { OwnerRoute } from './components/OwnerRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TopNav } from './components/TopNav';
 import { MobileTopNav } from './components/MobileTopNav';
+import { BottomNav } from './components/BottomNav';
 import { Loading } from './components/Loading';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Home } from './pages/Home';
@@ -103,8 +104,8 @@ function RootPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#1e272e] flex items-center justify-center">
-        <div className="text-white text-xl">Завантаження...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--cpc-bg)' }}>
+        <div className="text-xl" style={{ color: 'var(--cpc-text)' }}>Завантаження...</div>
       </div>
     );
   }
@@ -117,8 +118,11 @@ function RootPage() {
     <>
       <TopNav />
       <MobileTopNav />
-      <div className="pt-16 lg:pt-0">
+      <div className="pt-14 lg:pt-16 pb-28 lg:pb-8">
         <Home />
+      </div>
+      <div className="lg:hidden">
+        <BottomNav />
       </div>
     </>
   );
@@ -128,30 +132,39 @@ function AppContent() {
   const location = useLocation();
   const { language } = useLanguage();
 
-  const isAuthPage =
-    location.pathname === '/' ||
+  const isPublicAuthPage =
     location.pathname === '/login' ||
     location.pathname === '/signup' ||
     location.pathname === '/onboarding' ||
     location.pathname === '/privacy' ||
-    location.pathname === '/terms' ||
-    location.pathname === '/pdf-creator';
+    location.pathname === '/terms';
+
+  const isRoot = location.pathname === '/';
+  const hideChrome =
+    isPublicAuthPage ||
+    location.pathname === '/pdf-creator' ||
+    isRoot;
+
+  const showAppChrome = !hideChrome;
 
   return (
-    <div className="min-h-screen overflow-x-hidden" key={language}>
+    <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--cpc-bg)' }} key={language}>
       <SyncInit />
       <OfflineIndicator />
 
-      {!isAuthPage && (
+      {showAppChrome && (
         <ProtectedRoute>
           <>
             <TopNav />
             <MobileTopNav />
+            <div className="lg:hidden">
+              <BottomNav />
+            </div>
           </>
         </ProtectedRoute>
       )}
 
-      <div className={isAuthPage ? '' : 'pt-16 lg:pt-0 print:pt-0'}>
+      <div className={showAppChrome ? 'pt-14 lg:pt-16 pb-28 lg:pb-8 print:pt-0 print:pb-0' : ''}>
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />

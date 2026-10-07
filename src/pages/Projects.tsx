@@ -22,14 +22,12 @@ function statusChip(status: string, t: (k: string) => string) {
   const key = `projectStatus_${status}`;
   const label = t(key) === key ? status : t(key);
   const cls =
-    status === 'paid'
-      ? 'bg-green-500/20 text-green-200'
-      : status === 'completed'
-        ? 'bg-emerald-500/15 text-emerald-200'
-        : status === 'in_progress'
-          ? 'bg-sky-500/20 text-sky-200'
-          : 'bg-white/10 text-white/60';
-  return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
+    status === 'paid' || status === 'completed'
+      ? 'cpc-badge cpc-badge-paid'
+      : status === 'in_progress'
+        ? 'cpc-badge cpc-badge-wait'
+        : 'cpc-badge cpc-badge-draft';
+  return <span className={cls}>{label}</span>;
 }
 
 export default function Projects() {
@@ -178,28 +176,40 @@ export default function Projects() {
   }, [projects, workByProject, moneyByProject]);
 
   return (
-    <div className="min-h-screen pt-[4.5rem] pb-24 px-3 w-full max-w-[430px] mx-auto min-w-0">
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0">
       <div className="flex items-center gap-2.5 mb-4">
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="w-11 h-11 rounded-2xl bg-white/[0.07] border border-white/10 flex items-center justify-center text-white/80"
+          className="w-11 h-11 flex items-center justify-center"
+          style={{
+            background: 'var(--cpc-card)',
+            border: '1px solid var(--cpc-line)',
+            borderRadius: 12,
+            color: 'var(--cpc-text)',
+          }}
           aria-label={t('back')}
         >
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold text-white truncate">
-            {t('projectsNav') || 'Об’єкти'}
+          <h1 className="text-xl font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
+            {t('projectsNav') || 'Проекти'}
           </h1>
-          <p className="text-white/45 text-xs mt-0.5">
+          <p className="cpc-muted text-xs mt-0.5">
             {t('projectsSubtitle') || 'Кошторис, аванси та витрати по об’єкту'}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-11 h-11 rounded-2xl bg-orange-500/25 border border-orange-400/35 flex items-center justify-center text-orange-200"
+          className="w-11 h-11 flex items-center justify-center"
+          style={{
+            background: 'rgba(200,121,74,0.22)',
+            border: '1px solid rgba(224,151,95,0.4)',
+            borderRadius: 12,
+            color: 'var(--cpc-copper-light)',
+          }}
           aria-label={t('projectNew') || 'New project'}
         >
           <Plus size={22} />
@@ -216,18 +226,20 @@ export default function Projects() {
       {isLoading ? (
         <p className="text-white/50 text-sm">{t('loading') || 'Loading…'}</p>
       ) : cards.length === 0 && !schemaMissing ? (
-        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.03] px-5 py-10 text-center">
-          <Building2 className="mx-auto mb-3 text-white/30" size={36} />
-          <p className="text-white/70 text-sm mb-1">{t('projectsEmpty') || 'No projects yet'}</p>
-          <p className="text-white/40 text-xs mb-4">
+        <div className="cpc-card px-5 py-10 text-center">
+          <Building2 className="mx-auto mb-3 cpc-muted" size={36} />
+          <p className="text-sm mb-1" style={{ color: 'var(--cpc-text)' }}>
+            {t('projectsEmpty') || 'No projects yet'}
+          </p>
+          <p className="cpc-muted text-xs mb-4">
             {t('projectsEmptyHint') || 'Create an object to estimate works and track money.'}
           </p>
-          <Button className="min-h-[48px]" onClick={() => setOpen(true)}>
+          <button type="button" className="cpc-btn-primary min-h-[48px] w-full" onClick={() => setOpen(true)}>
             {t('projectNew') || 'New project'}
-          </Button>
+          </button>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {cards.map(({ project, metrics }, i) => (
             <motion.button
               key={project.id}
@@ -236,50 +248,40 @@ export default function Projects() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
               onClick={() => navigate(`/projects/${project.id}`)}
-              className="w-full text-left rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] px-3.5 py-3.5 hover:bg-white/[0.08] active:scale-[0.99] transition-all"
+              className="cpc-card w-full text-left active:scale-[0.99] transition-all"
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0">
-                  <p className="text-white font-semibold truncate">{project.name}</p>
+                  <p className="font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
+                    {project.name}
+                  </p>
                   {project.address && (
-                    <p className="text-white/40 text-xs mt-0.5 truncate">{project.address}</p>
+                    <p className="cpc-muted text-xs mt-0.5 truncate">{project.address}</p>
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   {statusChip(project.status, t)}
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${
-                      metrics.marginPct >= 20
-                        ? 'bg-green-500/15 text-green-300'
-                        : metrics.marginPct >= 0
-                          ? 'bg-amber-500/15 text-amber-200'
-                          : 'bg-red-500/15 text-red-300'
-                    }`}
-                  >
+                  <span className="cpc-copper text-xs font-medium tabular-nums">
                     {metrics.marginPct.toFixed(0)}%
                   </span>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
-                  <p className="text-white/35">{t('projectEstimate') || 'Estimate'}</p>
-                  <p className="text-white/90 font-medium tabular-nums">
+                  <p className="cpc-muted">{t('projectEstimate') || 'Estimate'}</p>
+                  <p className="font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
                     {formatCurrency(metrics.estimateTotal, project.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-white/35">{t('projectBalanceDue') || 'Balance'}</p>
-                  <p className="text-orange-300 font-medium tabular-nums">
+                  <p className="cpc-muted">{t('projectBalanceDue') || 'Balance'}</p>
+                  <p className="cpc-copper font-medium tabular-nums">
                     {formatCurrency(metrics.balanceDue, project.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-white/35">{t('projectProfit') || 'Profit'}</p>
-                  <p
-                    className={`font-medium tabular-nums ${
-                      metrics.projectedProfit >= 0 ? 'text-green-300' : 'text-red-300'
-                    }`}
-                  >
+                  <p className="cpc-muted">{t('projectProfit') || 'Profit'}</p>
+                  <p className="cpc-copper font-medium tabular-nums">
                     {formatCurrency(metrics.projectedProfit, project.currency)}
                   </p>
                 </div>

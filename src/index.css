@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import './styles/copper.css';
 
 @font-face {
   font-family: 'DejaVu Sans';
@@ -21,18 +22,28 @@
 @tailwind utilities;
 
 :root {
-  --primary-orange: #f97316;
-  --primary-orange-hover: #ea580c;
+  --primary-orange: #c8794a;
+  --primary-orange-hover: #e0975f;
 
-  --glass-bg: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-hover: rgba(255, 255, 255, 0.15);
+  --glass-bg: rgba(32, 36, 43, 0.85);
+  --glass-border: #2f353e;
+  --glass-hover: rgba(32, 36, 43, 0.95);
 
-  --input-bg: rgba(255, 255, 255, 0.05);
-  --input-border: rgba(255, 255, 255, 0.1);
+  --input-bg: #15181d;
+  --input-border: #2f353e;
 
   --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --shadow-glass-hover: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+
+  --cpc-bg: #15181d;
+  --cpc-card: #20242b;
+  --cpc-line: #2f353e;
+  --cpc-copper: #c8794a;
+  --cpc-copper-light: #e0975f;
+  --cpc-text: #ebe5db;
+  --cpc-muted: #9a958c;
+  --cpc-on-copper: #1b120c;
+  --cpc-page: #0b0d10;
 }
 
 * {
@@ -42,13 +53,13 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: #ffffff;
+  background: var(--cpc-bg);
+  color: var(--cpc-text);
   overflow-x: hidden;
-  line-height: 1.6;
+  line-height: 1.35;
   min-height: 100vh;
 }
 

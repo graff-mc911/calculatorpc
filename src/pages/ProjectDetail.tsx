@@ -7,12 +7,12 @@ import {
   Camera,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   FileText,
   Minus,
+  Pencil,
   Plus,
   Trash2,
-  Wallet,
-  Wrench,
   X,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -20,6 +20,7 @@ import { useToastContext } from '../contexts/ToastContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { QuickActionsBar } from '../components/QuickActionsBar';
 import { MoneyInput, QtyInput } from '../components/projects/MoneyInput';
 import { EXPENSE_CATEGORIES, categoryI18nKey } from '../lib/expenseCategories';
 import {
@@ -59,18 +60,33 @@ import { supabase } from '../lib/supabase';
 type Tab = 'works' | 'expenses' | 'prepayments';
 type Sheet = null | 'work' | 'expense' | 'prepayment' | 'pdf';
 
-/** Expandable template groups required by Ivan. */
+/** All catalog categories that have seed works (skip empty `other`). */
 const TEMPLATE_GROUPS: WorkCategory[] = [
   'demolition',
+  'masonry',
+  'concrete',
   'drywall',
   'plaster',
   'tiling',
   'paint',
   'flooring',
-  'other',
+  'plumbing',
+  'electrical',
+  'roofing',
+  'insulation',
+  'facade',
+  'doors_windows',
+  'outdoor',
 ];
 
-const STAGE_PRESETS = ['Bathroom', 'Kitchen', 'Living', 'Hall', 'Facade', 'Roof'];
+const STAGE_PRESETS = [
+  { id: 'Bathroom', en: 'Bathroom', uk: 'Ванна', de: 'Bad' },
+  { id: 'Kitchen', en: 'Kitchen', uk: 'Кухня', de: 'Küche' },
+  { id: 'Living', en: 'Living', uk: 'Вітальня', de: 'Wohnzimmer' },
+  { id: 'Hall', en: 'Hall', uk: 'Коридор', de: 'Flur' },
+  { id: 'Facade', en: 'Facade', uk: 'Фасад', de: 'Fassade' },
+  { id: 'Roof', en: 'Roof', uk: 'Дах', de: 'Dach' },
+] as const;
 
 function statusLabel(status: string, t: (k: string) => string): string {
   const key = `projectStatus_${status}`;
@@ -81,15 +97,15 @@ function statusLabel(status: string, t: (k: string) => string): string {
 function statusChipClass(status: string): string {
   switch (status) {
     case 'draft':
-      return 'bg-white/10 text-white/70 border-white/15';
+      return 'cpc-badge-draft border-transparent';
     case 'in_progress':
-      return 'bg-sky-500/20 text-sky-200 border-sky-400/30';
+      return 'cpc-badge-wait border-transparent';
     case 'completed':
-      return 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30';
+      return 'cpc-badge-paid border-transparent';
     case 'paid':
-      return 'bg-green-500/25 text-green-200 border-green-400/40';
+      return 'cpc-badge-paid border-transparent';
     default:
-      return 'bg-white/10 text-white/60 border-white/15';
+      return 'cpc-badge-draft border-transparent';
   }
 }
 
@@ -127,6 +143,9 @@ export default function ProjectDetail() {
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [addressDraft, setAddressDraft] = useState('');
 
   const { data: bundle, isLoading, error, isError } = useQuery({
     queryKey: ['project-bundle', id],
@@ -154,6 +173,8 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (!bundle) return;
+    setNameDraft(bundle.project.name || '');
+    setAddressDraft(bundle.project.address || '');
     setBudgetDraft(
       Number(bundle.project.expense_budget)
         ? formatMoneyInput(Number(bundle.project.expense_budget), 2)
@@ -340,11 +361,28 @@ export default function ProjectDetail() {
     onError: onSchemaErr,
   });
 
+  const metaMut = useMutation({
+    mutationFn: async () => {
+      const name = nameDraft.trim();
+      if (!name) throw new Error('INVALID');
+      return updateProject(id, {
+        name,
+        address: addressDraft.trim() || null,
+      });
+    },
+    onSuccess: () => {
+      showSuccess(t('saved') || 'Saved');
+      setEditingMeta(false);
+      invalidate();
+    },
+    onError: onSchemaErr,
+  });
+
   const pdfMut = useMutation({
     mutationFn: async (mode: ProjectPdfMode) => {
       if (!bundle) throw new Error('NO_PROJECT');
       let company: Record<string, unknown> = {
-        company_name: 'CPC Bau',
+        company_name: 'Construction Project Calculator',
         company_address: '',
         company_phone: '',
         company_email: '',
@@ -467,7 +505,7 @@ export default function ProjectDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen pt-20 px-4 text-white/50 text-sm max-w-[430px] mx-auto">
+      <div className="cpc-page px-4 cpc-muted text-sm max-w-[430px] mx-auto">
         {t('loading') || 'Loading…'}
       </div>
     );
@@ -475,7 +513,7 @@ export default function ProjectDetail() {
 
   if (schemaMissing || !bundle) {
     return (
-      <div className="min-h-screen pt-20 px-3 w-full max-w-[430px] mx-auto">
+      <div className="cpc-page px-3 w-full max-w-[430px] mx-auto">
         <button
           type="button"
           onClick={() => navigate('/projects')}
@@ -497,20 +535,28 @@ export default function ProjectDetail() {
   const rawProgressPct = Math.round(metrics.expenseProgress * 100);
 
   return (
-    <div className="min-h-screen pb-32 px-3 w-full max-w-[430px] mx-auto min-w-0 pt-[4.5rem]">
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-4">
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-3">
         <button
           type="button"
           onClick={() => navigate('/projects')}
-          className="w-11 h-11 shrink-0 rounded-2xl bg-white/[0.07] border border-white/10 flex items-center justify-center text-white/80"
+          className="w-11 h-11 shrink-0 flex items-center justify-center"
+          style={{
+            background: 'var(--cpc-card)',
+            border: '1px solid var(--cpc-line)',
+            borderRadius: 12,
+            color: 'var(--cpc-text)',
+          }}
           aria-label={t('back')}
         >
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold text-white truncate leading-tight">{project.name}</h1>
-          <p className="text-white/40 text-xs truncate mt-0.5">
+          <h1 className="text-lg font-medium truncate leading-tight" style={{ color: 'var(--cpc-text)' }}>
+            {project.name}
+          </h1>
+          <p className="text-xs truncate mt-0.5 cpc-muted">
             {project.client_name || t('noClient') || 'No client'}
             {project.address ? ` · ${project.address}` : ''}
           </p>
@@ -518,16 +564,73 @@ export default function ProjectDetail() {
         <button
           type="button"
           onClick={() => {
+            setNameDraft(project.name || '');
+            setAddressDraft(project.address || '');
+            setEditingMeta((v) => !v);
+          }}
+          className="w-11 h-11 shrink-0 flex items-center justify-center"
+          style={{
+            background: 'var(--cpc-card)',
+            border: '1px solid var(--cpc-line)',
+            borderRadius: 12,
+            color: 'var(--cpc-muted)',
+          }}
+          aria-label={t('edit') || 'Edit'}
+        >
+          <Pencil size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
             if (window.confirm(t('projectDeleteConfirm') || 'Delete this project?')) {
               deleteMut.mutate();
             }
           }}
-          className="w-11 h-11 shrink-0 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-300"
+          className="w-11 h-11 shrink-0 flex items-center justify-center text-red-300"
+          style={{
+            background: 'rgba(200,80,80,0.1)',
+            border: '1px solid rgba(200,80,80,0.25)',
+            borderRadius: 12,
+          }}
           aria-label={t('delete')}
         >
           <Trash2 size={16} />
         </button>
       </div>
+
+      {editingMeta && (
+        <div className="mb-3 rounded-2xl border border-white/10 bg-white/[0.05] p-3 space-y-2.5">
+          <Input
+            label={t('projectName') || 'Project name'}
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+          />
+          <Input
+            label={t('address') || 'Site address'}
+            value={addressDraft}
+            onChange={(e) => setAddressDraft(e.target.value)}
+            placeholder={t('projectAddressPlaceholder') || 'Site / object address'}
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={metaMut.isPending || !nameDraft.trim()}
+              onClick={() => metaMut.mutate()}
+            >
+              {t('save') || 'Save'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setEditingMeta(false)}
+            >
+              {t('cancel') || 'Cancel'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Status chips */}
       <div className="flex flex-wrap gap-1.5 mb-3">
@@ -564,39 +667,57 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {/* Balance + invoice count — calculator mockup header card */}
+      <div className="cpc-card flex items-center justify-between gap-2 mb-2">
+        <div>
+          <small className="cpc-card-label">{t('totalBalance') === 'totalBalance' ? 'Загальний баланс' : t('totalBalance')}</small>
+          <b className="block text-[18px] font-medium cpc-copper tabular-nums">
+            {formatCurrency(metrics.projectedProfit, currency)}
+          </b>
+        </div>
+        <div className="text-right cpc-muted text-[12px]">
+          {t('invoices') || 'Рахунків'}:{' '}
+          <b style={{ color: 'var(--cpc-text)' }}>{workItems.length}</b>
+        </div>
+      </div>
+
       {/* Metrics dashboard */}
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      <div className="grid grid-cols-2 gap-1.5 mb-2">
         {[
-          { label: t('projectEstimate') || 'Estimate', value: metrics.estimateTotal, color: 'text-white' },
-          { label: t('projectReceived') || 'Received', value: metrics.received, color: 'text-green-300' },
-          {
-            label: t('projectBalanceDue') || 'Balance due',
-            value: metrics.balanceDue,
-            color: 'text-orange-300',
-          },
-          { label: t('projectExpenses') || 'Expenses', value: metrics.expenses, color: 'text-red-300' },
-          {
-            label: t('projectProfit') || 'Profit',
-            value: metrics.projectedProfit,
-            color: metrics.projectedProfit >= 0 ? 'text-green-300' : 'text-red-300',
-          },
-          {
-            label: t('projectMargin') || 'Margin',
-            value: metrics.marginPct,
-            color: metrics.marginPct >= 0 ? 'text-cyan-300' : 'text-red-300',
-            isPct: true,
-          },
+          { label: t('projectEstimate') || 'Estimate', value: metrics.estimateTotal, copper: false },
+          { label: t('projectReceived') || 'Received', value: metrics.received, copper: false },
+          { label: t('projectBalanceDue') || 'Balance due', value: metrics.balanceDue, copper: true },
+          { label: t('projectExpenses') || 'Expenses', value: metrics.expenses, copper: false },
         ].map((m) => (
-          <div
-            key={m.label}
-            className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] px-3 py-3 shadow-sm"
-          >
-            <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">{m.label}</p>
-            <p className={`text-[15px] font-semibold leading-tight tabular-nums ${m.color}`}>
-              {m.isPct ? `${Number.isFinite(metrics.marginPct) ? metrics.marginPct.toFixed(1) : '0.0'}%` : formatCurrency(m.value, currency)}
-            </p>
+          <div key={m.label} className="cpc-card">
+            <small className="cpc-card-label">{m.label}</small>
+            <b
+              className={`block text-[15px] font-medium leading-tight tabular-nums ${m.copper ? 'cpc-copper' : ''}`}
+              style={m.copper ? undefined : { color: 'var(--cpc-text)' }}
+            >
+              {formatCurrency(m.value, currency)}
+            </b>
           </div>
         ))}
+      </div>
+
+      {/* Client cost + profit card (mockup calculator) */}
+      <div className="flex items-center justify-between px-0.5 mb-2">
+        <span className="cpc-muted text-[12px]">{t('projectEstimate') || 'Вартість для клієнта'}</span>
+        <b className="text-[16px] font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+          {formatCurrency(metrics.estimateTotal, currency)}
+        </b>
+      </div>
+      <div className="cpc-profit mb-3">
+        <div className="text-[11px]">{t('projectProfit') || 'Прогнозований прибуток'}</div>
+        <div className="flex items-center justify-between gap-2">
+          <b className="text-[22px] font-medium tabular-nums">
+            {formatCurrency(metrics.projectedProfit, currency)}
+          </b>
+          <b className="text-[12px] font-medium tabular-nums">
+            {Number.isFinite(metrics.marginPct) ? `${metrics.marginPct.toFixed(0)}%` : '0%'}
+          </b>
+        </div>
       </div>
 
       {/* Overpayment — separate from balance due, never breaks UI */}
@@ -775,7 +896,7 @@ export default function ProjectDetail() {
             expenses.map((e) => (
               <div
                 key={e.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-3.5 flex items-center gap-3"
+                className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-3.5 flex items-center gap-2"
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{e.title}</p>
@@ -783,16 +904,28 @@ export default function ProjectDetail() {
                     {t(categoryI18nKey(e.category)) || e.category} · {e.expense_date}
                   </p>
                 </div>
-                <p className="text-red-300 text-sm font-semibold tabular-nums">
+                <p className="text-red-300 text-sm font-semibold tabular-nums shrink-0">
                   {formatCurrency(Number(e.amount), currency)}
                 </p>
+                {e.receipt_url ? (
+                  <a
+                    href={e.receipt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-11 h-11 shrink-0 text-sky-300/80 hover:text-sky-200 flex items-center justify-center"
+                    aria-label={t('projectReceiptOpen') || 'Open receipt'}
+                    title={t('projectReceiptOpen') || 'Open receipt'}
+                  >
+                    <ExternalLink size={15} />
+                  </a>
+                ) : null}
                 <button
                   type="button"
                   onClick={async () => {
                     await deleteExpense(e.id, id);
                     invalidate();
                   }}
-                  className="w-11 h-11 text-white/30 hover:text-red-300 flex items-center justify-center"
+                  className="w-11 h-11 shrink-0 text-white/30 hover:text-red-300 flex items-center justify-center"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -839,64 +972,32 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Sticky Quick Actions */}
-      <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
-        <div className="bg-gradient-to-t from-[#1e272e] via-[#1e272e] to-transparent pt-6 pb-[max(0.65rem,env(safe-area-inset-bottom))] px-2">
-          <div className="max-w-[430px] mx-auto grid grid-cols-4 gap-1.5 pointer-events-auto">
-            {[
-              {
-                key: 'work',
-                icon: Wrench,
-                label: t('projectQaWork') || '+ Work',
-                color: 'text-orange-300',
-                onClick: () => {
-                  setTab('works');
-                  setSheet('work');
-                },
+      {/* Sticky Quick Actions — above BottomNav */}
+      <div
+        className="fixed inset-x-0 z-40 px-3 pointer-events-none lg:bottom-4"
+        style={{ bottom: 'calc(52px + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div className="max-w-[430px] mx-auto pointer-events-auto">
+          <QuickActionsBar
+            handlers={{
+              onWork: () => {
+                setTab('works');
+                setSheet('work');
               },
-              {
-                key: 'expense',
-                icon: Wallet,
-                label: t('projectQaExpense') || '+ Expense',
-                color: 'text-red-300',
-                onClick: () => {
-                  setTab('expenses');
-                  setSheet('expense');
-                },
+              onExpense: () => {
+                setTab('expenses');
+                setSheet('expense');
               },
-              {
-                key: 'prepay',
-                icon: Plus,
-                label: t('projectQaPrepay') || '+ Prepay',
-                color: 'text-green-300',
-                onClick: () => {
-                  setTab('prepayments');
-                  setSheet('prepayment');
-                },
+              onAdvance: () => {
+                setTab('prepayments');
+                setSheet('prepayment');
               },
-              {
-                key: 'pdf',
-                icon: FileText,
-                label: 'PDF',
-                color: 'text-cyan-300',
-                onClick: () => setSheet('pdf'),
-              },
-            ].map((a) => (
-              <button
-                key={a.key}
-                type="button"
-                onClick={a.onClick}
-                className="flex flex-col items-center justify-center gap-1 min-h-[64px] rounded-2xl border border-white/15 bg-white/[0.12] backdrop-blur-xl px-1 active:scale-95 shadow-lg shadow-black/30"
-              >
-                <a.icon size={20} className={a.color} />
-                <span className="text-[11px] text-white font-semibold leading-tight text-center">
-                  {a.label}
-                </span>
-              </button>
-            ))}
-          </div>
+              onPdf: () => setSheet('pdf'),
+            }}
+          />
         </div>
       </div>
+      <div className="h-16" aria-hidden />
 
       {/* Sheets */}
       <AnimatePresence>
@@ -1022,20 +1123,24 @@ export default function ProjectDetail() {
                       {t('projectGroup') || 'Room / stage'}
                     </p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
-                      {STAGE_PRESETS.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setWorkGroup(p)}
-                          className={`min-h-[44px] px-3 rounded-full text-[11px] border ${
-                            workGroup === p
-                              ? 'bg-orange-500/25 text-orange-100 border-orange-400/40'
-                              : 'bg-white/5 text-white/50 border-white/10'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      ))}
+                      {STAGE_PRESETS.map((p) => {
+                        const label =
+                          language === 'uk' ? p.uk : language === 'de' ? p.de : p.en;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setWorkGroup(label)}
+                            className={`min-h-[44px] px-3 rounded-full text-[11px] border ${
+                              workGroup === label || workGroup === p.id
+                                ? 'bg-orange-500/25 text-orange-100 border-orange-400/40'
+                                : 'bg-white/5 text-white/50 border-white/10'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
                     <Input
                       value={workGroup}

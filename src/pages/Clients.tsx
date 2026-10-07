@@ -209,14 +209,14 @@ export const Clients: React.FC = () => {
   }, [clients, search]);
 
   return (
-    <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-6xl mx-auto">
+    <div className="cpc-page px-3 md:px-6 w-full max-w-[430px] md:max-w-6xl mx-auto">
       {/* Верх сторінки */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4">
         <div>
-          <h2 className="text-2xl font-semibold text-white">
+          <h2 className="text-xl font-medium" style={{ color: 'var(--cpc-text)' }}>
             {t('clients') || 'Клієнти'}
           </h2>
-          <p className="text-white/60 text-sm mt-1">
+          <p className="cpc-muted text-sm mt-1">
             {t('manageClients') || 'Керуйте своїми клієнтами'}
           </p>
         </div>
@@ -226,7 +226,13 @@ export const Clients: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/clients/new')}
-            className="p-2.5 rounded-xl bg-white/10 backdrop-blur-xl border border-white/10 text-orange-500 hover:bg-white/20 transition-all active:scale-95"
+            className="p-2.5 transition-all active:scale-95"
+            style={{
+              background: 'rgba(200,121,74,0.22)',
+              border: '1px solid rgba(224,151,95,0.4)',
+              borderRadius: 12,
+              color: 'var(--cpc-copper-light)',
+            }}
             title={t('addClient') || 'Новий клієнт'}
           >
             <Plus size={16} />
@@ -235,19 +241,24 @@ export const Clients: React.FC = () => {
       </div>
 
       {/* Блок списку */}
-      <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+      <div className="cpc-card p-4 md:p-6">
         {/* Поле пошуку */}
         <div className="relative mb-4">
           <Search
             size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+            className="absolute left-3 top-1/2 -translate-y-1/2 cpc-muted"
           />
           <input
             type="text"
             placeholder={t('searchClients') || 'Пошук по імені, адресі, номеру...'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/20 transition-colors"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm focus:outline-none transition-colors"
+            style={{
+              background: 'var(--cpc-bg)',
+              border: '1px solid var(--cpc-line)',
+              color: 'var(--cpc-text)',
+            }}
           />
         </div>
 

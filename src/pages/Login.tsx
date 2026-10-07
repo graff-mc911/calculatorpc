@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Card } from '../components/ui/Card'
-import { Button } from '../components/ui/Button'
-import { Logo } from '../components/Logo'
 import { supabase } from '../lib/supabase'
 
 export const Login: React.FC = () => {
@@ -72,16 +70,17 @@ export const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#1a1f24]">
-      <Card className="w-full max-w-md p-8">
-        {/* ---------------------------
-            ЛОГО + ЗАГОЛОВОК
-        --------------------------- */}
-        <div className="mb-8 flex flex-col items-center">
-          <Logo variant="full" size="lg" className="mb-6" />
-          <p className="text-sm text-white/60">
-            Увійти в акаунт
-          </p>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--cpc-bg)' }}>
+      <Card className="w-full max-w-[360px] p-5">
+        {/* Splash pattern from mockup 1a92 */}
+        <div className="mb-6 flex flex-col items-center text-center gap-3">
+          <img
+            src="/logo-cpc-full.jpg"
+            alt="CPC Construction Project Calculator"
+            className="w-full rounded-[14px] object-cover max-h-48"
+            draggable={false}
+          />
+          <p className="text-[12px] cpc-muted">Калькулятор → рахунок на об&apos;єкті</p>
         </div>
 
         {/* ---------------------------
@@ -142,18 +141,15 @@ export const Login: React.FC = () => {
           {/* ---------------------------
               КНОПКА
           --------------------------- */}
-          <Button type="submit" disabled={loading} className="w-full">
+          <button type="submit" disabled={loading} className="cpc-btn-primary w-full min-h-[44px]">
             {loading ? 'Завантаження...' : 'Увійти'}
-          </Button>
+          </button>
         </form>
 
-        {/* ---------------------------
-            ПЕРЕХІД НА SIGNUP
-        --------------------------- */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-white/60">
+          <p className="text-sm cpc-muted">
             Немає акаунта?{' '}
-            <Link to="/signup" className="text-orange-400 hover:text-orange-300">
+            <Link to="/signup" className="cpc-copper">
               Зареєструватися
             </Link>
           </p>
