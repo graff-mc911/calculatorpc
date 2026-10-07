@@ -8,7 +8,7 @@ import { useToastContext } from '../contexts/ToastContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { formatMoneyDisplay } from '../lib/moneyMask';
+import { formatCurrency } from '../lib/moneyMask';
 import { computeProjectMetrics } from '../lib/projectMetrics';
 import {
   createProject,
@@ -207,18 +207,9 @@ export default function Projects() {
       </div>
 
       {schemaMissing && (
-        <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm space-y-2">
-          <p>
-            {t('projectsSchemaMissing') ||
-              'Apply migration 20261006220000_create_project_estimator.sql in Supabase SQL Editor.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/projects/demo?demo=1')}
-            className="w-full min-h-[44px] rounded-xl bg-orange-500/25 text-orange-100 border border-orange-400/30 text-sm font-medium"
-          >
-            {t('projectOpenDemo') || 'Open UX demo'}
-          </button>
+        <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm">
+          {t('projectsSchemaMissing') ||
+            'Apply migration 20261006220000_create_project_estimator.sql in Supabase SQL Editor.'}
         </div>
       )}
 
@@ -273,13 +264,13 @@ export default function Projects() {
                 <div>
                   <p className="text-white/35">{t('projectEstimate') || 'Estimate'}</p>
                   <p className="text-white/90 font-medium tabular-nums">
-                    {formatMoneyDisplay(metrics.estimateTotal, project.currency)}
+                    {formatCurrency(metrics.estimateTotal, project.currency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-white/35">{t('projectBalanceDue') || 'Balance'}</p>
                   <p className="text-orange-300 font-medium tabular-nums">
-                    {formatMoneyDisplay(metrics.balanceDue, project.currency)}
+                    {formatCurrency(metrics.balanceDue, project.currency)}
                   </p>
                 </div>
                 <div>
@@ -289,7 +280,7 @@ export default function Projects() {
                       metrics.projectedProfit >= 0 ? 'text-green-300' : 'text-red-300'
                     }`}
                   >
-                    {formatMoneyDisplay(metrics.projectedProfit, project.currency)}
+                    {formatCurrency(metrics.projectedProfit, project.currency)}
                   </p>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ensurePdfUnicodeFont } from './pdfUnicodeFont';
 import { shareOrDownloadPdf } from './shareInvoice';
-import { formatMoneyDisplay, formatMoneyInput } from './moneyMask';
+import { formatCurrency, formatMoneyInput } from './moneyMask';
 import { computeProjectMetrics, lineTotal } from './projectMetrics';
 import type {
   Project,
@@ -10,6 +10,8 @@ import type {
   ProjectPrepayment,
   ProjectWorkItem,
 } from './projectsApi';
+
+export type ProjectPdfMode = 'client' | 'internal';
 
 type CompanyProfile = {
   company_name?: string | null;
@@ -23,8 +25,9 @@ type CompanyProfile = {
   logo_url?: string | null;
 };
 
-type PdfLabels = {
+export type PdfLabels = {
   estimateTitle: string;
+  internalTitle?: string;
   client: string;
   address: string;
   works: string;
@@ -35,6 +38,7 @@ type PdfLabels = {
   estimateTotal: string;
   received: string;
   balanceDue: string;
+  overpayment?: string;
   expenses: string;
   projectedProfit: string;
   margin: string;
@@ -42,11 +46,12 @@ type PdfLabels = {
   ungrouped: string;
   date: string;
   note: string;
+  category?: string;
   bank?: string;
 };
 
 function money(n: number, currency?: string): string {
-  if (currency) return formatMoneyDisplay(n, currency);
+  if (currency) return formatCurrency(n, currency);
   return formatMoneyInput(n, 2);
 }
 
@@ -61,13 +66,14 @@ function detectImageFormat(dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' | null {
   if (dataUrl.startsWith('data:image/png')) return 'PNG';
   if (dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg')) return 'JPEG';
   if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
-  // fallback guess from bytes
   if (dataUrl.includes('iVBORw0KGgo')) return 'PNG';
   if (dataUrl.includes('/9j/')) return 'JPEG';
   return 'PNG';
 }
 
-async function loadLogo(url?: string | null): Promise<{ data: string; format: 'PNG' | 'JPEG' | 'WEBP' } | null> {
+async function loadLogo(
+  url?: string | null
+): Promise<{ data: string; format: 'PNG' | 'JPEG' | 'WEBP' } | null> {
   if (!url) return null;
   try {
     const res = await fetch(url);
@@ -105,8 +111,19 @@ export async function generateProjectEstimatePdf(options: {
   prepayments: ProjectPrepayment[];
   company: CompanyProfile;
   labels: PdfLabels;
+  /** client = commercial (no expenses). internal = cost report with expenses. */
+  mode?: ProjectPdfMode;
 }): Promise<jsPDF> {
-  const { project, workItems, expenses, prepayments, company, labels } = options;
+  const {
+    project,
+    workItems,
+    expenses,
+    prepayments,
+    company,
+    labels,
+    mode = 'client',
+  } = options;
+  const isInternal = mode === 'internal';
   const metrics = computeProjectMetrics(
     workItems,
     expenses,
@@ -121,7 +138,6 @@ export async function generateProjectEstimatePdf(options: {
   const right = pageWidth - 16;
   let y = 14;
 
-  // Brand header band
   doc.setFillColor(30, 39, 46);
   doc.rect(0, 0, pageWidth, 36, 'F');
 
@@ -159,9 +175,13 @@ export async function generateProjectEstimatePdf(options: {
     cy += 3.5;
   }
 
+  const title = isInternal
+    ? labels.internalTitle || labels.estimateTitle
+    : labels.estimateTitle;
+
   doc.setFont(font, 'bold');
   doc.setFontSize(13);
-  doc.text(labels.estimateTitle, right, 14, { align: 'right' });
+  doc.text(title, right, 14, { align: 'right' });
   doc.setFont(font, 'normal');
   doc.setFontSize(9);
   doc.text(project.name, right, 20, { align: 'right' });
@@ -173,7 +193,6 @@ export async function generateProjectEstimatePdf(options: {
   y = 44;
   doc.setTextColor(30, 39, 46);
 
-  // Client block
   doc.setFillColor(245, 247, 249);
   doc.roundedRect(left, y, pageWidth - 32, 22, 2, 2, 'F');
   doc.setFont(font, 'bold');
@@ -210,7 +229,7 @@ export async function generateProjectEstimatePdf(options: {
         item.title,
         String(item.quantity).replace('.', ','),
         item.unit,
-        formatMoneyInput(Number(item.unit_price), 2),
+        formatMoneyInput(Number(item.unit_price) || 0, 2),
         formatMoneyInput(lineTotal(item.quantity, item.unit_price), 2),
       ]);
     }
@@ -232,7 +251,9 @@ export async function generateProjectEstimatePdf(options: {
     },
     margin: { left, right: 16 },
     didParseCell(data) {
-      if (data.section === 'body' && String(data.row.raw?.[0] || '').startsWith('▸')) {
+      const raw = data.row.raw;
+      const first = Array.isArray(raw) ? String(raw[0] ?? '') : '';
+      if (data.section === 'body' && first.startsWith('▸')) {
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.fillColor = [230, 236, 240];
       }
@@ -252,7 +273,7 @@ export async function generateProjectEstimatePdf(options: {
       body: prepayments.map((p) => [
         formatDate(p.paid_at),
         p.note || '—',
-        formatMoneyInput(Number(p.amount), 2),
+        formatMoneyInput(Number(p.amount) || 0, 2),
       ]),
       styles: { font, fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [30, 39, 46], textColor: 255, font },
@@ -266,15 +287,51 @@ export async function generateProjectEstimatePdf(options: {
     y = ((doc as any).lastAutoTable?.finalY || y) + 8;
   }
 
+  // Internal-only: expenses table (never on client commercial PDF)
+  if (isInternal && expenses.length > 0) {
+    doc.setFont(font, 'bold');
+    doc.setFontSize(11);
+    doc.text(labels.expenses, left, y);
+    y += 2;
+    autoTable(doc, {
+      startY: y,
+      head: [[labels.date, labels.works, labels.category || '', labels.total]],
+      body: expenses.map((e) => [
+        formatDate(e.expense_date),
+        e.title,
+        String(e.category || ''),
+        formatMoneyInput(Number(e.amount) || 0, 2),
+      ]),
+      styles: { font, fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [120, 40, 40], textColor: 255, font },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 78 },
+        2: { cellWidth: 32 },
+        3: { halign: 'right', cellWidth: 32 },
+      },
+      margin: { left, right: 16 },
+    });
+    y = ((doc as any).lastAutoTable?.finalY || y) + 8;
+  }
+
   const cur = project.currency || 'EUR';
   const summary: Array<[string, string]> = [
     [labels.estimateTotal, money(metrics.estimateTotal, cur)],
     [labels.received, money(metrics.received, cur)],
     [labels.balanceDue, money(metrics.balanceDue, cur)],
-    [labels.expenses, money(metrics.expenses, cur)],
-    [labels.projectedProfit, money(metrics.projectedProfit, cur)],
-    [labels.margin, `${formatMoneyInput(metrics.marginPct, 1)} %`],
   ];
+  if (metrics.overpayment > 0 && labels.overpayment) {
+    summary.push([labels.overpayment, money(metrics.overpayment, cur)]);
+  }
+  // Client PDF must NOT leak internal cost / profit
+  if (isInternal) {
+    summary.push(
+      [labels.expenses, money(metrics.expenses, cur)],
+      [labels.projectedProfit, money(metrics.projectedProfit, cur)],
+      [labels.margin, `${formatMoneyInput(metrics.marginPct, 1)} %`]
+    );
+  }
 
   autoTable(doc, {
     startY: y,
@@ -288,7 +345,6 @@ export async function generateProjectEstimatePdf(options: {
     margin: { left: pageWidth - 16 - 110 },
   });
 
-  // Bank footer
   const bankBits = [
     company.company_bank,
     company.company_iban ? `IBAN ${company.company_iban}` : '',
@@ -312,14 +368,21 @@ export async function shareProjectEstimatePdf(options: {
   prepayments: ProjectPrepayment[];
   company: CompanyProfile;
   labels: PdfLabels;
+  mode?: ProjectPdfMode;
 }): Promise<'shared' | 'downloaded'> {
-  const doc = await generateProjectEstimatePdf(options);
+  const mode = options.mode || 'client';
+  const doc = await generateProjectEstimatePdf({ ...options, mode });
   const blob = doc.output('blob');
-  const fileName = `estimate-${options.project.name.replace(/[^\w\-]+/g, '_').slice(0, 40)}.pdf`;
+  const prefix = mode === 'internal' ? 'cost' : 'estimate';
+  const fileName = `${prefix}-${options.project.name.replace(/[^\w\-]+/g, '_').slice(0, 40)}.pdf`;
+  const title =
+    mode === 'internal'
+      ? options.labels.internalTitle || options.labels.estimateTitle
+      : options.labels.estimateTitle;
   return shareOrDownloadPdf({
     blob,
     fileName,
-    title: options.labels.estimateTitle,
+    title,
     text: options.project.name,
   });
 }

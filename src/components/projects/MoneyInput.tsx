@@ -50,9 +50,11 @@ export function MoneyInput({
             if (Number.isFinite(n)) {
               onChange(formatMoneyInput(n, 2));
               onCommit?.(n);
+            } else if (value.trim() === '') {
+              onChange('');
             }
           }}
-          className={`w-full bg-white/[0.07] border border-white/15 rounded-xl text-white text-base tabular-nums py-3 pl-3 pr-10 focus:outline-none focus:border-orange-400/70 focus:bg-white/10 transition-all ${inputClassName}`}
+          className={`w-full min-h-[44px] bg-white/[0.07] border border-white/15 rounded-xl text-white text-base tabular-nums py-3 pl-3 pr-10 focus:outline-none focus:border-orange-400/70 focus:bg-white/10 transition-all ${inputClassName}`}
         />
         {currencyHint && (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">
@@ -72,7 +74,7 @@ type QtyProps = {
   ariaLabel?: string;
 };
 
-/** Inline qty with decimal support (`12,5`). */
+/** Inline qty with decimal support (`12,5`). min-h 44px touch target. */
 export function QtyInput({ value, onChange, onCommit, className = '', ariaLabel }: QtyProps) {
   return (
     <input
@@ -83,12 +85,12 @@ export function QtyInput({ value, onChange, onCommit, className = '', ariaLabel 
       onChange={(e) => onChange(maskQtyTyping(e.target.value))}
       onBlur={() => {
         const n = parseMoneyInput(value);
-        if (Number.isFinite(n)) {
+        if (Number.isFinite(n) && n >= 0) {
           onChange(formatQtyDisplay(n));
           onCommit?.(n);
         }
       }}
-      className={`w-14 min-w-0 bg-black/30 border border-white/15 rounded-lg text-white text-sm tabular-nums text-center py-2.5 px-1 focus:outline-none focus:border-orange-400/70 ${className}`}
+      className={`w-16 min-h-[44px] min-w-0 bg-black/30 border border-white/15 rounded-lg text-white text-sm tabular-nums text-center py-2.5 px-1 focus:outline-none focus:border-orange-400/70 ${className}`}
     />
   );
 }

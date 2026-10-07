@@ -55,6 +55,18 @@ export function formatMoneyDisplay(
 }
 
 /**
+ * Canonical money formatter for the project calculator (and shared UI).
+ * Always guards NaN → `0,00 €`.
+ */
+export function formatCurrency(
+  value: number | string | null | undefined,
+  currency = 'EUR'
+): string {
+  const n = typeof value === 'number' ? value : Number(value);
+  return formatMoneyDisplay(Number.isFinite(n) ? n : 0, currency);
+}
+
+/**
  * Mask while typing: keep digits + one comma/dot decimal; insert thousand spaces.
  * Example progressive: `1` → `15` → `150` → `1 500` → `1 500,5` → `1 500,50`
  */

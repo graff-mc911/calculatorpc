@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   Camera,
+  ChevronDown,
+  ChevronRight,
   FileText,
   Minus,
   Plus,
@@ -21,13 +23,13 @@ import { Select } from '../components/ui/Select';
 import { MoneyInput, QtyInput } from '../components/projects/MoneyInput';
 import { EXPENSE_CATEGORIES, categoryI18nKey } from '../lib/expenseCategories';
 import {
-  formatMoneyDisplay,
+  formatCurrency,
   formatMoneyInput,
   formatQtyDisplay,
   parseMoneyInput,
 } from '../lib/moneyMask';
 import { computeProjectMetrics, lineTotal } from '../lib/projectMetrics';
-import { shareProjectEstimatePdf } from '../lib/projectPdf';
+import { shareProjectEstimatePdf, type ProjectPdfMode } from '../lib/projectPdf';
 import {
   PROJECT_STATUSES,
   addExpense,
@@ -42,9 +44,6 @@ import {
   updateProject,
   updateWorkItem,
   uploadProjectReceipt,
-  type Project,
-  type ProjectExpense,
-  type ProjectPrepayment,
   type ProjectStatus,
   type ProjectWorkItem,
 } from '../lib/projectsApi';
@@ -58,103 +57,20 @@ import { translateUnit } from '../lib/languages';
 import { supabase } from '../lib/supabase';
 
 type Tab = 'works' | 'expenses' | 'prepayments';
-type Sheet = null | 'work' | 'expense' | 'prepayment';
+type Sheet = null | 'work' | 'expense' | 'prepayment' | 'pdf';
 
-const WORK_CATEGORIES: WorkCategory[] = [
-  'tiling',
-  'plaster',
-  'paint',
-  'drywall',
-  'masonry',
-  'concrete',
-  'flooring',
-  'plumbing',
-  'electrical',
-  'roofing',
-  'insulation',
-  'facade',
+/** Expandable template groups required by Ivan. */
+const TEMPLATE_GROUPS: WorkCategory[] = [
   'demolition',
-  'doors_windows',
-  'outdoor',
+  'drywall',
+  'plaster',
+  'tiling',
+  'paint',
+  'flooring',
   'other',
 ];
 
 const STAGE_PRESETS = ['Bathroom', 'Kitchen', 'Living', 'Hall', 'Facade', 'Roof'];
-
-const DEMO_BUNDLE = {
-  project: {
-    id: 'demo',
-    user_id: 'demo',
-    name: 'Wohnung Müller',
-    client_id: null,
-    client_name: 'Herr Müller',
-    address: 'Hauptstr. 12, 80331 München',
-    currency: 'EUR',
-    status: 'in_progress' as ProjectStatus,
-    expense_budget: 2500,
-    notes: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  workItems: [
-    {
-      id: 'w1',
-      project_id: 'demo',
-      user_id: 'demo',
-      title: 'Fliesen verlegen 60×60',
-      category: 'tiling',
-      catalog_work_id: null,
-      group_key: 'Bathroom',
-      quantity: 12.5,
-      unit: 'm2',
-      unit_price: 45,
-      sort_order: 0,
-      created_at: '',
-      updated_at: '',
-    },
-    {
-      id: 'w2',
-      project_id: 'demo',
-      user_id: 'demo',
-      title: 'Malerarbeiten Wände',
-      category: 'paint',
-      catalog_work_id: null,
-      group_key: 'Living',
-      quantity: 40,
-      unit: 'm2',
-      unit_price: 18,
-      sort_order: 1,
-      created_at: '',
-      updated_at: '',
-    },
-  ] as ProjectWorkItem[],
-  expenses: [
-    {
-      id: 'e1',
-      project_id: 'demo',
-      user_id: 'demo',
-      title: 'Fliesen Hornbach',
-      category: 'materials',
-      amount: 650,
-      expense_date: '2026-10-01',
-      receipt_url: null,
-      notes: null,
-      created_at: '',
-      updated_at: '',
-    },
-  ] as ProjectExpense[],
-  prepayments: [
-    {
-      id: 'p1',
-      project_id: 'demo',
-      user_id: 'demo',
-      amount: 1500,
-      paid_at: '2026-09-20',
-      note: 'Anzahlung',
-      created_at: '',
-    },
-  ] as ProjectPrepayment[],
-};
 
 function statusLabel(status: string, t: (k: string) => string): string {
   const key = `projectStatus_${status}`;
@@ -179,8 +95,6 @@ function statusChipClass(status: string): string {
 
 export default function ProjectDetail() {
   const { id = '' } = useParams();
-  const [searchParams] = useSearchParams();
-  const isDemo = searchParams.get('demo') === '1' || id === 'demo';
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -189,7 +103,6 @@ export default function ProjectDetail() {
 
   const [tab, setTab] = useState<Tab>('works');
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [demoBundle, setDemoBundle] = useState(DEMO_BUNDLE);
 
   const [workCategory, setWorkCategory] = useState<WorkCategory>('tiling');
   const [templateId, setTemplateId] = useState('');
@@ -198,6 +111,7 @@ export default function ProjectDetail() {
   const [workQty, setWorkQty] = useState('1');
   const [workUnit, setWorkUnit] = useState('m2');
   const [workPrice, setWorkPrice] = useState('');
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({ tiling: true });
 
   const [expTitle, setExpTitle] = useState('');
   const [expAmount, setExpAmount] = useState('');
@@ -214,15 +128,14 @@ export default function ProjectDetail() {
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
 
-  const { data: liveBundle, isLoading, error, isError } = useQuery({
+  const { data: bundle, isLoading, error, isError } = useQuery({
     queryKey: ['project-bundle', id],
-    enabled: !!id && !isDemo,
+    enabled: !!id,
     queryFn: () => fetchProjectBundle(id),
   });
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients-picker'],
-    enabled: !isDemo,
     queryFn: async () => {
       const { data: session } = await supabase.auth.getSession();
       const uid = session.session?.user?.id;
@@ -237,8 +150,7 @@ export default function ProjectDetail() {
     },
   });
 
-  const schemaMissing = !isDemo && isError && error instanceof ProjectsSchemaMissingError;
-  const bundle = isDemo ? demoBundle : liveBundle;
+  const schemaMissing = isError && error instanceof ProjectsSchemaMissingError;
 
   useEffect(() => {
     if (!bundle) return;
@@ -258,7 +170,10 @@ export default function ProjectDetail() {
     setQtyDrafts(qd);
     setPriceDrafts(pd);
     setGroupDrafts(gd);
-  }, [bundle?.project.updated_at, bundle?.workItems.map((w) => `${w.id}:${w.quantity}:${w.unit_price}:${w.group_key}`).join('|')]);
+  }, [
+    bundle?.project.updated_at,
+    bundle?.workItems.map((w) => `${w.id}:${w.quantity}:${w.unit_price}:${w.group_key}`).join('|'),
+  ]);
 
   const metrics = useMemo(() => {
     if (!bundle) return computeProjectMetrics([], [], [], 0);
@@ -281,16 +196,19 @@ export default function ProjectDetail() {
     return Array.from(map.entries());
   }, [bundle?.workItems]);
 
-  const templates = useMemo(
-    () => CATALOG_WORKS.filter((w) => w.category === workCategory),
-    [workCategory]
-  );
+  const templatesByCat = useMemo(() => {
+    const map: Record<string, typeof CATALOG_WORKS> = {};
+    for (const cat of TEMPLATE_GROUPS) {
+      map[cat] = CATALOG_WORKS.filter((w) => w.category === cat);
+    }
+    return map;
+  }, []);
+
   const priceCountry = getStoredPriceCountry();
   const currencySymbol =
     bundle?.project.currency === 'UAH' ? '₴' : bundle?.project.currency === 'USD' ? '$' : '€';
 
   const invalidate = () => {
-    if (isDemo) return;
     qc.invalidateQueries({ queryKey: ['project-bundle', id] });
     qc.invalidateQueries({ queryKey: ['projects'] });
     qc.invalidateQueries({ queryKey: ['projects-work-summary'] });
@@ -305,36 +223,12 @@ export default function ProjectDetail() {
     showError(t('saveFailed') || 'Save failed');
   };
 
-  const patchProjectLocal = (patch: Partial<Project>) => {
-    if (!isDemo) return;
-    setDemoBundle((b) => ({ ...b, project: { ...b.project, ...patch } }));
-  };
-
   const addWorkMut = useMutation({
     mutationFn: async () => {
       const qty = parseMoneyInput(workQty);
       const price = parseMoneyInput(workPrice);
-      if (!workTitle.trim() || !Number.isFinite(qty) || !Number.isFinite(price)) {
+      if (!workTitle.trim() || !Number.isFinite(qty) || qty < 0 || !Number.isFinite(price)) {
         throw new Error('INVALID');
-      }
-      if (isDemo) {
-        const item: ProjectWorkItem = {
-          id: `w-${Date.now()}`,
-          project_id: 'demo',
-          user_id: 'demo',
-          title: workTitle.trim(),
-          category: workCategory,
-          catalog_work_id: templateId || null,
-          group_key: workGroup,
-          quantity: qty,
-          unit: workUnit,
-          unit_price: price,
-          sort_order: demoBundle.workItems.length,
-          created_at: '',
-          updated_at: '',
-        };
-        setDemoBundle((b) => ({ ...b, workItems: [...b.workItems, item] }));
-        return item;
       }
       return addWorkItem({
         project_id: id,
@@ -364,23 +258,6 @@ export default function ProjectDetail() {
     mutationFn: async () => {
       const amount = parseMoneyInput(expAmount);
       if (!expTitle.trim() || !Number.isFinite(amount) || amount < 0) throw new Error('INVALID');
-      if (isDemo) {
-        const e: ProjectExpense = {
-          id: `e-${Date.now()}`,
-          project_id: 'demo',
-          user_id: 'demo',
-          title: expTitle.trim(),
-          category: expCategory,
-          amount,
-          expense_date: expDate,
-          receipt_url: null,
-          notes: null,
-          created_at: '',
-          updated_at: '',
-        };
-        setDemoBundle((b) => ({ ...b, expenses: [e, ...b.expenses] }));
-        return e;
-      }
       let receipt_url: string | null = null;
       if (expReceipt) {
         receipt_url = await uploadProjectReceipt(id, expReceipt, expReceipt.name);
@@ -409,19 +286,6 @@ export default function ProjectDetail() {
     mutationFn: async () => {
       const amount = parseMoneyInput(prepAmount);
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('INVALID');
-      if (isDemo) {
-        const p: ProjectPrepayment = {
-          id: `p-${Date.now()}`,
-          project_id: 'demo',
-          user_id: 'demo',
-          amount,
-          paid_at: prepDate,
-          note: prepNote || null,
-          created_at: '',
-        };
-        setDemoBundle((b) => ({ ...b, prepayments: [p, ...b.prepayments] }));
-        return p;
-      }
       return addPrepayment({
         project_id: id,
         amount,
@@ -440,11 +304,6 @@ export default function ProjectDetail() {
   });
 
   const saveStatus = async (status: ProjectStatus) => {
-    if (isDemo) {
-      patchProjectLocal({ status });
-      showSuccess(t('saved') || 'Saved');
-      return;
-    }
     try {
       await updateProject(id, { status });
       showSuccess(t('saved') || 'Saved');
@@ -456,17 +315,12 @@ export default function ProjectDetail() {
 
   const saveClient = async (clientId: string) => {
     const c = clients.find((x: { id: string }) => x.id === clientId);
-    const patch = {
-      client_id: clientId || null,
-      client_name: c?.name || null,
-      address: c?.address || bundle?.project.address || null,
-    };
-    if (isDemo) {
-      patchProjectLocal(patch);
-      return;
-    }
     try {
-      await updateProject(id, patch);
+      await updateProject(id, {
+        client_id: clientId || null,
+        client_name: c?.name || null,
+        address: c?.address || bundle?.project.address || null,
+      });
       invalidate();
     } catch (err) {
       onSchemaErr(err);
@@ -477,10 +331,6 @@ export default function ProjectDetail() {
     mutationFn: async () => {
       const n = parseMoneyInput(budgetDraft);
       if (!Number.isFinite(n) || n < 0) throw new Error('INVALID');
-      if (isDemo) {
-        patchProjectLocal({ expense_budget: n });
-        return null;
-      }
       return updateProject(id, { expense_budget: n });
     },
     onSuccess: () => {
@@ -491,34 +341,33 @@ export default function ProjectDetail() {
   });
 
   const pdfMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (mode: ProjectPdfMode) => {
       if (!bundle) throw new Error('NO_PROJECT');
       let company: Record<string, unknown> = {
         company_name: 'SCB Light Bau',
-        company_address: 'Musterweg 1, 80331 München',
-        company_phone: '+49 89 123456',
-        company_email: 'info@scblight.app',
-        company_iban: 'DE89 3704 0044 0532 0130 00',
+        company_address: '',
+        company_phone: '',
+        company_email: '',
       };
-      if (!isDemo) {
-        const { data } = await supabase
-          .from('company_profile')
-          .select('*')
-          .eq('user_id', bundle.project.user_id)
-          .maybeSingle();
-        if (data) {
-          const { toPdfCompany } = await import('../lib/companyProfile');
-          company = toPdfCompany(data);
-        }
+      const { data } = await supabase
+        .from('company_profile')
+        .select('*')
+        .eq('user_id', bundle.project.user_id)
+        .maybeSingle();
+      if (data) {
+        const { toPdfCompany } = await import('../lib/companyProfile');
+        company = toPdfCompany(data);
       }
       return shareProjectEstimatePdf({
-        project: bundle.project as Project,
+        project: bundle.project,
         workItems: bundle.workItems,
         expenses: bundle.expenses,
         prepayments: bundle.prepayments,
         company,
+        mode,
         labels: {
-          estimateTitle: t('projectPdfTitle') || 'Estimate / Invoice',
+          estimateTitle: t('projectPdfTitle') || 'Estimate',
+          internalTitle: t('projectPdfInternalTitle') || 'Internal cost report',
           client: t('clientName'),
           address: t('address'),
           works: t('projectWorks') || 'Works',
@@ -529,6 +378,7 @@ export default function ProjectDetail() {
           estimateTotal: t('projectEstimate') || 'Estimate',
           received: t('projectReceived') || 'Received',
           balanceDue: t('projectBalanceDue') || 'Balance due',
+          overpayment: t('projectOverpayment') || 'Overpayment',
           expenses: t('projectExpenses') || 'Expenses',
           projectedProfit: t('projectProfit') || 'Projected profit',
           margin: t('projectMargin') || 'Margin',
@@ -536,10 +386,12 @@ export default function ProjectDetail() {
           ungrouped: t('projectUngrouped') || 'General',
           date: t('date'),
           note: t('notes'),
+          category: t('category') || 'Category',
         },
       });
     },
     onSuccess: (result) => {
+      setSheet(null);
       showSuccess(
         result === 'shared'
           ? t('projectPdfShared') || 'Shared'
@@ -550,7 +402,7 @@ export default function ProjectDetail() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: () => (isDemo ? Promise.resolve() : deleteProject(id)),
+    mutationFn: () => deleteProject(id),
     onSuccess: () => {
       showSuccess(t('projectDeleted') || 'Deleted');
       navigate('/projects');
@@ -558,10 +410,12 @@ export default function ProjectDetail() {
     onError: onSchemaErr,
   });
 
-  const applyTemplate = (catalogId: string) => {
+  const applyTemplate = (catalogId: string, cat?: WorkCategory) => {
     setTemplateId(catalogId);
     const work = CATALOG_WORKS.find((w) => w.id === catalogId);
     if (!work) return;
+    if (cat) setWorkCategory(cat);
+    else setWorkCategory(work.category as WorkCategory);
     setWorkTitle(localizedWorkName(work, language));
     setWorkUnit(work.unit);
     const labor = work.labor[priceCountry];
@@ -569,15 +423,9 @@ export default function ProjectDetail() {
   };
 
   const bumpQty = async (itemId: string, quantity: number, delta: number) => {
-    const next = Math.max(0, Math.round((quantity + delta) * 1000) / 1000);
+    const base = Number.isFinite(quantity) ? quantity : 0;
+    const next = Math.max(0, Math.round((base + delta) * 1000) / 1000);
     setQtyDrafts((d) => ({ ...d, [itemId]: formatQtyDisplay(next) }));
-    if (isDemo) {
-      setDemoBundle((b) => ({
-        ...b,
-        workItems: b.workItems.map((w) => (w.id === itemId ? { ...w, quantity: next } : w)),
-      }));
-      return;
-    }
     try {
       await updateWorkItem(itemId, { quantity: next });
       invalidate();
@@ -589,13 +437,6 @@ export default function ProjectDetail() {
   const commitQty = async (itemId: string, raw: string) => {
     const n = parseMoneyInput(raw);
     if (!Number.isFinite(n) || n < 0) return;
-    if (isDemo) {
-      setDemoBundle((b) => ({
-        ...b,
-        workItems: b.workItems.map((w) => (w.id === itemId ? { ...w, quantity: n } : w)),
-      }));
-      return;
-    }
     try {
       await updateWorkItem(itemId, { quantity: n });
       invalidate();
@@ -607,13 +448,6 @@ export default function ProjectDetail() {
   const commitPrice = async (itemId: string, raw: string) => {
     const price = parseMoneyInput(raw);
     if (!Number.isFinite(price)) return;
-    if (isDemo) {
-      setDemoBundle((b) => ({
-        ...b,
-        workItems: b.workItems.map((w) => (w.id === itemId ? { ...w, unit_price: price } : w)),
-      }));
-      return;
-    }
     try {
       await updateWorkItem(itemId, { unit_price: price });
       invalidate();
@@ -623,13 +457,6 @@ export default function ProjectDetail() {
   };
 
   const commitGroup = async (itemId: string, group_key: string) => {
-    if (isDemo) {
-      setDemoBundle((b) => ({
-        ...b,
-        workItems: b.workItems.map((w) => (w.id === itemId ? { ...w, group_key } : w)),
-      }));
-      return;
-    }
     try {
       await updateWorkItem(itemId, { group_key });
       invalidate();
@@ -638,7 +465,7 @@ export default function ProjectDetail() {
     }
   };
 
-  if (!isDemo && isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen pt-20 px-4 text-white/50 text-sm max-w-[430px] mx-auto">
         {t('loading') || 'Loading…'}
@@ -646,7 +473,7 @@ export default function ProjectDetail() {
     );
   }
 
-  if (!isDemo && (schemaMissing || !bundle)) {
+  if (schemaMissing || !bundle) {
     return (
       <div className="min-h-screen pt-20 px-3 w-full max-w-[430px] mx-auto">
         <button
@@ -660,40 +487,22 @@ export default function ProjectDetail() {
           {t('projectsSchemaMissing') ||
             'Apply migration 20261006220000_create_project_estimator.sql in Supabase.'}
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/projects/demo?demo=1')}
-          className="mt-4 w-full min-h-[48px] rounded-xl bg-orange-500/25 text-orange-100 border border-orange-400/30"
-        >
-          {t('projectOpenDemo') || 'Open UX demo'}
-        </button>
       </div>
     );
   }
 
-  if (!bundle) return null;
-
   const { project, workItems, expenses, prepayments } = bundle;
   const currency = project.currency || 'EUR';
-  const progressPct = Math.min(150, Math.round(metrics.expenseProgress * 100));
+  const progressPct = Math.round(metrics.expenseProgressCapped * 100);
+  const rawProgressPct = Math.round(metrics.expenseProgress * 100);
 
   return (
-    <div
-      className={`min-h-screen pb-32 px-3 w-full max-w-[430px] mx-auto min-w-0 ${
-        isDemo ? 'pt-4 bg-[#1e272e]' : 'pt-[4.5rem]'
-      }`}
-    >
-      {isDemo && (
-        <div className="mb-3 rounded-xl bg-sky-500/15 border border-sky-400/25 px-3 py-2 text-sky-100 text-xs">
-          {t('projectDemoBanner') || 'UX demo — sample data, no Supabase writes'}
-        </div>
-      )}
-
+    <div className="min-h-screen pb-32 px-3 w-full max-w-[430px] mx-auto min-w-0 pt-[4.5rem]">
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-3">
         <button
           type="button"
-          onClick={() => navigate(isDemo ? '/projects' : '/projects')}
+          onClick={() => navigate('/projects')}
           className="w-11 h-11 shrink-0 rounded-2xl bg-white/[0.07] border border-white/10 flex items-center justify-center text-white/80"
           aria-label={t('back')}
         >
@@ -727,7 +536,7 @@ export default function ProjectDetail() {
             key={s}
             type="button"
             onClick={() => saveStatus(s)}
-            className={`min-h-[36px] px-3 rounded-full text-[11px] font-semibold border transition-all ${
+            className={`min-h-[44px] px-3 rounded-full text-[11px] font-semibold border transition-all ${
               project.status === s
                 ? statusChipClass(s)
                 : 'bg-transparent text-white/35 border-white/10'
@@ -738,8 +547,7 @@ export default function ProjectDetail() {
         ))}
       </div>
 
-      {/* Client picker */}
-      {!isDemo && clients.length > 0 && (
+      {clients.length > 0 && (
         <div className="mb-3">
           <Select
             label={t('clients') || 'Client'}
@@ -756,12 +564,16 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Metrics 2×3 */}
+      {/* Metrics dashboard */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         {[
           { label: t('projectEstimate') || 'Estimate', value: metrics.estimateTotal, color: 'text-white' },
           { label: t('projectReceived') || 'Received', value: metrics.received, color: 'text-green-300' },
-          { label: t('projectBalanceDue') || 'Balance due', value: metrics.balanceDue, color: 'text-orange-300' },
+          {
+            label: t('projectBalanceDue') || 'Balance due',
+            value: metrics.balanceDue,
+            color: 'text-orange-300',
+          },
           { label: t('projectExpenses') || 'Expenses', value: metrics.expenses, color: 'text-red-300' },
           {
             label: t('projectProfit') || 'Profit',
@@ -781,13 +593,28 @@ export default function ProjectDetail() {
           >
             <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">{m.label}</p>
             <p className={`text-[15px] font-semibold leading-tight tabular-nums ${m.color}`}>
-              {m.isPct ? `${metrics.marginPct.toFixed(1)}%` : formatMoneyDisplay(m.value, currency)}
+              {m.isPct ? `${Number.isFinite(metrics.marginPct) ? metrics.marginPct.toFixed(1) : '0.0'}%` : formatCurrency(m.value, currency)}
             </p>
           </div>
         ))}
       </div>
 
-      {/* Budget */}
+      {/* Overpayment — separate from balance due, never breaks UI */}
+      {metrics.overpayment > 0 && (
+        <div className="mb-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-3">
+          <p className="text-emerald-200/70 text-[10px] uppercase tracking-wider mb-1">
+            {t('projectOverpayment') || 'Overpayment'}
+          </p>
+          <p className="text-emerald-200 text-[15px] font-semibold tabular-nums">
+            {formatCurrency(metrics.overpayment, currency)}
+          </p>
+          <p className="text-emerald-200/50 text-[10px] mt-1">
+            {t('projectOverpaymentHint') || 'Prepayments exceed estimate'}
+          </p>
+        </div>
+      )}
+
+      {/* Budget progress — bar capped 100%, exceeded label when over */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-3 mb-3">
         <div className="flex items-end justify-between gap-2 mb-2">
           <p className="text-white/50 text-xs pb-2">{t('projectExpenseBudget') || 'Expense budget'}</p>
@@ -803,20 +630,24 @@ export default function ProjectDetail() {
         </div>
         <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
           <motion.div
-            className={`h-full ${progressPct > 100 ? 'bg-red-400' : 'bg-teal-400'}`}
+            className={`h-full ${metrics.budgetExceeded ? 'bg-red-400' : 'bg-teal-400'}`}
             initial={{ width: 0 }}
-            animate={{ width: `${Math.min(100, progressPct)}%` }}
+            animate={{ width: `${progressPct}%` }}
             transition={{ duration: 0.4 }}
           />
         </div>
-        <p className="text-white/35 text-[10px] mt-1.5 tabular-nums">
-          {formatMoneyDisplay(metrics.expenses, currency)} /{' '}
-          {formatMoneyDisplay(
-            metrics.expenseBudget > 0 ? metrics.expenseBudget : metrics.estimateTotal,
-            currency
-          )}{' '}
-          ({progressPct}%)
-        </p>
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <p className="text-white/35 text-[10px] tabular-nums">
+            {formatCurrency(metrics.expenses, currency)} /{' '}
+            {formatCurrency(metrics.budgetBase, currency)} ({progressPct}%)
+          </p>
+          {metrics.budgetExceeded && (
+            <p className="text-red-300 text-[10px] font-semibold shrink-0">
+              {t('projectBudgetExceeded') || 'Budget exceeded'}
+              {rawProgressPct > 100 ? ` · ${rawProgressPct}%` : ''}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -832,7 +663,7 @@ export default function ProjectDetail() {
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`flex-1 min-h-[40px] text-xs rounded-xl transition-all ${
+            className={`flex-1 min-h-[44px] text-xs rounded-xl transition-all ${
               tab === key ? 'bg-white/12 text-white font-semibold shadow' : 'text-white/45'
             }`}
           >
@@ -844,7 +675,7 @@ export default function ProjectDetail() {
       {tab === 'works' && (
         <div className="space-y-3">
           {workItems.length === 0 ? (
-            <p className="text-white/40 text-sm text-center py-10">
+            <p className="text-white/40 text-sm text-center py-6">
               {t('projectWorksEmpty') || 'Add works from templates'}
             </p>
           ) : (
@@ -853,7 +684,7 @@ export default function ProjectDetail() {
                 <p className="text-orange-300/80 text-[11px] font-semibold uppercase tracking-wider px-1">
                   {groupKey === '__none__' ? t('projectUngrouped') || 'General' : groupKey}
                 </p>
-                {items.map((item) => (
+                {items.map((item: ProjectWorkItem) => (
                   <div
                     key={item.id}
                     className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.03] px-3 py-3"
@@ -869,23 +700,15 @@ export default function ProjectDetail() {
                       <button
                         type="button"
                         onClick={async () => {
-                          if (isDemo) {
-                            setDemoBundle((b) => ({
-                              ...b,
-                              workItems: b.workItems.filter((w) => w.id !== item.id),
-                            }));
-                            return;
-                          }
                           await deleteWorkItem(item.id, id);
                           invalidate();
                         }}
-                        className="w-9 h-9 flex items-center justify-center text-white/30 hover:text-red-300"
+                        className="w-11 h-11 flex items-center justify-center text-white/30 hover:text-red-300"
                       >
                         <Trash2 size={14} />
                       </button>
                     </div>
 
-                    {/* Editable room/stage */}
                     <input
                       value={groupDrafts[item.id] ?? item.group_key ?? ''}
                       onChange={(e) =>
@@ -893,14 +716,15 @@ export default function ProjectDetail() {
                       }
                       onBlur={(e) => commitGroup(item.id, e.target.value.trim())}
                       placeholder={t('projectGroup') || 'Room / stage'}
-                      className="w-full mb-2 bg-black/25 border border-white/10 rounded-lg text-white/80 text-xs px-2.5 py-2 focus:outline-none focus:border-orange-400/50"
+                      className="w-full mb-2 min-h-[44px] bg-black/25 border border-white/10 rounded-lg text-white/80 text-xs px-2.5 py-2 focus:outline-none focus:border-orange-400/50"
                     />
 
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        className="w-10 h-10 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
+                        className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
                         onClick={() => bumpQty(item.id, Number(item.quantity), -1)}
+                        aria-label="−"
                       >
                         <Minus size={16} />
                       </button>
@@ -912,14 +736,17 @@ export default function ProjectDetail() {
                       />
                       <button
                         type="button"
-                        className="w-10 h-10 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
+                        className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
                         onClick={() => bumpQty(item.id, Number(item.quantity), 1)}
+                        aria-label="+"
                       >
                         <Plus size={16} />
                       </button>
                       <div className="flex-1 min-w-0">
                         <MoneyInput
-                          value={priceDrafts[item.id] ?? formatMoneyInput(Number(item.unit_price), 2)}
+                          value={
+                            priceDrafts[item.id] ?? formatMoneyInput(Number(item.unit_price), 2)
+                          }
                           onChange={(v) => setPriceDrafts((d) => ({ ...d, [item.id]: v }))}
                           onCommit={() => commitPrice(item.id, priceDrafts[item.id] ?? '')}
                           currencyHint={currencySymbol}
@@ -927,7 +754,7 @@ export default function ProjectDetail() {
                         />
                       </div>
                       <span className="text-white/85 text-xs font-semibold tabular-nums shrink-0 w-[76px] text-right">
-                        {formatMoneyDisplay(lineTotal(item.quantity, item.unit_price), currency)}
+                        {formatCurrency(lineTotal(item.quantity, item.unit_price), currency)}
                       </span>
                     </div>
                   </div>
@@ -957,22 +784,15 @@ export default function ProjectDetail() {
                   </p>
                 </div>
                 <p className="text-red-300 text-sm font-semibold tabular-nums">
-                  {formatMoneyDisplay(Number(e.amount), currency)}
+                  {formatCurrency(Number(e.amount), currency)}
                 </p>
                 <button
                   type="button"
                   onClick={async () => {
-                    if (isDemo) {
-                      setDemoBundle((b) => ({
-                        ...b,
-                        expenses: b.expenses.filter((x) => x.id !== e.id),
-                      }));
-                      return;
-                    }
                     await deleteExpense(e.id, id);
                     invalidate();
                   }}
-                  className="w-9 h-9 text-white/30 hover:text-red-300"
+                  className="w-11 h-11 text-white/30 hover:text-red-300 flex items-center justify-center"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -996,7 +816,7 @@ export default function ProjectDetail() {
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-green-300 text-sm font-semibold tabular-nums">
-                    {formatMoneyDisplay(Number(p.amount), currency)}
+                    {formatCurrency(Number(p.amount), currency)}
                   </p>
                   <p className="text-white/35 text-[10px]">
                     {p.paid_at}
@@ -1006,17 +826,10 @@ export default function ProjectDetail() {
                 <button
                   type="button"
                   onClick={async () => {
-                    if (isDemo) {
-                      setDemoBundle((b) => ({
-                        ...b,
-                        prepayments: b.prepayments.filter((x) => x.id !== p.id),
-                      }));
-                      return;
-                    }
                     await deletePrepayment(p.id, id);
                     invalidate();
                   }}
-                  className="w-9 h-9 text-white/30 hover:text-red-300"
+                  className="w-11 h-11 text-white/30 hover:text-red-300 flex items-center justify-center"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -1026,7 +839,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Sticky Quick Actions — always visible, large targets */}
+      {/* Sticky Quick Actions */}
       <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
         <div className="bg-gradient-to-t from-[#1e272e] via-[#1e272e] to-transparent pt-6 pb-[max(0.65rem,env(safe-area-inset-bottom))] px-2">
           <div className="max-w-[430px] mx-auto grid grid-cols-4 gap-1.5 pointer-events-auto">
@@ -1034,7 +847,7 @@ export default function ProjectDetail() {
               {
                 key: 'work',
                 icon: Wrench,
-                label: t('projectQaWork') || '+ Робота',
+                label: t('projectQaWork') || '+ Work',
                 color: 'text-orange-300',
                 onClick: () => {
                   setTab('works');
@@ -1044,7 +857,7 @@ export default function ProjectDetail() {
               {
                 key: 'expense',
                 icon: Wallet,
-                label: t('projectQaExpense') || '+ Витрата',
+                label: t('projectQaExpense') || '+ Expense',
                 color: 'text-red-300',
                 onClick: () => {
                   setTab('expenses');
@@ -1054,7 +867,7 @@ export default function ProjectDetail() {
               {
                 key: 'prepay',
                 icon: Plus,
-                label: t('projectQaPrepay') || '+ Аванс',
+                label: t('projectQaPrepay') || '+ Prepay',
                 color: 'text-green-300',
                 onClick: () => {
                   setTab('prepayments');
@@ -1066,14 +879,13 @@ export default function ProjectDetail() {
                 icon: FileText,
                 label: 'PDF',
                 color: 'text-cyan-300',
-                onClick: () => pdfMut.mutate(),
+                onClick: () => setSheet('pdf'),
               },
             ].map((a) => (
               <button
                 key={a.key}
                 type="button"
                 onClick={a.onClick}
-                disabled={a.key === 'pdf' && pdfMut.isPending}
                 className="flex flex-col items-center justify-center gap-1 min-h-[64px] rounded-2xl border border-white/15 bg-white/[0.12] backdrop-blur-xl px-1 active:scale-95 shadow-lg shadow-black/30"
               >
                 <a.icon size={20} className={a.color} />
@@ -1094,11 +906,13 @@ export default function ProjectDetail() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={() => setSheet(null)}
           >
             <motion.div
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 50, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-[430px] max-h-[88vh] overflow-y-auto rounded-2xl bg-[#24313a] border border-white/10 p-4 pb-6"
             >
               <div className="flex items-center justify-between mb-3">
@@ -1106,44 +920,98 @@ export default function ProjectDetail() {
                   {sheet === 'work' && (t('projectAddWork') || 'Add work')}
                   {sheet === 'expense' && (t('projectAddExpense') || 'Add expense')}
                   {sheet === 'prepayment' && (t('projectAddPrepayment') || 'Add prepayment')}
+                  {sheet === 'pdf' && (t('projectPdfShare') || 'Share PDF')}
                 </h2>
                 <button
                   type="button"
                   onClick={() => setSheet(null)}
-                  className="w-10 h-10 flex items-center justify-center text-white/50"
+                  className="w-11 h-11 flex items-center justify-center text-white/50"
                 >
                   <X size={18} />
                 </button>
               </div>
 
+              {sheet === 'pdf' && (
+                <div className="space-y-2">
+                  <p className="text-white/45 text-xs mb-2">
+                    {t('projectPdfShareHint') ||
+                      'Client estimate hides expenses. Internal report includes costs.'}
+                  </p>
+                  <Button
+                    className="w-full min-h-[48px] !bg-cyan-500/25 !text-cyan-100"
+                    disabled={pdfMut.isPending}
+                    onClick={() => pdfMut.mutate('client')}
+                  >
+                    {t('projectPdfClient') || 'Client estimate (commercial)'}
+                  </Button>
+                  <Button
+                    className="w-full min-h-[48px] !bg-white/10 !text-white/80"
+                    disabled={pdfMut.isPending}
+                    onClick={() => pdfMut.mutate('internal')}
+                  >
+                    {t('projectPdfInternal') || 'Internal cost report'}
+                  </Button>
+                </div>
+              )}
+
               {sheet === 'work' && (
                 <div className="space-y-3">
-                  <Select
-                    label={t('projectCategory') || 'Category'}
-                    value={workCategory}
-                    onChange={(e) => {
-                      setWorkCategory(e.target.value as WorkCategory);
-                      setTemplateId('');
-                    }}
-                  >
-                    {WORK_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {localizedCategoryName(c, language)}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select
-                    label={t('projectTemplate') || 'Template'}
-                    value={templateId}
-                    onChange={(e) => applyTemplate(e.target.value)}
-                  >
-                    <option value="">{t('projectCustomWork') || 'Custom / blank'}</option>
-                    {templates.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {localizedWorkName(w, language)}
-                      </option>
-                    ))}
-                  </Select>
+                  {/* Expandable work templates */}
+                  <div>
+                    <p className="text-xs text-white/55 mb-1.5 uppercase tracking-wide">
+                      {t('projectTemplates') || 'Templates'}
+                    </p>
+                    <div className="rounded-xl border border-white/10 overflow-hidden divide-y divide-white/10">
+                      {TEMPLATE_GROUPS.map((cat) => {
+                        const open = !!expandedCats[cat];
+                        const list = templatesByCat[cat] || [];
+                        return (
+                          <div key={cat}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedCats((s) => ({ ...s, [cat]: !s[cat] }))
+                              }
+                              className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 text-left bg-white/[0.04] hover:bg-white/[0.07]"
+                            >
+                              {open ? (
+                                <ChevronDown size={16} className="text-orange-300 shrink-0" />
+                              ) : (
+                                <ChevronRight size={16} className="text-white/40 shrink-0" />
+                              )}
+                              <span className="text-white text-sm font-medium flex-1">
+                                {localizedCategoryName(cat, language)}
+                              </span>
+                              <span className="text-white/35 text-[10px]">{list.length}</span>
+                            </button>
+                            {open && (
+                              <div className="max-h-40 overflow-y-auto bg-black/20">
+                                {list.length === 0 ? (
+                                  <p className="text-white/30 text-xs px-3 py-2">—</p>
+                                ) : (
+                                  list.map((w) => (
+                                    <button
+                                      key={w.id}
+                                      type="button"
+                                      onClick={() => applyTemplate(w.id, cat)}
+                                      className={`w-full min-h-[44px] text-left px-3 py-2 text-sm border-t border-white/5 ${
+                                        templateId === w.id
+                                          ? 'bg-orange-500/20 text-orange-100'
+                                          : 'text-white/75 hover:bg-white/5'
+                                      }`}
+                                    >
+                                      {localizedWorkName(w, language)}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <Input
                     label={t('description')}
                     value={workTitle}
@@ -1159,7 +1027,7 @@ export default function ProjectDetail() {
                           key={p}
                           type="button"
                           onClick={() => setWorkGroup(p)}
-                          className={`min-h-[32px] px-2.5 rounded-full text-[11px] border ${
+                          className={`min-h-[44px] px-3 rounded-full text-[11px] border ${
                             workGroup === p
                               ? 'bg-orange-500/25 text-orange-100 border-orange-400/40'
                               : 'bg-white/5 text-white/50 border-white/10'
@@ -1180,12 +1048,36 @@ export default function ProjectDetail() {
                       <p className="text-xs text-white/55 mb-1.5 uppercase tracking-wide">
                         {t('quantity')}
                       </p>
-                      <QtyInput
-                        value={workQty}
-                        onChange={setWorkQty}
-                        className="!w-full !py-3"
-                        ariaLabel={t('quantity')}
-                      />
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
+                          onClick={() => {
+                            const n = parseMoneyInput(workQty);
+                            const base = Number.isFinite(n) ? n : 0;
+                            setWorkQty(formatQtyDisplay(Math.max(0, base - 1)));
+                          }}
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <QtyInput
+                          value={workQty}
+                          onChange={setWorkQty}
+                          className="!w-full !flex-1"
+                          ariaLabel={t('quantity')}
+                        />
+                        <button
+                          type="button"
+                          className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
+                          onClick={() => {
+                            const n = parseMoneyInput(workQty);
+                            const base = Number.isFinite(n) ? n : 0;
+                            setWorkQty(formatQtyDisplay(base + 1));
+                          }}
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     </div>
                     <Input
                       label={t('unit')}
