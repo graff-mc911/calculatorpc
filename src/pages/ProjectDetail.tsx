@@ -974,7 +974,7 @@ export default function ProjectDetail() {
 
       {/* Sticky Quick Actions — above BottomNav */}
       <div
-        className="fixed inset-x-0 z-40 px-3 pointer-events-none lg:bottom-4"
+        className="fixed inset-x-0 z-40 px-3 pointer-events-none"
         style={{ bottom: 'calc(52px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="max-w-[430px] mx-auto pointer-events-auto">

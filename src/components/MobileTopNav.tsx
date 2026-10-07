@@ -55,7 +55,7 @@ export const MobileTopNav: React.FC = () => {
 
   return (
     <nav
-      className="no-print lg:hidden fixed top-0 left-0 right-0 z-50"
+      className="no-print fixed top-0 left-0 right-0 z-50"
       style={{
         background: 'var(--cpc-bg)',
         borderBottom: '1px solid var(--cpc-line)',
