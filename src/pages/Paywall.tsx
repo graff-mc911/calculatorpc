@@ -168,7 +168,7 @@ export const Paywall: React.FC = () => {
         <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-500/20 rounded-2xl mb-4">
           <Zap className="h-7 w-7 text-orange-400" />
         </div>
-        <h1 className="text-3xl font-bold text-white mb-3">SCB Light Pro</h1>
+        <h1 className="text-3xl font-bold text-white mb-3">CPC Pro</h1>
         <p className="text-white/60 text-base max-w-xl mx-auto">
           Отримайте доступ до всіх функцій. 30 днів безкоштовно — без прихованих платежів.
         </p>

@@ -78,7 +78,7 @@ export const Login: React.FC = () => {
             ЛОГО + ЗАГОЛОВОК
         --------------------------- */}
         <div className="mb-8 flex flex-col items-center">
-          <Logo variant="glass" size="lg" className="mb-6" />
+          <Logo variant="full" size="lg" className="mb-6" />
           <p className="text-sm text-white/60">
             Увійти в акаунт
           </p>

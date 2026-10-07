@@ -294,7 +294,11 @@ export const Home: React.FC = () => {
   return (
     <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-semibold text-white mb-1">{t('appName')}</h1>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-white mb-1 leading-snug break-words">
+          <span className="sm:hidden">CPC</span>
+          <span className="hidden sm:inline">{t('appName')}</span>
+        </h1>
+        <p className="text-white/50 text-sm sm:hidden">{t('appName')}</p>
         <p className="text-white/50 text-sm">{t('appSubtitle')}</p>
       </div>
 

@@ -95,7 +95,7 @@ export const PrivacyPolicy: React.FC = () => {
                 {t('contactText')}
               </p>
               <p className="text-slate-700 mt-3">
-                Email: <a href="mailto:support@scblight.com" className="text-primary-600 hover:text-primary-700">support@scblight.com</a>
+                Email: <a href="mailto:support@calculatorpc.com" className="text-primary-600 hover:text-primary-700">support@calculatorpc.com</a>
               </p>
             </section>
           </div>

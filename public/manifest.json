@@ -1,7 +1,7 @@
 {
-  "name": "SCB Light",
-  "short_name": "SCB Light",
-  "description": "Premium construction calculator and invoicing app for professionals",
+  "name": "Construction Project Calculator",
+  "short_name": "CPC",
+  "description": "Construction Project Calculator — field calculator and invoicing for professionals",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

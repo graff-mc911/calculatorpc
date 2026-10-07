@@ -131,7 +131,10 @@ export const Onboarding: React.FC = () => {
 
       <div className="text-center pb-6">
         <p className="text-sm text-white/40">
-          {t('appName')} - {t('appSubtitle')}
+          <span className="sm:hidden">CPC</span>
+          <span className="hidden sm:inline">{t('appName')}</span>
+          {' — '}
+          {t('appSubtitle')}
         </p>
       </div>
     </div>

@@ -23,17 +23,17 @@ export const PDFHeader: React.FC = () => {
   const pushToast = usePdfStore((s) => s.pushToast);
 
   const links = [
-    { label: 'Продукт', onClick: () => pushToast('info', 'SCB PDF — редактор документів') },
+    { label: 'Продукт', onClick: () => pushToast('info', 'CPC PDF — редактор документів') },
     { label: 'Плани', onClick: () => navigate('/paywall') },
     { label: 'Швидкі інструменти', onClick: () => setQuickToolsOpen(true) },
     { label: 'Для бізнесу', onClick: () => pushToast('info', 'Для бізнесу: командні інструменти') },
-    { label: 'Підтримка', onClick: () => pushToast('info', 'Підтримка: support@scblight.com') },
+    { label: 'Підтримка', onClick: () => pushToast('info', 'Підтримка: support@calculatorpc.com') },
   ];
 
   return (
     <header className="h-12 flex items-center gap-2 px-3 sm:px-4 border-b border-[#e5e7eb] bg-white shrink-0 z-30">
       <button type="button" onClick={() => navigate('/')} className="flex items-center gap-2 shrink-0" title="На головну">
-        <span className="text-[#e11d48] font-bold text-xl tracking-tight lowercase">scb</span>
+        <span className="text-[#e11d48] font-bold text-xl tracking-tight lowercase">cpc</span>
         <span className="text-[#64748b] text-xs font-medium hidden sm:inline">PDF</span>
       </button>
 

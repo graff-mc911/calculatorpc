@@ -161,7 +161,7 @@ export async function generateProjectEstimatePdf(options: {
   doc.setTextColor(255, 255, 255);
   doc.setFont(font, 'bold');
   doc.setFontSize(14);
-  doc.text(company.company_name || 'SCB Light', textX, 14);
+  doc.text(company.company_name || 'Construction Project Calculator', textX, 14);
   doc.setFont(font, 'normal');
   doc.setFontSize(8);
   const companyLines = [

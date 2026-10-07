@@ -287,7 +287,7 @@ export default function Settings() {
             <div className="w-8 h-8 bg-orange-500/20 rounded-xl flex items-center justify-center">
               <Zap className="h-4 w-4 text-orange-400" />
             </div>
-            <h2 className="text-lg font-medium text-white">SCB Light</h2>
+            <h2 className="text-lg font-medium text-white">Construction Project Calculator</h2>
           </div>
 
           {isActive ? (

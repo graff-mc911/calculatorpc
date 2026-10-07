@@ -1,4 +1,4 @@
-/** Універсальний формат документа SCB Light (.scbdoc.json) */
+/** Універсальний формат документа CPC (.scbdoc.json) */
 
 export type EditorMode = 'document' | 'presentation' | 'book';
 

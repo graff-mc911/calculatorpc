@@ -131,7 +131,8 @@ export const Landing: React.FC = () => {
             transition={{ delay: 0.1, duration: 0.6 }}
             className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight mb-6 tracking-tight"
           >
-            SCB Light
+            CPC
+            <span className="block text-white/90 text-2xl sm:text-3xl md:text-4xl font-semibold mt-2">Construction Project Calculator</span>
             <span className="block text-orange-400 mt-1">Ваш інструмент</span>
             <span className="block text-white/80 text-3xl sm:text-4xl md:text-5xl font-semibold mt-2">на кожному об'єкті</span>
           </motion.h1>
@@ -244,9 +245,9 @@ export const Landing: React.FC = () => {
               transition={{ duration: 0.6 }}
             >
               <p className="text-orange-400 text-sm font-medium uppercase tracking-widest mb-3">Переваги</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Чому обирають SCB Light</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Чому обирають CPC</h2>
               <p className="text-white/50 text-base mb-8 leading-relaxed">
-                SCB Light — це не просто калькулятор. Це ваш щоденний інструмент для роботи, який допомагає заробляти більше і працювати швидше.
+                Construction Project Calculator (CPC) — це не просто калькулятор. Це ваш щоденний інструмент для роботи, який допомагає заробляти більше і працювати швидше.
               </p>
               <div className="space-y-3">
                 {benefits.map((b, i) => (
@@ -348,7 +349,7 @@ export const Landing: React.FC = () => {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <Logo variant="glass" size="sm" />
           <p className="text-white/30 text-xs text-center">
-            SCB Light – Construction Calculator &amp; Invoice App
+            Construction Project Calculator (CPC)
           </p>
           <div className="flex items-center gap-4">
             <Link to="/privacy" className="text-white/30 hover:text-white/60 text-xs transition-colors">Конфіденційність</Link>

@@ -344,7 +344,7 @@ export default function ProjectDetail() {
     mutationFn: async (mode: ProjectPdfMode) => {
       if (!bundle) throw new Error('NO_PROJECT');
       let company: Record<string, unknown> = {
-        company_name: 'SCB Light Bau',
+        company_name: 'CPC Bau',
         company_address: '',
         company_phone: '',
         company_email: '',

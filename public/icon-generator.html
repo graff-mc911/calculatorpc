@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SCB Light - Premium Icon Generator</title>
+    <title>CPC - Premium Icon Generator</title>
     <style>
         * {
             margin: 0;
@@ -72,7 +72,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>SCB Light - Premium App Icons</h1>
+        <h1>CPC - Premium App Icons</h1>
         <div class="grid" id="iconGrid"></div>
     </div>
 
@@ -218,7 +218,7 @@
                     ctx.font = `bold ${size * 0.3}px "SF Pro Display", -apple-system, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText('SCB', centerX, centerY);
+                    ctx.fillText('CPC', centerX, centerY);
                 }
             },
             {
@@ -311,7 +311,7 @@
             downloadBtn.textContent = 'Download 1024x1024';
             downloadBtn.onclick = () => {
                 const link = document.createElement('a');
-                link.download = `scb-light-icon-${index + 1}-${icon.name.toLowerCase().replace(/\s+/g, '-')}.png`;
+                link.download = `cpc-icon-${index + 1}-${icon.name.toLowerCase().replace(/\s+/g, '-')}.png`;
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             };
