@@ -6,7 +6,6 @@ import { ToastProvider, useToastContext } from './contexts/ToastContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { OwnerRoute } from './components/OwnerRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { TopNav } from './components/TopNav';
 import { MobileTopNav } from './components/MobileTopNav';
 import { BottomNav } from './components/BottomNav';
 import { Loading } from './components/Loading';
@@ -116,14 +115,11 @@ function RootPage() {
 
   return (
     <>
-      <TopNav />
       <MobileTopNav />
-      <div className="pt-14 lg:pt-16 pb-28 lg:pb-8">
+      <div className="pt-14 pb-28">
         <Home />
       </div>
-      <div className="lg:hidden">
-        <BottomNav />
-      </div>
+      <BottomNav />
     </>
   );
 }
@@ -155,16 +151,13 @@ function AppContent() {
       {showAppChrome && (
         <ProtectedRoute>
           <>
-            <TopNav />
             <MobileTopNav />
-            <div className="lg:hidden">
-              <BottomNav />
-            </div>
+            <BottomNav />
           </>
         </ProtectedRoute>
       )}
 
-      <div className={showAppChrome ? 'pt-14 lg:pt-16 pb-28 lg:pb-8 print:pt-0 print:pb-0' : ''}>
+      <div className={showAppChrome ? 'pt-14 pb-28 print:pt-0 print:pb-0' : ''}>
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />

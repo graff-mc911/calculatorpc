@@ -178,21 +178,28 @@ export const Home: React.FC = () => {
     }
   };
 
-  const balanceLabel = t('totalBalance');
-  const unpaidLabel = t('unpaidInvoices');
-  const receivedLabel = t('totalRevenue');
-  const spentLabel = t('totalExpenses') === 'totalExpenses' ? 'Витрачено' : t('totalExpenses');
-  const profitLabel = t('netProfit');
-  const recentLabel = t('recentInvoices');
-  const allLabel = t('viewAll') === 'viewAll' ? (t('seeAll') === 'seeAll' ? 'Усі' : t('seeAll')) : t('viewAll');
+  // Overview card labels — short mockup wording (1a92), not long invoice list titles
+  const balanceLabel =
+    t('totalBalance') === 'totalBalance' ? 'Загальний баланс' : t('totalBalance');
+  const unpaidLabel = 'Неоплачено';
+  const receivedLabel = 'Отримано';
+  const spentLabel = 'Витрачено';
+  const profitLabel =
+    t('netProfit') === 'netProfit' ? 'Чистий прибуток' : t('netProfit');
+  const recentLabel =
+    t('recentInvoices') === 'recentInvoices' ? 'Останні рахунки' : t('recentInvoices');
+  const allLabel =
+    t('viewAll') === 'viewAll'
+      ? t('seeAll') === 'seeAll'
+        ? 'Усі'
+        : t('seeAll')
+      : t('viewAll');
 
   return (
     <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 flex flex-col gap-2">
       {/* Balance */}
       <div className="cpc-card">
-        <small className="cpc-card-label">
-          {balanceLabel === 'totalBalance' ? 'Загальний баланс' : balanceLabel}
-        </small>
+        <small className="cpc-card-label">{balanceLabel}</small>
         <b className="block text-[20px] font-medium cpc-copper tabular-nums">
           {formatAmount(money.profit)}
         </b>
@@ -205,9 +212,7 @@ export const Home: React.FC = () => {
           className="cpc-card text-left"
           onClick={() => navigate('/invoices?status=unpaid')}
         >
-          <small className="cpc-card-label">
-            {unpaidLabel === 'unpaidInvoices' ? 'Неоплачено' : unpaidLabel}
-          </small>
+          <small className="cpc-card-label">{unpaidLabel}</small>
           <b className="block font-medium cpc-copper tabular-nums">{formatAmountShort(unpaidTotal)}</b>
         </button>
         <button
@@ -215,9 +220,7 @@ export const Home: React.FC = () => {
           className="cpc-card text-left"
           onClick={() => navigate('/invoices?status=paid')}
         >
-          <small className="cpc-card-label">
-            {receivedLabel === 'totalRevenue' ? 'Отримано' : receivedLabel}
-          </small>
+          <small className="cpc-card-label">{receivedLabel}</small>
           <b className="block font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
             {formatAmountShort(money.received)}
           </b>
@@ -233,9 +236,7 @@ export const Home: React.FC = () => {
           </b>
         </button>
         <div className="cpc-card text-left">
-          <small className="cpc-card-label">
-            {profitLabel === 'netProfit' ? 'Чистий прибуток' : profitLabel}
-          </small>
+          <small className="cpc-card-label">{profitLabel}</small>
           <b className="block font-medium cpc-copper tabular-nums">
             {formatAmountShort(money.profit)}
           </b>
@@ -245,7 +246,7 @@ export const Home: React.FC = () => {
       {/* Recent invoices */}
       <div className="flex items-center justify-between px-0.5">
         <b className="font-medium text-[12px]" style={{ color: 'var(--cpc-text)' }}>
-          {recentLabel === 'recentInvoices' ? 'Останні рахунки' : recentLabel}
+          {recentLabel}
         </b>
         <button
           type="button"
@@ -291,16 +292,25 @@ export const Home: React.FC = () => {
         })
       )}
 
-      <div className="flex-1 min-h-2" />
-
-      <QuickActionsBar
-        handlers={{
-          onWork: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : setProjectOpen(true)),
-          onExpense: () => navigate('/scan'),
-          onAdvance: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : navigate('/projects')),
-          onPdf: () => navigate('/pdf-creator'),
-        }}
-      />
+      {/* Sticky Quick Actions — above BottomNav (mockup qb + nv) */}
+      <div
+        className="fixed inset-x-0 z-40 px-3 pointer-events-none"
+        style={{ bottom: 'calc(52px + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div className="max-w-[430px] mx-auto pointer-events-auto">
+          <QuickActionsBar
+            handlers={{
+              onWork: () =>
+                lastProject ? navigate(`/projects/${lastProject.id}`) : setProjectOpen(true),
+              onExpense: () => navigate('/scan'),
+              onAdvance: () =>
+                lastProject ? navigate(`/projects/${lastProject.id}`) : navigate('/projects'),
+              onPdf: () => navigate('/pdf-creator'),
+            }}
+          />
+        </div>
+      </div>
+      <div className="h-16" aria-hidden />
 
       <AnimatePresence>
         {projectOpen && (
