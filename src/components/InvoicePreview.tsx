@@ -3,6 +3,11 @@ import { X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { InvoiceDocument } from './invoice/Din5008InvoiceDocument';
 import { useLanguage } from '../contexts/LanguageContext';
 import { calculateLineTotal } from '../lib/invoiceTotals';
+import {
+  buildCompanyFromInvoice,
+  resolveCompanyLogoUrl,
+  resolveCompanySignatureUrl,
+} from '../lib/companyProfile';
 
 interface InvoicePreviewProps {
   invoice: any;
@@ -109,21 +114,12 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   }, [onClose]);
 
   const companyData = useMemo(
-    () => ({
-      company_name: invoice?.executor_name || companyProfile?.company_name || '',
-      company_address: invoice?.executor_address || companyProfile?.address || '',
-      company_phone: invoice?.executor_phone || companyProfile?.phone || '',
-      company_email: invoice?.executor_email || companyProfile?.email || '',
-      company_tax_number: invoice?.executor_tax_number || companyProfile?.tax_number || '',
-      company_bank: invoice?.executor_bank || companyProfile?.bank_name || '',
-      company_iban: invoice?.executor_iban || companyProfile?.iban || '',
-      company_bic: invoice?.executor_bic || companyProfile?.bic || '',
-    }),
+    () => buildCompanyFromInvoice(invoice, companyProfile),
     [invoice, companyProfile],
   );
 
   const companyLogoUrl = useMemo(
-    () => invoice?.executor_logo_url || companyProfile?.logo_url || '',
+    () => resolveCompanyLogoUrl(invoice, companyProfile),
     [invoice, companyProfile],
   );
 
@@ -165,7 +161,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
       service_period_start: invoice?.work_period_start || '',
       service_period_end: invoice?.work_period_end || '',
       invoice_language: language,
-      signature_data_url: invoice?.signature_data_url || '',
+      signature_data_url: resolveCompanySignatureUrl(invoice, companyProfile),
       signed_by: invoice?.signed_by || '',
       signed_at: invoice?.signed_at || '',
       company_name: companyData.company_name,
@@ -178,7 +174,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
       company_bic: companyData.company_bic,
       company_logo_url: companyLogoUrl,
     }),
-    [invoice, client, companyData, companyLogoUrl, language],
+    [invoice, client, companyProfile, companyData, companyLogoUrl, language],
   );
 
   const zoomIn = () => setZoom((z) => Math.min(z + 0.15, 2.5));

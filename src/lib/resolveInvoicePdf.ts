@@ -3,21 +3,13 @@ import { calculateLineTotal } from './invoiceTotals';
 import { generateInvoicePDFBlob } from './pdfGenerator';
 import { fetchPdfBlob } from './shareInvoice';
 import { invoicePdfFileName } from './languages';
+import {
+  buildCompanyFromInvoice,
+  resolveCompanyLogoUrl,
+  resolveCompanySignatureUrl,
+} from './companyProfile';
 
 type AnyInvoice = Record<string, any>;
-
-function buildCompanyFromInvoice(invoice: AnyInvoice, companyProfile?: AnyInvoice | null) {
-  return {
-    company_name: invoice.executor_name || companyProfile?.company_name || '',
-    company_address: invoice.executor_address || companyProfile?.address || '',
-    company_phone: invoice.executor_phone || companyProfile?.phone || '',
-    company_email: invoice.executor_email || companyProfile?.email || '',
-    company_tax_number: invoice.executor_tax_number || companyProfile?.tax_number || '',
-    company_bank: invoice.executor_bank || companyProfile?.bank_name || '',
-    company_iban: invoice.executor_iban || companyProfile?.iban || '',
-    company_bic: invoice.executor_bic || companyProfile?.bic || '',
-  };
-}
 
 async function generatePdfFromInvoice(
   invoice: AnyInvoice,
@@ -79,7 +71,7 @@ async function generatePdfFromInvoice(
     vat_enabled: !!invoice.vat_enabled || Number(invoice.tax_percent || 0) > 0,
     vat_rate: invoice.vat_rate || invoice.tax_percent || 0,
     notes: invoice.notes || '',
-    signature_data_url: invoice.signature_data_url || '',
+    signature_data_url: resolveCompanySignatureUrl(invoice, companyProfile),
     signed_by: invoice.signed_by || '',
     service_period_start: invoice.work_period_start,
     service_period_end: invoice.work_period_end,
@@ -88,7 +80,7 @@ async function generatePdfFromInvoice(
   };
 
   const companyData = buildCompanyFromInvoice(invoice, companyProfile);
-  const logoUrl = invoice.executor_logo_url || companyProfile?.logo_url || '';
+  const logoUrl = resolveCompanyLogoUrl(invoice, companyProfile);
 
   return generateInvoicePDFBlob(invoicePayload, companyData, logoUrl);
 }

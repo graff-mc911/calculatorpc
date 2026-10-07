@@ -506,7 +506,10 @@ export default function ProjectDetail() {
           .select('*')
           .eq('user_id', bundle.project.user_id)
           .maybeSingle();
-        company = data || company;
+        if (data) {
+          const { toPdfCompany } = await import('../lib/companyProfile');
+          company = toPdfCompany(data);
+        }
       }
       return shareProjectEstimatePdf({
         project: bundle.project as Project,

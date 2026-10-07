@@ -998,6 +998,7 @@ export const InvoiceForm: React.FC = () => {
             executor_iban: companyProfile?.iban || '',
             executor_bic: companyProfile?.bic || '',
             executor_tax_number: companyProfile?.tax_number || '',
+            signature_data_url: companyProfile?.signature_url || '',
           }}
           client={
             clients.find((c) => c.id === formData.client_id) ||

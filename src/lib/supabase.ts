@@ -137,6 +137,9 @@ export type Database = {
           user_id: string;
           company_name: string;
           logo_url: string;
+          logo_path: string;
+          signature_url: string;
+          signature_path: string;
           address: string;
           phone: string;
           email: string;
@@ -144,6 +147,7 @@ export type Database = {
           iban: string;
           bic: string;
           tax_number: string;
+          google_client_ids: string;
           created_at: string;
           updated_at: string;
         };
@@ -152,6 +156,9 @@ export type Database = {
           user_id: string;
           company_name?: string;
           logo_url?: string;
+          logo_path?: string;
+          signature_url?: string;
+          signature_path?: string;
           address?: string;
           phone?: string;
           email?: string;
@@ -159,6 +166,7 @@ export type Database = {
           iban?: string;
           bic?: string;
           tax_number?: string;
+          google_client_ids?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -167,6 +175,9 @@ export type Database = {
           user_id?: string;
           company_name?: string;
           logo_url?: string;
+          logo_path?: string;
+          signature_url?: string;
+          signature_path?: string;
           address?: string;
           phone?: string;
           email?: string;
@@ -174,6 +185,7 @@ export type Database = {
           iban?: string;
           bic?: string;
           tax_number?: string;
+          google_client_ids?: string;
           created_at?: string;
           updated_at?: string;
         };

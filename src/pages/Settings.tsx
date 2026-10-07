@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Moon, Sun, Globe, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield, MessageCircle, MessagesSquare } from 'lucide-react';
+import { Moon, Sun, LogOut, ArrowLeft, Trash2, AlertTriangle, Zap, Check, Crown, Shield, MessageCircle, MessagesSquare } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabase } from '../lib/supabase';
-import { languages } from '../lib/languages';
-import { motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkIsAppOwner } from '../lib/ownerAccess';
 import {
@@ -14,6 +12,7 @@ import {
   type CommunityCountryCode,
 } from '../lib/chatApi';
 import { useToastContext } from '../contexts/ToastContext';
+import { CompanyProfileForm } from '../components/CompanyProfileForm';
 
 const MONTHLY_LINK = 'https://buy.stripe.com/test_bJe14o2ip6Oe99f0N49oc00';
 const YEARLY_LINK = 'https://buy.stripe.com/test_eVq5kEbSZ0pQ5X3dzQ9oc01';
@@ -31,7 +30,7 @@ const FEATURES = [
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { t, language, setLanguage } = useLanguage();
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useToastContext();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -154,8 +153,6 @@ export default function Settings() {
     navigate('/login');
   };
 
-  const currentLanguage = languages.find(lang => lang.code === language) || languages[0];
-
   return (
     <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-4xl mx-auto">
       <button
@@ -171,20 +168,17 @@ export default function Settings() {
       </h1>
 
       <div className="space-y-4">
+        <div>
+          <h2 className="text-lg font-medium text-white mb-3">
+            {t('companyProfile') || 'Профіль компанії / ФОП'}
+          </h2>
+          <CompanyProfileForm />
+        </div>
+
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
           <h2 className="text-lg font-medium text-white mb-4">
             {t('account') || 'Акаунт'}
           </h2>
-          <button
-            type="button"
-            onClick={() => navigate('/account')}
-            className="flex items-center justify-between w-full py-3 px-2 rounded-lg hover:bg-white/5 transition-colors"
-          >
-            <span className="text-white">
-              {t('companyProfile') || t('account') || 'Профіль компанії'}
-            </span>
-            <span className="text-white/40">›</span>
-          </button>
           <button
             type="button"
             onClick={() => navigate('/contact')}
