@@ -164,8 +164,10 @@ function AppContent() {
 
             <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
             <Route path="/invoices/new" element={<ProtectedRoute><InvoiceForm /></ProtectedRoute>} />
+            <Route path="/invoices/:id/edit" element={<ProtectedRoute><InvoiceForm /></ProtectedRoute>} />
             <Route path="/invoices/:id" element={<ProtectedRoute><InvoiceForm /></ProtectedRoute>} />
             <Route path="/invoices/:id/view" element={<ProtectedRoute><InvoiceView /></ProtectedRoute>} />
+            <Route path="/invoices/:id/preview" element={<ProtectedRoute><InvoiceView /></ProtectedRoute>} />
 
             <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
             <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
