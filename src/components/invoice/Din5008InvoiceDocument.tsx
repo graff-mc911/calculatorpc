@@ -209,6 +209,12 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                   <td style={metaLabelStyle}>{tInvoice('date')}:</td>
                   <td style={metaValueStyle}>{formatDeDate(data.date)}</td>
                 </tr>
+                {data.due_date ? (
+                  <tr>
+                    <td style={metaLabelStyle}>{tInvoice('dueDate')}:</td>
+                    <td style={metaValueStyle}>{formatDeDate(data.due_date)}</td>
+                  </tr>
+                ) : null}
                 <tr>
                   <td style={{ ...metaLabelStyle, verticalAlign: 'top' }}>
                     {tInvoice('performancePeriod')}:

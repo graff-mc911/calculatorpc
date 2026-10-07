@@ -1,18 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Eye, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, FileText, UserPlus } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
-import { InvoicePreview } from '../components/InvoicePreview';
 import { supabase } from '../lib/supabase';
-import { currencies, statuses, unitSelectOptions } from '../lib/languages';
+import { currencies, unitSelectOptions } from '../lib/languages';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { evalFieldExpression } from '../lib/calculator';
 import { calculateLineTotal } from '../lib/invoiceTotals';
+import { listProjects, ProjectsSchemaMissingError, type Project } from '../lib/projectsApi';
 
 interface InvoiceItem {
   quantity: number;
@@ -26,85 +26,91 @@ interface InvoiceItem {
   total: number;
 }
 
+const emptyItem = (): InvoiceItem => ({
+  quantity: 0,
+  quantityDisplay: '',
+  unit: 'm²',
+  price: 0,
+  priceDisplay: '',
+  material: '',
+  materialDisplay: '',
+  description: '',
+  total: 0,
+});
+
+function defaultDueDate(issueDate: string): string {
+  const d = new Date(issueDate || new Date().toISOString().split('T')[0]);
+  if (Number.isNaN(d.getTime())) {
+    return new Date().toISOString().split('T')[0];
+  }
+  d.setDate(d.getDate() + 14);
+  return d.toISOString().split('T')[0];
+}
+
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message || '').toLowerCase();
+  return (
+    error.code === 'PGRST204' ||
+    msg.includes('project_id') ||
+    msg.includes('due_date') ||
+    (msg.includes('column') && msg.includes('does not exist'))
+  );
+}
+
 export const InvoiceForm: React.FC = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { showSuccess, showError } = useToastContext();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [showClientSuggestions, setShowClientSuggestions] = useState(false);
-  const clientFieldRef = useRef<HTMLDivElement>(null);
+  const [showQuickClient, setShowQuickClient] = useState(false);
+  const [quickClientName, setQuickClientName] = useState('');
+  const [quickClientEmail, setQuickClientEmail] = useState('');
+  const [quickClientPhone, setQuickClientPhone] = useState('');
+  const [creatingClient, setCreatingClient] = useState(false);
 
-  // --------------------------------------------------
-  // Клієнти та профіль компанії
-  // --------------------------------------------------
   const [clients, setClients] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsAvailable, setProjectsAvailable] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
 
-  // --------------------------------------------------
-  // Основні дані інвойсу
-  // --------------------------------------------------
+  const today = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState({
     client_id: '',
     client_name: '',
     document_number: '',
-    date: new Date().toISOString().split('T')[0],
-    work_period_start: new Date().toISOString().split('T')[0],
-    work_period_end: new Date().toISOString().split('T')[0],
+    date: today,
+    due_date: defaultDueDate(today),
+    work_period_start: today,
+    work_period_end: today,
     currency: 'EUR',
     status: 'draft',
     vat_enabled: false,
     vat_rate: 20,
     document_type: 'invoice',
+    project_id: '',
     project_area: '',
     object_address: '',
     notes: '',
   });
 
-  // --------------------------------------------------
-  // Позиції інвойсу
-  // --------------------------------------------------
-  const [items, setItems] = useState<InvoiceItem[]>([
-    {
-      quantity: 0,
-      quantityDisplay: '',
-      unit: 'm²',
-      price: 0,
-      priceDisplay: '',
-      material: '',
-      materialDisplay: '',
-      description: '',
-      total: 0,
-    },
-  ]);
+  const [items, setItems] = useState<InvoiceItem[]>([emptyItem()]);
 
   useEffect(() => {
     void init();
   }, [id]);
 
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      if (!clientFieldRef.current?.contains(event.target as Node)) {
-        setShowClientSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  }, []);
-
-  // --------------------------------------------------
-  // Початкове завантаження
-  // --------------------------------------------------
   const init = async () => {
     try {
       setLoading(true);
       const loadedClients = await fetchClients();
       await fetchCompanyProfile();
+      await fetchProjects();
 
       if (id) {
         await fetchInvoice(loadedClients);
@@ -122,15 +128,17 @@ export const InvoiceForm: React.FC = () => {
             }));
           }
         }
+
+        const preselectedProjectId = searchParams.get('project_id');
+        if (preselectedProjectId) {
+          setFormData((prev) => ({ ...prev, project_id: preselectedProjectId }));
+        }
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // --------------------------------------------------
-  // Завантаження клієнтів
-  // --------------------------------------------------
   const fetchClients = async () => {
     const {
       data: { user },
@@ -152,9 +160,23 @@ export const InvoiceForm: React.FC = () => {
     return [];
   };
 
-  // --------------------------------------------------
-  // Завантаження профілю компанії
-  // --------------------------------------------------
+  const fetchProjects = async () => {
+    try {
+      const rows = await listProjects();
+      setProjects(rows);
+      setProjectsAvailable(true);
+    } catch (error) {
+      if (error instanceof ProjectsSchemaMissingError) {
+        setProjects([]);
+        setProjectsAvailable(false);
+        return;
+      }
+      console.warn('Projects load failed', error);
+      setProjects([]);
+      setProjectsAvailable(false);
+    }
+  };
+
   const fetchCompanyProfile = async () => {
     const {
       data: { user },
@@ -173,9 +195,6 @@ export const InvoiceForm: React.FC = () => {
     }
   };
 
-  // --------------------------------------------------
-  // Генерація номера документа
-  // --------------------------------------------------
   const generateDocumentNumber = async () => {
     const {
       data: { user },
@@ -209,9 +228,6 @@ export const InvoiceForm: React.FC = () => {
     }));
   };
 
-  // --------------------------------------------------
-  // Завантаження існуючого інвойсу
-  // --------------------------------------------------
   const fetchInvoice = async (loadedClients: any[] = []) => {
     const { data: invoiceData, error } = await supabase
       .from('invoices')
@@ -226,25 +242,28 @@ export const InvoiceForm: React.FC = () => {
 
     const linkedClient =
       loadedClients.find((c) => c.id === invoiceData.client_id) || null;
+    const issueDate = invoiceData.date || today;
 
     setFormData({
       client_id: invoiceData.client_id || '',
       client_name: linkedClient?.name || invoiceData.client_name || '',
       document_number: invoiceData.document_no || '',
-      date: invoiceData.date || new Date().toISOString().split('T')[0],
+      date: issueDate,
+      due_date: invoiceData.due_date || defaultDueDate(issueDate),
       work_period_start:
         invoiceData.work_period_start ||
         invoiceData.date ||
-        new Date().toISOString().split('T')[0],
+        today,
       work_period_end:
         invoiceData.work_period_end ||
         invoiceData.date ||
-        new Date().toISOString().split('T')[0],
+        today,
       currency: invoiceData.currency || 'EUR',
       status: invoiceData.status || 'draft',
       vat_enabled: (invoiceData.tax_percent || 0) > 0,
       vat_rate: invoiceData.tax_percent || 20,
       document_type: invoiceData.document_type || 'invoice',
+      project_id: invoiceData.project_id || '',
       project_area: invoiceData.total_project_area?.toString() || '',
       object_address: invoiceData.object_address || '',
       notes: invoiceData.notes || '',
@@ -278,37 +297,59 @@ export const InvoiceForm: React.FC = () => {
     }
   };
 
-  const filteredClients = useMemo(() => {
-    const query = formData.client_name.trim().toLowerCase();
-    if (!query) return clients;
-    return clients.filter((c) => String(c.name || '').toLowerCase().includes(query));
-  }, [clients, formData.client_name]);
+  const handleQuickCreateClient = async () => {
+    const name = quickClientName.trim();
+    if (!name) {
+      showError(t('clientNameRequired') || 'Client name is required');
+      return;
+    }
 
-  const handleClientInputChange = (value: string) => {
-    const exactMatch = clients.find(
-      (c) => String(c.name || '').toLowerCase() === value.trim().toLowerCase()
-    );
+    try {
+      setCreatingClient(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        showError(t('notAuthenticated') || 'Not authenticated');
+        return;
+      }
 
-    setFormData((prev) => ({
-      ...prev,
-      client_name: value,
-      client_id: exactMatch?.id || '',
-    }));
-    setShowClientSuggestions(true);
+      const { data, error } = await supabase
+        .from('clients')
+        .insert([
+          {
+            user_id: user.id,
+            name,
+            email: quickClientEmail.trim() || null,
+            phone: quickClientPhone.trim() || null,
+          },
+        ])
+        .select('*')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) throw new Error('Failed to create client');
+
+      setClients((prev) => [...prev, data].sort((a, b) => String(a.name).localeCompare(String(b.name))));
+      setFormData((prev) => ({
+        ...prev,
+        client_id: data.id,
+        client_name: data.name || name,
+      }));
+      setShowQuickClient(false);
+      setQuickClientName('');
+      setQuickClientEmail('');
+      setQuickClientPhone('');
+      showSuccess(t('clientCreated') || 'Client created');
+      await queryClient.invalidateQueries({ queryKey: ['clients'] });
+    } catch (error: any) {
+      console.error('Quick create client error:', error);
+      showError(error?.message || t('errorSavingClient') || 'Could not create client');
+    } finally {
+      setCreatingClient(false);
+    }
   };
 
-  const handleSelectClient = (client: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      client_id: client.id,
-      client_name: client.name || '',
-    }));
-    setShowClientSuggestions(false);
-  };
-
-  // --------------------------------------------------
-  // Зміна полів позиції + inline math (qty / price / material)
-  // --------------------------------------------------
   const recomputeItem = (item: InvoiceItem): InvoiceItem => ({
     ...item,
     total: calculateLineTotal(item.quantity, item.price, item.material),
@@ -428,24 +469,8 @@ export const InvoiceForm: React.FC = () => {
     applyExpressionField(index, 'materialDisplay', 'material', items[index].materialDisplay, true);
   };
 
-  // --------------------------------------------------
-  // Додати / видалити позицію
-  // --------------------------------------------------
   const addItem = () => {
-    setItems((prev) => [
-      ...prev,
-      {
-        quantity: 0,
-        quantityDisplay: '',
-        unit: 'm²',
-        price: 0,
-        priceDisplay: '',
-        material: '',
-        materialDisplay: '',
-        description: '',
-        total: 0,
-      },
-    ]);
+    setItems((prev) => [...prev, emptyItem()]);
   };
 
   const removeItem = (index: number) => {
@@ -455,9 +480,6 @@ export const InvoiceForm: React.FC = () => {
     });
   };
 
-  // --------------------------------------------------
-  // Підсумки
-  // --------------------------------------------------
   const netTotal = useMemo(() => items.reduce((sum, item) => sum + item.total, 0), [items]);
 
   const vatAmount = useMemo(
@@ -469,133 +491,191 @@ export const InvoiceForm: React.FC = () => {
 
   const formatCurrency = (amount: number) => amount.toFixed(2);
 
-  // --------------------------------------------------
-  // Збереження інвойсу
-  // --------------------------------------------------
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const bankDetailsText = useMemo(() => {
+    if (!companyProfile) return '';
+    const parts = [
+      companyProfile.bank_name && `${t('bank') || 'Bank:'} ${companyProfile.bank_name}`,
+      companyProfile.iban && `IBAN: ${companyProfile.iban}`,
+      companyProfile.bic && `${t('bicSwift') || 'BIC/SWIFT:'} ${companyProfile.bic}`,
+    ].filter(Boolean);
+    return parts.join('\n');
+  }, [companyProfile, t]);
+
+  const validateForPdf = (): string | null => {
+    if (!formData.client_id && !formData.client_name.trim()) {
+      return t('clientRequired') || 'Select or create a client';
+    }
+    if (!formData.document_number.trim()) {
+      return t('documentNumberRequired') || 'Invoice number is required';
+    }
+    if (!formData.date) {
+      return t('issueDateRequired') || 'Issue date is required';
+    }
+    const hasLine = items.some(
+      (item) => item.description.trim() || item.quantity > 0 || item.price > 0
+    );
+    if (!hasLine) {
+      return t('lineItemsRequired') || 'Add at least one line item';
+    }
+    return null;
+  };
+
+  const persistInvoice = async (status: string): Promise<string> => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error(t('notAuthenticated') || 'Not authenticated');
+    }
+
+    const selectedClient = clients.find((c) => c.id === formData.client_id);
+    const clientName =
+      formData.client_name.trim() || selectedClient?.name || '';
+
+    const selectedProject = projects.find((p) => p.id === formData.project_id);
+    const totalProjectArea = formData.project_area ? parseFloat(formData.project_area) : 0;
+    const totalAreaNet = items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalAreaGross = totalAreaNet;
+
+    const invoicePayload: Record<string, unknown> = {
+      user_id: user.id,
+      client_id: formData.client_id || null,
+      client_name: clientName,
+      client_number: selectedClient?.client_number || null,
+      document_no: formData.document_number,
+      date: formData.date,
+      due_date: formData.due_date || null,
+      work_period_start: formData.work_period_start,
+      work_period_end: formData.work_period_end,
+      currency: formData.currency,
+      status,
+      document_type: formData.document_type,
+      project_id: formData.project_id || null,
+      object_address:
+        formData.object_address ||
+        selectedProject?.address ||
+        null,
+      notes: formData.notes || null,
+
+      total_net: netTotal,
+      tax_percent: formData.vat_enabled ? formData.vat_rate : 0,
+      tax_amount: vatAmount,
+      total_gross: grossTotal,
+      total_project_area: totalProjectArea || null,
+      total_area_net: totalAreaNet || null,
+      total_area_gross: totalAreaGross || null,
+
+      executor_name: companyProfile?.company_name || null,
+      executor_logo_url: companyProfile?.logo_url || null,
+      executor_address: companyProfile?.address || null,
+      executor_phone: companyProfile?.phone || null,
+      executor_email: companyProfile?.email || null,
+      executor_bank: companyProfile?.bank_name || null,
+      executor_iban: companyProfile?.iban || null,
+      executor_bic: companyProfile?.bic || null,
+      executor_tax_number: companyProfile?.tax_number || null,
+      // Seed company signature/stamp only on create (do not overwrite later signs)
+      ...(!id && companyProfile?.signature_url
+        ? { signature_data_url: companyProfile.signature_url }
+        : {}),
+    };
+
+    const stripOptionalColumns = (payload: Record<string, unknown>) => {
+      const next = { ...payload };
+      delete next.project_id;
+      return next;
+    };
+
+    let invoiceId = id;
+    let workingPayload = invoicePayload;
+
+    const runUpdate = async (payload: Record<string, unknown>) =>
+      supabase.from('invoices').update(payload).eq('id', id);
+
+    const runInsert = async (payload: Record<string, unknown>) =>
+      supabase.from('invoices').insert([payload]).select().maybeSingle();
+
+    if (id) {
+      let { error } = await runUpdate(workingPayload);
+      if (error && isMissingColumnError(error)) {
+        workingPayload = stripOptionalColumns(workingPayload);
+        ({ error } = await runUpdate(workingPayload));
+      }
+      if (error) throw error;
+    } else {
+      let { data, error } = await runInsert(workingPayload);
+      if (error && isMissingColumnError(error)) {
+        workingPayload = stripOptionalColumns(workingPayload);
+        ({ data, error } = await runInsert(workingPayload));
+      }
+      if (error) throw error;
+      invoiceId = data?.id;
+    }
+
+    if (!invoiceId) {
+      throw new Error('Failed to get invoice ID');
+    }
+
+    await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId);
+
+    if (items.length > 0) {
+      const itemsPayload = items.map((item, index) => ({
+        invoice_id: invoiceId,
+        quantity: item.quantity,
+        unit: item.unit,
+        price: item.price,
+        material: item.material,
+        description: item.description || '',
+        total: calculateLineTotal(item.quantity, item.price, item.material),
+        sort_order: index,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(itemsPayload);
+
+      if (itemsError) throw itemsError;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    return invoiceId;
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setSaving(true);
+      const invoiceId = await persistInvoice('draft');
+      setFormData((prev) => ({ ...prev, status: 'draft' }));
+      showSuccess(t('draftSaved') || 'Draft saved');
+      if (!id) {
+        navigate(`/invoices/${invoiceId}/edit`, { replace: true });
+      }
+    } catch (error: any) {
+      console.error('Error saving draft:', error);
+      showError(error?.message || t('errorSavingInvoice') || 'Error saving invoice');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAndGeneratePdf = async () => {
+    const validationError = validateForPdf();
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
 
     try {
       setSaving(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        showError(t('notAuthenticated') || 'Not authenticated');
-        return;
-      }
-
-      const selectedClient = clients.find((c) => c.id === formData.client_id);
-      const clientName =
-        formData.client_name.trim() || selectedClient?.name || '';
-
-      const totalProjectArea = formData.project_area ? parseFloat(formData.project_area) : 0;
-      const totalAreaNet = items.reduce((sum, item) => sum + item.quantity, 0);
-      const totalAreaGross = totalAreaNet;
-
-      // --------------------------------------------------
-      // Тут додаємо ВСІ потрібні дані компанії
-      // щоб вони залишилися в ЗБЕРЕЖЕНОМУ інвойсі
-      // --------------------------------------------------
-      const invoicePayload = {
-        user_id: user.id,
-        client_id: formData.client_id || null,
-        client_name: clientName,
-        client_number: selectedClient?.client_number || null,
-        document_no: formData.document_number,
-        date: formData.date,
-        work_period_start: formData.work_period_start,
-        work_period_end: formData.work_period_end,
-        currency: formData.currency,
-        status: formData.status,
-        document_type: formData.document_type,
-        object_address: formData.object_address || null,
-        notes: formData.notes || null,
-
-        total_net: netTotal,
-        tax_percent: formData.vat_enabled ? formData.vat_rate : 0,
-        tax_amount: vatAmount,
-        total_gross: grossTotal,
-        total_project_area: totalProjectArea || null,
-        total_area_net: totalAreaNet || null,
-        total_area_gross: totalAreaGross || null,
-
-        // --------------------------------------------------
-        // Дані виконавця / компанії
-        // --------------------------------------------------
-        executor_name: companyProfile?.company_name || null,
-        executor_logo_url: companyProfile?.logo_url || null,
-        executor_address: companyProfile?.address || null,
-        executor_phone: companyProfile?.phone || null,
-        executor_email: companyProfile?.email || null,
-        executor_bank: companyProfile?.bank_name || null,
-        executor_iban: companyProfile?.iban || null,
-        executor_bic: companyProfile?.bic || null,
-        executor_tax_number: companyProfile?.tax_number || null,
-      };
-
-      let invoiceId = id;
-
-      if (id) {
-        const { error } = await supabase
-          .from('invoices')
-          .update(invoicePayload)
-          .eq('id', id);
-
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('invoices')
-          .insert([invoicePayload])
-          .select()
-          .maybeSingle();
-
-        if (error) throw error;
-        invoiceId = data?.id;
-      }
-
-      if (!invoiceId) {
-        throw new Error('Failed to get invoice ID');
-      }
-
-      // --------------------------------------------------
-      // Видаляємо старі позиції
-      // --------------------------------------------------
-      await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId);
-
-      // --------------------------------------------------
-      // Додаємо нові позиції
-      // --------------------------------------------------
-      if (items.length > 0) {
-        const itemsPayload = items.map((item, index) => ({
-          invoice_id: invoiceId,
-          quantity: item.quantity,
-          unit: item.unit,
-          price: item.price,
-          material: item.material,
-          description: item.description || '',
-          total: calculateLineTotal(item.quantity, item.price, item.material),
-          sort_order: index,
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('invoice_items')
-          .insert(itemsPayload);
-
-        if (itemsError) throw itemsError;
-      }
-
-      await queryClient.invalidateQueries({ queryKey: ['invoices'] });
-
+      const nextStatus = formData.status === 'draft' ? 'draft' : formData.status || 'draft';
+      const invoiceId = await persistInvoice(nextStatus);
       showSuccess(
         id
           ? (t('invoiceUpdated') || 'Invoice updated')
           : (t('invoiceCreated') || 'Invoice created')
       );
-
-      navigate(`/invoices/${invoiceId}/view`);
+      navigate(`/invoices/${invoiceId}/preview`);
     } catch (error: any) {
       console.error('Error saving invoice:', error);
       showError(error?.message || t('errorSavingInvoice') || 'Error saving invoice');
@@ -604,9 +684,6 @@ export const InvoiceForm: React.FC = () => {
     }
   };
 
-  // --------------------------------------------------
-  // Лоадер
-  // --------------------------------------------------
   if (loading) {
     return (
       <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-5xl mx-auto">
@@ -641,70 +718,110 @@ export const InvoiceForm: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* --------------------------------------------------
-            Основні дані документа
-        -------------------------------------------------- */}
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div ref={clientFieldRef} className="relative">
-              <Input
-                label={t('client')}
-                value={formData.client_name}
-                onChange={(e) => handleClientInputChange(e.target.value)}
-                onFocus={() => setShowClientSuggestions(true)}
-                placeholder={t('clientOrContactPlaceholder') || t('chooseClient')}
-                autoComplete="off"
+      <div className="space-y-4">
+        {/* 1) Client */}
+        <section className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+          <h3 className="text-white font-medium text-lg mb-4">{t('client')}</h3>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+            <div className="flex-1">
+              <Select
+                label={t('chooseClient')}
+                value={formData.client_id}
+                onChange={(e) => {
+                  const client = clients.find((c) => c.id === e.target.value);
+                  setFormData((prev) => ({
+                    ...prev,
+                    client_id: e.target.value,
+                    client_name: client?.name || '',
+                  }));
+                }}
+                options={[
+                  { value: '', label: t('chooseClient') },
+                  ...clients.map((c) => ({
+                    value: c.id,
+                    label: c.client_number ? `${c.name} (${c.client_number})` : c.name,
+                  })),
+                ]}
               />
-              {showClientSuggestions && filteredClients.length > 0 && (
-                <div className="absolute z-30 mt-1 w-full max-h-56 overflow-auto rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-xl">
-                  {filteredClients.map((client) => (
-                    <button
-                      key={client.id}
-                      type="button"
-                      onClick={() => handleSelectClient(client)}
-                      className="w-full px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
-                    >
-                      <span className="font-medium">{client.name}</span>
-                      {client.client_number ? (
-                        <span className="ml-2 text-white/40">{client.client_number}</span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="mt-1.5 text-xs text-white/40">
-                {t('clientOrContactHint') ||
-                  'Type a name or pick from Contacts'}
-              </p>
             </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setQuickClientName('');
+                setShowQuickClient(true);
+              }}
+              className="shrink-0 border border-white/10 text-orange-400 hover:bg-white/10"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              {t('quickCreateClient') || 'New client'}
+            </Button>
+          </div>
+        </section>
 
+        {/* 2) General */}
+        <section className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+          <h3 className="text-white font-medium text-lg mb-4">
+            {t('invoiceGeneral') || 'General'}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label={t('documentNumber')}
+              label={t('documentNumber') || t('invoiceNumber') || 'Invoice number'}
               value={formData.document_number}
               onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
             />
 
             <Input
-              label={t('date')}
+              label={t('issueDate') || t('date') || 'Issue date'}
               type="date"
               value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              onChange={(e) => {
+                const date = e.target.value;
+                setFormData((prev) => ({
+                  ...prev,
+                  date,
+                  due_date:
+                    !prev.due_date || prev.due_date === defaultDueDate(prev.date)
+                      ? defaultDueDate(date)
+                      : prev.due_date,
+                  work_period_start: prev.work_period_start || date,
+                  work_period_end: prev.work_period_end || date,
+                }));
+              }}
             />
 
             <Input
-              label={t('workPeriodStart')}
+              label={t('dueDate') || 'Due date'}
               type="date"
-              value={formData.work_period_start}
-              onChange={(e) => setFormData({ ...formData, work_period_start: e.target.value })}
+              value={formData.due_date}
+              onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
             />
 
-            <Input
-              label={t('workPeriodEnd')}
-              type="date"
-              value={formData.work_period_end}
-              onChange={(e) => setFormData({ ...formData, work_period_end: e.target.value })}
-            />
+            {projectsAvailable ? (
+              <Select
+                label={t('selectProject') || t('projects') || 'Project'}
+                value={formData.project_id}
+                onChange={(e) => {
+                  const project = projects.find((p) => p.id === e.target.value);
+                  setFormData((prev) => ({
+                    ...prev,
+                    project_id: e.target.value,
+                    object_address:
+                      prev.object_address || project?.address || prev.object_address,
+                    client_id:
+                      prev.client_id || project?.client_id || prev.client_id,
+                    client_name:
+                      prev.client_name ||
+                      project?.client_name ||
+                      prev.client_name,
+                  }));
+                }}
+                options={[
+                  { value: '', label: t('noProject') || 'No project' },
+                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
+            ) : null}
 
             <Select
               label={t('currency')}
@@ -726,45 +843,50 @@ export const InvoiceForm: React.FC = () => {
               value={formData.document_type}
               onChange={(e) => setFormData({ ...formData, document_type: e.target.value })}
             />
-
-            <Select
-              label={t('status')}
-              options={statuses.map((s) => ({ value: s.value, label: t(s.value) }))}
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-            />
           </div>
-        </div>
+        </section>
 
-        {/* --------------------------------------------------
-            Позиції
-        -------------------------------------------------- */}
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-medium text-white text-lg">{t('positions')}</h2>
+        {/* 3) Line items */}
+        <section className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <div>
+              <h3 className="font-medium text-white text-lg">{t('positions')}</h3>
+              <p className="text-white/40 text-xs mt-1">{t('calcOnSiteHint')}</p>
+            </div>
 
             <Button type="button" size="sm" onClick={addItem}>
               <Plus className="h-4 w-4" />
-              <span className="ml-1">{t('addPosition')}</span>
+              <span className="ml-1">{t('addLine') || t('addPosition')}</span>
             </Button>
           </div>
-          <p className="text-white/40 text-xs -mt-2 mb-4">{t('calcOnSiteHint')}</p>
 
-          <div className="space-y-4">
+          <div className="hidden md:grid md:grid-cols-[minmax(0,2fr)_5rem_6rem_7rem_7rem_2.5rem] gap-2 px-1 mb-2 text-xs text-white/50">
+            <span>{t('lineTitle') || t('description') || 'Title'}</span>
+            <span>{t('qty')}</span>
+            <span>{t('unitShort')}</span>
+            <span>{t('unitPrice') || t('priceLabel')}</span>
+            <span>{t('lineTotal') || t('sumLabel')}</span>
+            <span />
+          </div>
+
+          <div className="space-y-3">
             {items.map((item, index) => (
-              <div key={index} className="bg-white/5 border border-white/10 rounded-xl p-4">
-                <div className="mb-3">
-                  <Input
-                    label={t('description')}
-                    value={item.description}
-                    onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div key={index} className="bg-white/5 border border-white/10 rounded-xl p-3 md:p-4">
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_5rem_6rem_7rem_7rem_2.5rem] gap-2 items-end">
                   <div>
-                    <label className="block mb-1.5 text-sm font-medium text-white/70">
-                      {t('quantity')}
+                    <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
+                      {t('lineTitle') || t('description')}
+                    </label>
+                    <Input
+                      value={item.description}
+                      onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                      placeholder={t('lineTitle') || t('description')}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
+                      {t('qty')}
                     </label>
                     <Input
                       type="text"
@@ -776,8 +898,8 @@ export const InvoiceForm: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-1.5 text-sm font-medium text-white/70">
-                      {t('unit')}
+                    <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
+                      {t('unitShort')}
                     </label>
                     <Select
                       options={unitSelectOptions(t)}
@@ -787,8 +909,8 @@ export const InvoiceForm: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-1.5 text-sm font-medium text-white/70">
-                      {t('price')}
+                    <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
+                      {t('unitPrice') || t('price')}
                     </label>
                     <Input
                       type="text"
@@ -801,51 +923,51 @@ export const InvoiceForm: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-1.5 text-sm font-medium text-white/70">
-                      {t('material')}
+                    <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
+                      {t('lineTotal') || t('totalAmount')}
                     </label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={item.materialDisplay}
-                      onChange={(e) => handleMaterialChange(index, e.target.value)}
-                      onBlur={() => handleMaterialBlur(index)}
-                      placeholder={t('calculatorPlaceholder') || '0.00'}
-                    />
+                    <Input value={item.total ? formatCurrency(item.total) : ''} disabled />
                   </div>
 
-                  <div className="md:col-span-2 flex gap-2">
-                    <div className="flex-1">
-                      <label className="block mb-1.5 text-sm font-medium text-white/70">
-                        {t('totalAmount')}
-                      </label>
-                      <Input value={item.total ? formatCurrency(item.total) : ''} disabled />
-                    </div>
-
-                    {items.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeItem(index)}
-                        className="mt-auto text-red-400 hover:text-red-300"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      onClick={() => removeItem(index)}
+                      disabled={items.length <= 1}
+                      className="disabled:opacity-30"
+                      title={t('delete') || 'Delete'}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
+                </div>
+
+                <div className="mt-2 max-w-xs">
+                  <Input
+                    label={t('material')}
+                    type="text"
+                    inputMode="decimal"
+                    value={item.materialDisplay}
+                    onChange={(e) => handleMaterialChange(index, e.target.value)}
+                    onBlur={() => handleMaterialBlur(index)}
+                    placeholder={t('calculatorPlaceholder') || '0.00'}
+                  />
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* --------------------------------------------------
-            ПДВ і підсумки
-        -------------------------------------------------- */}
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+        {/* 4) Summary */}
+        <section className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
+          <h3 className="text-white font-medium text-lg mb-4">
+            {t('invoiceSummary') || 'Summary'}
+          </h3>
+
           <div className="space-y-4">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -893,122 +1015,110 @@ export const InvoiceForm: React.FC = () => {
               )}
 
               <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                <span className="font-semibold text-white text-lg">{t('grossAmount')}</span>
+                <span className="font-semibold text-white text-lg">
+                  {t('grandTotal') || t('grossAmount')}
+                </span>
                 <span className="text-2xl font-bold text-orange-400">
                   {formatCurrency(grossTotal)} {formData.currency}
                 </span>
               </div>
             </div>
+
+            {bankDetailsText ? (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-white/50 text-xs mb-1">{t('bankDetails')}</p>
+                <pre className="text-white/80 text-sm whitespace-pre-wrap font-sans">
+                  {bankDetailsText}
+                </pre>
+              </div>
+            ) : null}
+
+            <Textarea
+              label={t('notes') || t('bankDetails')}
+              placeholder={t('notesOrBankDetails') || t('additionalNotes')}
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              rows={4}
+            />
           </div>
-        </div>
+        </section>
 
-        {/* --------------------------------------------------
-            Додаткові поля
-        -------------------------------------------------- */}
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg">
-          <Input
-            label={t('projectArea')}
-            value={formData.project_area}
-            onChange={(e) => setFormData({ ...formData, project_area: e.target.value })}
-            className="mb-4"
-          />
-
-          <Input
-            label={t('objectAddress') || "BVH (адреса об'єкта)"}
-            placeholder="Robert-Bosch-Straße 7a, 63303 Dreieich"
-            value={formData.object_address}
-            onChange={(e) => setFormData({ ...formData, object_address: e.target.value })}
-            className="mb-4"
-          />
-
-          <Textarea
-            label={t('notes')}
-            placeholder={t('additionalNotes')}
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            rows={4}
-          />
-        </div>
-
-        {/* --------------------------------------------------
-            Кнопки
-        -------------------------------------------------- */}
-        <div className="flex gap-2">
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             type="button"
             onClick={() => navigate('/invoices')}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-gray-300 hover:text-white transition-all active:scale-95"
+            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-gray-300 hover:text-white transition-all active:scale-95 sm:w-auto"
             title={t('back')}
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
 
-          <button
+          <Button
             type="button"
-            onClick={() => setIsPreviewOpen(true)}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-blue-400 transition-all active:scale-95"
-            title={t('preview')}
-          >
-            <Eye className="h-4 w-4" />
-          </button>
-
-          <button
-            type="submit"
+            onClick={() => void handleSaveDraft()}
             disabled={saving}
-            className="p-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white transition-all active:scale-95 disabled:opacity-60"
-            title={t('save')}
+            className="flex-1 bg-white/10 border border-white/10 text-white hover:bg-white/20"
           >
-            <Save className="h-4 w-4" />
-          </button>
+            <Save className="h-4 w-4 mr-2" />
+            {t('saveDraft') || 'Save draft'}
+          </Button>
+
+          <Button
+            type="button"
+            onClick={() => void handleSaveAndGeneratePdf()}
+            disabled={saving}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            {t('saveAndGeneratePdf') || 'Save and generate PDF'}
+          </Button>
         </div>
-      </form>
+      </div>
 
-      {/* --------------------------------------------------
-          Preview
-      -------------------------------------------------- */}
-      {isPreviewOpen && (
-        <InvoicePreview
-          invoice={{
-            document_number: formData.document_number,
-            date: formData.date,
-            work_period_start: formData.work_period_start,
-            work_period_end: formData.work_period_end,
-            client_name: formData.client_name,
-            client_number: clients.find((c) => c.id === formData.client_id)?.client_number || '',
-            currency: formData.currency,
-            items,
-            vat_enabled: formData.vat_enabled,
-            vat_rate: formData.vat_rate,
-            net_total: netTotal,
-            gross_total: grossTotal,
-            vat_amount: vatAmount,
-            object_address: formData.object_address,
-            notes: formData.notes,
-            invoice_language: language,
-
-            // --------------------------------------------------
-            // Передаємо також збережені дані компанії
-            // --------------------------------------------------
-            executor_name: companyProfile?.company_name || '',
-            executor_logo_url: companyProfile?.logo_url || '',
-            executor_address: companyProfile?.address || '',
-            executor_phone: companyProfile?.phone || '',
-            executor_email: companyProfile?.email || '',
-            executor_bank: companyProfile?.bank_name || '',
-            executor_iban: companyProfile?.iban || '',
-            executor_bic: companyProfile?.bic || '',
-            executor_tax_number: companyProfile?.tax_number || '',
-            signature_data_url: companyProfile?.signature_url || '',
-          }}
-          client={
-            clients.find((c) => c.id === formData.client_id) ||
-            (formData.client_name
-              ? { name: formData.client_name }
-              : undefined)
-          }
-          companyProfile={companyProfile}
-          onClose={() => setIsPreviewOpen(false)}
-        />
+      {showQuickClient && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-white/10 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-xl font-semibold text-white">
+              {t('quickCreateClient') || 'New client'}
+            </h3>
+            <Input
+              label={t('name') || 'Name'}
+              value={quickClientName}
+              onChange={(e) => setQuickClientName(e.target.value)}
+              autoFocus
+            />
+            <Input
+              label={t('email') || 'Email'}
+              type="email"
+              value={quickClientEmail}
+              onChange={(e) => setQuickClientEmail(e.target.value)}
+            />
+            <Input
+              label={t('phone') || 'Phone'}
+              value={quickClientPhone}
+              onChange={(e) => setQuickClientPhone(e.target.value)}
+            />
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="flex-1 border border-white/10"
+                onClick={() => setShowQuickClient(false)}
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                disabled={creatingClient || !quickClientName.trim()}
+                onClick={() => void handleQuickCreateClient()}
+              >
+                {creatingClient ? (t('saving') || 'Saving…') : (t('save') || 'Save')}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -274,3 +274,49 @@ button {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Invoice print: hide app chrome / action bars; keep A4 blank only */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .no-print,
+  nav.no-print,
+  .invoice-action-bar,
+  .invoice-preview-chrome {
+    display: none !important;
+  }
+
+  .invoice-print-root {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  .invoice-print-root .bg-neutral-900\/40,
+  .invoice-print-root .rounded-2xl {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .invoice-print-root .relative.mx-auto {
+    width: 210mm !important;
+    max-width: none !important;
+    height: auto !important;
+  }
+
+  #invoice-document,
+  .invoice-print-root .bg-white.shadow-lg {
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    transform: none !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+  }
+}

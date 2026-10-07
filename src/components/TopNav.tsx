@@ -40,7 +40,7 @@ export const TopNav: React.FC = () => {
   const currentLanguage = languages.find((lang) => lang.code === language) || languages[0];
 
   return (
-    <nav className="hidden lg:block fixed top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-xl border-b border-white/10">
+    <nav className="no-print hidden lg:block fixed top-0 left-0 right-0 z-50 bg-white/10 backdrop-blur-xl border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-3">
           <Logo variant="glass" size="md" />

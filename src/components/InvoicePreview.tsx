@@ -127,6 +127,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
     () => ({
       document_number: invoice?.document_number || invoice?.document_no || '',
       date: invoice?.date || '',
+      due_date: invoice?.due_date || '',
       work_period_start: invoice?.work_period_start || '',
       work_period_end: invoice?.work_period_end || '',
       client_name: client?.name || invoice?.client_name || '',

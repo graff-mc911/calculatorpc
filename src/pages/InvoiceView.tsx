@@ -16,6 +16,9 @@ import {
   Receipt,
   ScanLine,
   Share2,
+  Printer,
+  Link2,
+  Copy,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { InvoicePreview } from '../components/InvoicePreview';
@@ -27,7 +30,7 @@ import { AnimatePresence } from 'framer-motion';
 import ReceiptScanReview from '../components/ReceiptScanReview';
 import { ScannedReceiptData } from '../lib/receiptOCR';
 import { calculateLineTotal } from '../lib/invoiceTotals';
-import { fetchPdfBlob, shareOrDownloadPdf } from '../lib/shareInvoice';
+import { downloadPdfFiles, fetchPdfBlob, shareOrDownloadPdf } from '../lib/shareInvoice';
 import { generateInvoicePDFBlob } from '../lib/pdfGenerator';
 import { invoiceDocumentLabel, invoicePdfFileName } from '../lib/languages';
 import {
@@ -103,6 +106,8 @@ export const InvoiceView: React.FC = () => {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailTo, setEmailTo] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showFullScreenPDF, setShowFullScreenPDF] = useState(false);
@@ -545,36 +550,45 @@ export const InvoiceView: React.FC = () => {
     };
   };
 
+  const buildPdfBlob = async (): Promise<{ blob: Blob; fileName: string; shareLabel: string }> => {
+    if (!invoice) {
+      throw new Error('Invoice data missing');
+    }
+
+    const docNo = invoice.document_no || invoice.document_number || 'invoice';
+    const invoiceLang = language || 'uk';
+    const shareLabel = invoiceDocumentLabel(invoiceLang, docNo);
+    const fileName = invoicePdfFileName(invoiceLang, docNo);
+    let blob: Blob | null = null;
+
+    if (invoice.source === 'uploaded' && pdfUrl) {
+      try {
+        blob = await fetchPdfBlob(pdfUrl);
+      } catch (error) {
+        console.warn('Could not fetch stored PDF, generating locally', error);
+      }
+    }
+
+    if (!blob) {
+      const invoicePayload = buildShareInvoiceData();
+      if (!invoicePayload) {
+        throw new Error('Invoice data missing');
+      }
+
+      const companyData = buildCompanyFromInvoice(invoice, companyProfile);
+      const logoUrl = resolveCompanyLogoUrl(invoice, companyProfile);
+      blob = await generateInvoicePDFBlob(invoicePayload, companyData, logoUrl);
+    }
+
+    return { blob, fileName, shareLabel };
+  };
+
   const handleShareInvoice = async () => {
     if (!invoice) return;
 
     setSharing(true);
     try {
-      const docNo = invoice.document_no || invoice.document_number || 'invoice';
-      const invoiceLang = language || 'uk';
-      const shareLabel = invoiceDocumentLabel(invoiceLang, docNo);
-      const fileName = invoicePdfFileName(invoiceLang, docNo);
-      let blob: Blob | null = null;
-
-      // Prefer regenerating so labels match the current app language
-      if (invoice.source === 'uploaded' && pdfUrl) {
-        try {
-          blob = await fetchPdfBlob(pdfUrl);
-        } catch (error) {
-          console.warn('Could not fetch stored PDF, generating locally', error);
-        }
-      }
-
-      if (!blob) {
-        const invoicePayload = buildShareInvoiceData();
-        if (!invoicePayload) {
-          throw new Error('Invoice data missing');
-        }
-
-        const companyData = buildCompanyFromInvoice(invoice, companyProfile);
-        const logoUrl = resolveCompanyLogoUrl(invoice, companyProfile);
-        blob = await generateInvoicePDFBlob(invoicePayload, companyData, logoUrl);
-      }
+      const { blob, fileName, shareLabel } = await buildPdfBlob();
 
       const result = await shareOrDownloadPdf({
         blob,
@@ -594,6 +608,42 @@ export const InvoiceView: React.FC = () => {
       showError(error?.message || t('shareFailed') || 'Could not share invoice');
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!invoice) return;
+    setDownloadingPdf(true);
+    try {
+      const { blob, fileName } = await buildPdfBlob();
+      downloadPdfFiles([{ blob, fileName }]);
+      showSuccess(t('pdfDownloaded') || t('downloadPdf') || 'PDF downloaded');
+    } catch (error: any) {
+      console.error('Download PDF error:', error);
+      showError(error?.message || t('shareFailed') || 'Could not download PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const shareablePreviewUrl =
+    typeof window !== 'undefined' && id
+      ? `${window.location.origin}/invoices/${id}/preview`
+      : '';
+
+  const handleCopyShareLink = async () => {
+    if (!shareablePreviewUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareablePreviewUrl);
+      setLinkCopied(true);
+      showSuccess(t('linkCopied') || t('pdfShareLinkCopied') || 'Link copied');
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      showError(t('shareFailed') || 'Could not copy link');
     }
   };
 
@@ -622,6 +672,7 @@ export const InvoiceView: React.FC = () => {
   const invoiceData = {
     ...invoice,
     document_number: invoice.document_no || invoice.document_number,
+    due_date: invoice.due_date || '',
     gross_total: invoice.total_gross || invoice.gross_total,
     net_total: invoice.total_net || invoice.net_total,
     items: invoice.items || [],
@@ -636,8 +687,8 @@ export const InvoiceView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pt-20 pb-10 px-3 md:px-6 max-w-6xl mx-auto overflow-x-hidden">
-      <div className="mb-6">
+    <div className="invoice-print-root min-h-screen pt-20 pb-10 px-3 md:px-6 max-w-6xl mx-auto overflow-x-hidden">
+      <div className="invoice-action-bar no-print mb-6">
         <button
           type="button"
           onClick={() => navigate('/invoices')}
@@ -647,7 +698,7 @@ export const InvoiceView: React.FC = () => {
           <ArrowLeft size={20} />
         </button>
 
-        <div className="flex justify-between items-start gap-3 mb-6">
+        <div className="flex justify-between items-start gap-3 mb-4">
           <div className="min-w-0">
             <h2 className="text-2xl font-semibold text-white mb-1">
               {t('invoicePreviewTitle')}
@@ -656,65 +707,75 @@ export const InvoiceView: React.FC = () => {
               {invoice.document_no || invoice.document_number}
             </p>
           </div>
+        </div>
 
-          <div className="flex gap-2 flex-wrap justify-end">
-            {pdfUrl && (
-              <button
-                type="button"
-                onClick={() => setShowFullScreenPDF(true)}
-                className="p-2.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-all active:scale-95"
-                title={t('viewFile') || 'Переглянути PDF'}
-              >
-                <Eye size={18} />
-              </button>
-            )}
+        <div className="flex flex-wrap gap-2 mb-6">
+          <Button
+            type="button"
+            onClick={() => void handleDownloadPdf()}
+            disabled={downloadingPdf}
+            className="bg-white/10 border border-white/10 text-white hover:bg-white/20"
+          >
+            <Download size={16} className="mr-2" />
+            {t('downloadPdf') || 'Download PDF'}
+          </Button>
 
+          <Button
+            type="button"
+            onClick={handlePrint}
+            className="bg-white/10 border border-white/10 text-white hover:bg-white/20"
+          >
+            <Printer size={16} className="mr-2" />
+            {t('print') || 'Print'}
+          </Button>
+
+          <Button
+            type="button"
+            onClick={() => navigate(`/invoices/${id}/edit`)}
+            className="bg-white/10 border border-white/10 text-orange-400 hover:bg-white/20"
+          >
+            <Edit2 size={16} className="mr-2" />
+            {t('edit') || 'Edit'}
+          </Button>
+
+          <Button
+            type="button"
+            onClick={() => {
+              setEmailTo(client?.email || '');
+              setLinkCopied(false);
+              setShowEmailModal(true);
+            }}
+            className="bg-green-500/20 border border-green-500/30 text-green-300 hover:bg-green-500/30"
+          >
+            <Send size={16} className="mr-2" />
+            {t('sendToClient') || t('sendInvoice') || 'Send to client'}
+          </Button>
+
+          {!invoice.signature_data_url && (
             <button
               type="button"
-              onClick={() => void handleShareInvoice()}
-              disabled={sharing}
-              className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-cyan-400 transition-all active:scale-95 disabled:opacity-60"
-              title={t('share') || 'Поділитися'}
+              onClick={() => setShowSignatureModal(true)}
+              className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-blue-400 transition-all active:scale-95"
+              title={t('sign') || 'Підписати'}
             >
-              <Share2 size={18} />
+              <PenTool size={18} />
             </button>
+          )}
 
-            {!invoice.signature_data_url && (
-              <button
-                type="button"
-                onClick={() => setShowSignatureModal(true)}
-                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-blue-400 transition-all active:scale-95"
-                title={t('sign') || 'Підписати'}
-              >
-                <PenTool size={18} />
-              </button>
-            )}
-
+          {pdfUrl && (
             <button
               type="button"
-              onClick={() => {
-                setEmailTo(client?.email || '');
-                setShowEmailModal(true);
-              }}
-              className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-green-400 transition-all active:scale-95"
-              title={t('send') || 'Відправити'}
+              onClick={() => setShowFullScreenPDF(true)}
+              className="p-2.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-all active:scale-95"
+              title={t('viewFile') || 'Переглянути PDF'}
             >
-              <Send size={18} />
+              <Eye size={18} />
             </button>
-
-            <button
-              type="button"
-              onClick={() => navigate(`/invoices/${id}`)}
-              className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-orange-400 transition-all active:scale-95"
-              title={t('edit') || 'Редагувати'}
-            >
-              <Edit2 size={18} />
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <div className="invoice-preview-chrome no-print grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3">
           <p className="text-white/40 text-xs mb-1">Сума інвойсу</p>
           <p className="text-white font-semibold text-sm">
@@ -744,7 +805,7 @@ export const InvoiceView: React.FC = () => {
       />
 
       {pdfUrl && (
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mb-6 mt-6">
+        <div className="invoice-preview-chrome no-print bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mb-6 mt-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-white">
               {t('invoicePreviewTitle') || 'PDF інвойсу'}
@@ -805,7 +866,7 @@ export const InvoiceView: React.FC = () => {
       )}
 
       {invoiceExpenses.length > 0 && (
-        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mt-6">
+        <div className="invoice-preview-chrome no-print bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mt-6">
           <div className="flex items-center gap-2 mb-4">
             <Receipt className="h-5 w-5 text-red-400" />
             <h3 className="text-lg font-semibold text-white">
@@ -852,7 +913,7 @@ export const InvoiceView: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mt-6">
+      <div className="invoice-preview-chrome no-print bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mt-6">
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <h3 className="text-lg font-semibold text-white">
             {t('attachedFile') || 'Прикріплені файли'}
@@ -992,14 +1053,19 @@ export const InvoiceView: React.FC = () => {
       )}
 
       {showEmailModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="no-print fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl max-w-md w-full border border-white/10">
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <Mail className="text-green-400" size={24} />
-                <h3 className="text-xl font-semibold text-white">
-                  {t('sendInvoice') || 'Відправити інвойс'}
-                </h3>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">
+                    {t('sendToClient') || t('sendInvoice') || 'Send to client'}
+                  </h3>
+                  <p className="text-white/50 text-xs mt-0.5">
+                    {t('emailOrLink') || 'Email the client or share a link'}
+                  </p>
+                </div>
               </div>
 
               <button
@@ -1023,6 +1089,33 @@ export const InvoiceView: React.FC = () => {
                   placeholder={t('enterEmail') || 'Введіть email'}
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500/50"
                 />
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-white/70 text-sm">
+                  <Link2 size={16} />
+                  {t('orShareLink') || t('shareableLink') || 'Shareable link'}
+                </div>
+                <p className="text-xs text-white/40 break-all">{shareablePreviewUrl}</p>
+                <Button
+                  type="button"
+                  onClick={() => void handleCopyShareLink()}
+                  className="w-full bg-white/10 border border-white/10 text-white hover:bg-white/20"
+                >
+                  <Copy size={16} className="mr-2" />
+                  {linkCopied
+                    ? (t('linkCopied') || 'Link copied')
+                    : (t('copyLink') || 'Copy link')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleShareInvoice()}
+                  disabled={sharing}
+                  className="w-full bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/30"
+                >
+                  <Share2 size={16} className="mr-2" />
+                  {t('share') || 'Share'}
+                </Button>
               </div>
 
               {invoice.sent_at && (
