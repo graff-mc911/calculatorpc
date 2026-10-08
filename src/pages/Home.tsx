@@ -297,7 +297,7 @@ export const Home: React.FC = () => {
         handlers={{
           onWork: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : setProjectOpen(true)),
           onExpense: () => navigate('/expenses'),
-          onAdvance: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : navigate('/projects')),
+          onAdvance: () => navigate('/payments'),
           onPdf: () => navigate('/pdf-creator'),
         }}
       />

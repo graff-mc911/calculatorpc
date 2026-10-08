@@ -47,6 +47,7 @@ const ScanReceipt = lazy(() => import('./pages/ScanReceipt'));
 const Prices = lazy(() => import('./pages/Prices'));
 const Calculator = lazy(() => import('./pages/Calculator'));
 const Expenses = lazy(() => import('./pages/Expenses'));
+const Payments = lazy(() => import('./pages/Payments'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const Owner = lazy(() => import('./pages/Owner'));
@@ -189,6 +190,7 @@ function AppContent() {
             <Route path="/prices" element={<ProtectedRoute><Prices /></ProtectedRoute>} />
             <Route path="/calculator" element={<ProtectedRoute><Calculator /></ProtectedRoute>} />
             <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
             <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
             <Route path="/contact" element={<ProtectedRoute><Contact /></ProtectedRoute>} />

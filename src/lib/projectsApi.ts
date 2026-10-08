@@ -421,6 +421,23 @@ export async function deletePrepayment(id: string, projectId: string): Promise<v
   await touchProject(projectId);
 }
 
+/** All project prepayments / payments for the signed-in user (newest first). */
+export async function listProjectPrepayments(): Promise<ProjectPrepayment[]> {
+  const uid = await requireUserId();
+  const { data, error } = await supabase
+    .from('project_prepayments')
+    .select('*')
+    .eq('user_id', uid)
+    .order('paid_at', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    if (isMissingRelation(error)) throw new ProjectsSchemaMissingError();
+    throw error;
+  }
+  return (data || []) as ProjectPrepayment[];
+}
+
 export async function uploadProjectReceipt(
   projectId: string,
   file: File | Blob,

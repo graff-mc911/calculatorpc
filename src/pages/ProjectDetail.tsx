@@ -31,6 +31,11 @@ import {
   formatQtyDisplay,
   parseMoneyInput,
 } from '../lib/moneyMask';
+import {
+  PAYMENT_METHODS,
+  composePaymentNote,
+  parsePaymentNote,
+} from '../lib/paymentNote';
 import { computeProjectMetrics, lineTotal } from '../lib/projectMetrics';
 import { shareProjectEstimatePdf, type ProjectPdfMode } from '../lib/projectPdf';
 import {
@@ -114,6 +119,7 @@ export default function ProjectDetail() {
 
   const [prepAmount, setPrepAmount] = useState('');
   const [prepDate, setPrepDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [prepMethod, setPrepMethod] = useState('');
   const [prepNote, setPrepNote] = useState('');
 
   const [editingMeta, setEditingMeta] = useState(false);
@@ -292,13 +298,14 @@ export default function ProjectDetail() {
         project_id: id,
         amount,
         paid_at: prepDate,
-        note: prepNote || null,
+        note: composePaymentNote(prepMethod, prepNote),
       });
     },
     onSuccess: () => {
-      showSuccess(t('projectPrepaymentAdded') || 'Prepayment added');
+      showSuccess(t('projectPrepaymentAdded') || 'Оплату збережено');
       setSheet(null);
       setPrepAmount('');
+      setPrepMethod('');
       setPrepNote('');
       invalidate();
     },
@@ -591,6 +598,14 @@ export default function ProjectDetail() {
               {formatCompact(metrics.balanceDue, currency)}
             </b>
           </div>
+          {metrics.overpayment > 0 && (
+            <div className="flex justify-between gap-2 col-span-2">
+              <span className="cpc-muted">Переплата</span>
+              <b className="tabular-nums font-medium" style={{ color: '#f0a8a8' }}>
+                {formatCompact(metrics.overpayment, currency)}
+              </b>
+            </div>
+          )}
           <div className="flex justify-between gap-2 col-span-2">
             <span className="cpc-muted">Витрачено</span>
             <b className="tabular-nums font-medium" style={{ color: 'var(--cpc-text)' }}>
@@ -832,7 +847,7 @@ export default function ProjectDetail() {
             onClick={() => setSheet('prepayment')}
             className="text-[12px] cpc-copper bg-transparent border-0 min-h-[36px]"
           >
-            + Аванс
+            + Оплата
           </button>
         </div>
         {recentPayments.length === 0 ? (
@@ -840,13 +855,23 @@ export default function ProjectDetail() {
         ) : (
           <div className="cpc-card">
             <div className="divide-y" style={{ borderColor: 'var(--cpc-line)' }}>
-              {recentPayments.map((p) => (
+              {recentPayments.map((p) => {
+                const { method, comment } = parsePaymentNote(p.note);
+                const dateStr = String(p.paid_at || '').slice(0, 10);
+                const dateLabel = dateStr
+                  ? dateStr.split('-').reverse().join('.')
+                  : '';
+                return (
                 <div key={p.id} className="flex items-center justify-between gap-2 py-2 first:pt-0">
                   <div className="min-w-0">
-                    <p className="text-[13px]" style={{ color: 'var(--cpc-text)' }}>
-                      {p.note?.trim() || 'Аванс / оплата'}
+                    <p className="text-[13px] tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+                      {dateLabel || '—'}
                     </p>
-                    <p className="cpc-muted text-[11px]">{p.paid_at}</p>
+                    <p className="cpc-muted text-[11px]">
+                      {method || comment
+                        ? `${method || '—'}${comment ? ` · ${comment}` : ''}`
+                        : 'Аванс / оплата'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <b className="tabular-nums text-[13px] cpc-copper">
@@ -870,7 +895,8 @@ export default function ProjectDetail() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div
               className="flex justify-between pt-2 mt-1 text-[13px]"
@@ -881,6 +907,14 @@ export default function ProjectDetail() {
                 {formatCompact(metrics.received, currency)}
               </b>
             </div>
+            {metrics.overpayment > 0 && (
+              <div className="flex justify-between pt-1 text-[13px]">
+                <span className="cpc-muted">Переплата</span>
+                <b className="tabular-nums" style={{ color: '#f0a8a8' }}>
+                  {formatCompact(metrics.overpayment, currency)}
+                </b>
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -933,7 +967,7 @@ export default function ProjectDetail() {
                 <h2 className="font-semibold text-sm" style={{ color: 'var(--cpc-text)' }}>
                   {sheet === 'work' && (editingWorkId ? 'Редагувати роботу' : 'Додати роботу')}
                   {sheet === 'expense' && 'Додати витрату'}
-                  {sheet === 'prepayment' && 'Додати аванс'}
+                  {sheet === 'prepayment' && 'Зберегти оплату'}
                   {sheet === 'pdf' && 'PDF'}
                   {sheet === 'menu' && 'Меню'}
                 </h2>
@@ -1182,11 +1216,39 @@ export default function ProjectDetail() {
                     value={prepDate}
                     onChange={(e) => setPrepDate(e.target.value)}
                   />
+                  <div>
+                    <label className="cpc-card-label mb-1.5 block">
+                      Спосіб оплати — необов’язково
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PAYMENT_METHODS.map((m) => {
+                        const active = prepMethod === m;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setPrepMethod(active ? '' : m)}
+                            className="min-h-[40px] px-2.5 text-[12px] font-medium"
+                            style={{
+                              background: active ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                              color: active ? 'var(--cpc-on-copper)' : 'var(--cpc-text)',
+                              border: `1px solid ${
+                                active ? 'var(--cpc-copper)' : 'var(--cpc-line)'
+                              }`,
+                              borderRadius: 9,
+                            }}
+                          >
+                            {m}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <Input
-                    label="Нотатка"
+                    label="Коментар — необов’язково"
                     value={prepNote}
                     onChange={(e) => setPrepNote(e.target.value)}
-                    placeholder="Аванс / оплата"
+                    placeholder="Аванс / фінал"
                   />
                   <Button
                     className="w-full min-h-[48px]"
@@ -1194,7 +1256,7 @@ export default function ProjectDetail() {
                     disabled={addPrepMut.isPending}
                     onClick={() => addPrepMut.mutate()}
                   >
-                    {t('save') || 'Зберегти'}
+                    Зберегти оплату
                   </Button>
                 </div>
               )}

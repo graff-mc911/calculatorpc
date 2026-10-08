@@ -38,7 +38,7 @@ export const QuickActionsBar: React.FC<{
       key: 'advance',
       label: t('qaAdvance') === 'qaAdvance' ? '+ Аванс' : t('qaAdvance'),
       copper: true,
-      onClick: handlers?.onAdvance ?? (() => navigate('/projects')),
+      onClick: handlers?.onAdvance ?? (() => navigate('/payments')),
     },
     {
       key: 'pdf',
