@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Витрати — preview</title>
+  <style>
+    :root {
+      --cpc-bg: #14171c;
+      --cpc-card: #1c2128;
+      --cpc-text: #f2ebe3;
+      --cpc-muted: #9a9186;
+      --cpc-line: rgba(255,255,255,0.08);
+      --cpc-copper: #c8794a;
+      --cpc-copper-light: #e0975f;
+      --cpc-on-copper: #1a120c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--cpc-bg);
+      color: var(--cpc-text);
+    }
+    .page { max-width: 430px; margin: 0 auto; padding: 12px 12px 28px; }
+    h1 { font-size: 20px; font-weight: 500; margin: 0 0 12px; }
+    .label { display: block; font-size: 11px; color: var(--cpc-muted); margin-bottom: 6px; letter-spacing: 0.02em; }
+    .card {
+      background: var(--cpc-card);
+      border: 1px solid var(--cpc-line);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chip {
+      min-height: 40px; padding: 0 12px; border-radius: 9px;
+      border: 1px solid var(--cpc-line); background: var(--cpc-card);
+      color: var(--cpc-text); font-size: 13px; font-weight: 500;
+    }
+    .chip.on { background: var(--cpc-copper); color: var(--cpc-on-copper); border-color: var(--cpc-copper); }
+    .chip.cat { font-size: 12px; background: var(--cpc-bg); }
+    .chip.cat.on { background: var(--cpc-copper); }
+    input {
+      width: 100%; min-height: 48px; padding: 0 12px; margin-bottom: 12px;
+      border-radius: 10px; border: 1px solid var(--cpc-line);
+      background: var(--cpc-bg); color: var(--cpc-text); font-size: 16px;
+    }
+    .amount {
+      min-height: 56px; font-size: 24px; font-weight: 500;
+      border: 2px solid var(--cpc-copper); border-radius: 12px;
+    }
+    .btn {
+      width: 100%; min-height: 52px; border: 0; border-radius: 12px;
+      background: var(--cpc-copper); color: var(--cpc-on-copper);
+      font-size: 16px; font-weight: 600; cursor: pointer;
+    }
+    .warn {
+      background: rgba(200,80,80,0.14); border: 1px solid rgba(200,80,80,0.35);
+      color: #f0a8a8; border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px;
+    }
+    .row { display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--cpc-line); }
+    .row:first-child { border-top: 0; padding-top: 0; }
+    .muted { color: var(--cpc-muted); font-size: 11px; }
+    .name { font-size: 14px; font-weight: 500; }
+    .sum { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; }
+    .total-card {
+      background: rgba(200,121,74,0.10); border: 1px solid rgba(224,151,95,0.35);
+      border-radius: 14px; padding: 14px;
+    }
+    .total { color: var(--cpc-copper); font-size: 26px; font-weight: 600; margin: 0; }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .metrics .card { margin: 0; padding: 8px 12px; }
+    .metrics b { display: block; font-size: 15px; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Витрати</h1>
+    <span class="label">Об’єкт</span>
+    <div class="chips">
+      <button class="chip on">Будинок на Горі</button>
+      <button class="chip">Квартира 12</button>
+    </div>
+    <div class="warn" role="alert">
+      Бюджет перевищено
+      <span class="muted" style="display:block;margin-top:4px;color:#f0a8a8">Витрачено €2 570 з €2 450</span>
+    </div>
+    <div class="card">
+      <span class="label">Що купили?</span>
+      <input value="Цемент" readonly />
+      <span class="label">Сума</span>
+      <input class="amount" value="120" readonly />
+      <span class="label">Категорія</span>
+      <div class="chips">
+        <button class="chip cat on">Матеріали</button>
+        <button class="chip cat">Зарплата</button>
+        <button class="chip cat">Транспорт</button>
+        <button class="chip cat">Інструмент</button>
+        <button class="chip cat">Субпідрядник</button>
+        <button class="chip cat">Інше</button>
+      </div>
+      <span class="label">Дата</span>
+      <input type="date" value="2026-10-08" readonly />
+      <span class="label">Нотатка — необов’язково</span>
+      <input placeholder="Склад / доставка" readonly />
+      <button class="btn">Зберегти</button>
+    </div>
+    <div class="metrics">
+      <div class="card"><span class="muted">Витрачено</span><b>€2 570</b></div>
+      <div class="card"><span class="muted">Прибуток</span><b>€1 180</b></div>
+      <div class="card"><span class="muted">Margin</span><b>31.5%</b></div>
+      <div class="card"><span class="muted">Бюджет</span><b>€2 450</b></div>
+    </div>
+    <h2 style="font-size:13px;font-weight:500;margin:0 0 8px">Список</h2>
+    <div class="card">
+      <div class="row">
+        <div><div class="name">Цемент</div><div class="muted">Матеріали · 08.10.2026</div></div>
+        <div class="sum">€120</div>
+      </div>
+      <div class="row">
+        <div><div class="name">Доставка піску</div><div class="muted">Транспорт · 07.10.2026</div></div>
+        <div class="sum">€80</div>
+      </div>
+      <div class="row">
+        <div><div class="name">Бригада — 2 дні</div><div class="muted">Зарплата · 06.10.2026</div></div>
+        <div class="sum">€450</div>
+      </div>
+      <div class="row">
+        <div><div class="name">Гіпсокартон</div><div class="muted">Матеріали · 05.10.2026</div></div>
+        <div class="sum">€1 920</div>
+      </div>
+    </div>
+    <div class="total-card">
+      <span class="label">Всього витрат</span>
+      <p class="total">€2 570</p>
+    </div>
+  </div>
+</body>
+</html>
