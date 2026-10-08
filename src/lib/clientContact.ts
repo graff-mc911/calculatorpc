@@ -1,5 +1,47 @@
 /** Lightweight contact helpers — not a CRM. */
 
+const NOTE_KEY = (clientId: string) => `cpc.clientNote.${clientId}`;
+
+/** Local fallback until `clients.note` migration is applied in prod. */
+export function readLocalClientNote(clientId: string | null | undefined): string {
+  if (!clientId || typeof localStorage === 'undefined') return '';
+  try {
+    return localStorage.getItem(NOTE_KEY(clientId)) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function writeLocalClientNote(clientId: string, note: string): void {
+  if (!clientId || typeof localStorage === 'undefined') return;
+  try {
+    const trimmed = note.trim();
+    if (trimmed) localStorage.setItem(NOTE_KEY(clientId), trimmed);
+    else localStorage.removeItem(NOTE_KEY(clientId));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function resolveClientNote(
+  clientId: string | null | undefined,
+  remoteNote: string | null | undefined
+): string {
+  const remote = String(remoteNote || '').trim();
+  if (remote) return remote;
+  return readLocalClientNote(clientId);
+}
+
+export function isMissingNoteColumnError(error: unknown): boolean {
+  const msg = String((error as { message?: string })?.message || error || '').toLowerCase();
+  const code = String((error as { code?: string })?.code || '');
+  return (
+    code === '42703' ||
+    code === 'PGRST204' ||
+    (msg.includes('note') && (msg.includes('column') || msg.includes('schema cache')))
+  );
+}
+
 export function digitsOnlyPhone(phone: string | null | undefined): string {
   return String(phone || '').replace(/[^\d+]/g, '');
 }

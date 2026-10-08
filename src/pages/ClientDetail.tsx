@@ -11,7 +11,7 @@ import {
   Phone,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { mailtoHref, telHref, whatsappHref } from '../lib/clientContact';
+import { mailtoHref, resolveClientNote, telHref, whatsappHref } from '../lib/clientContact';
 import { formatCurrency } from '../lib/moneyMask';
 import { computeProjectMetrics } from '../lib/projectMetrics';
 import { listProjects, type Project } from '../lib/projectsApi';
@@ -169,6 +169,7 @@ export default function ClientDetail() {
   const call = telHref(client.phone);
   const wa = whatsappHref(client.phone);
   const mail = mailtoHref(client.email);
+  const note = resolveClientNote(client.id, (client as { note?: string | null }).note);
 
   return (
     <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
@@ -222,7 +223,15 @@ export default function ClientDetail() {
             </span>
           </div>
         )}
-        {!client.phone && !client.email && !client.address && (
+        {note && (
+          <div className="pt-1.5 mt-1" style={{ borderTop: '1px solid var(--cpc-line)' }}>
+            <span className="cpc-muted block mb-0.5">Нотатка</span>
+            <p className="text-[13px] whitespace-pre-wrap" style={{ color: 'var(--cpc-text)' }}>
+              {note}
+            </p>
+          </div>
+        )}
+        {!client.phone && !client.email && !client.address && !note && (
           <p className="cpc-muted text-sm">Контактні дані не вказані</p>
         )}
       </div>

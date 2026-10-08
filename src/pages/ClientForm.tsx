@@ -4,6 +4,11 @@ import { ArrowLeft } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
+import {
+  isMissingNoteColumnError,
+  resolveClientNote,
+  writeLocalClientNote,
+} from '../lib/clientContact';
 import { supabase } from '../lib/supabase';
 
 type ClientFormData = {
@@ -12,9 +17,10 @@ type ClientFormData = {
   email: string;
   phone: string;
   address: string;
+  note: string;
 };
 
-/** Simple contact form — name + phone required-ish; no CRM fields. */
+/** Simple contact form — name + phone; optional email/address/note. Not CRM. */
 export const ClientForm: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -28,6 +34,7 @@ export const ClientForm: React.FC = () => {
     email: '',
     phone: '',
     address: '',
+    note: '',
   });
 
   const { data: session, isLoading: sessionLoading } = useQuery({
@@ -63,6 +70,7 @@ export const ClientForm: React.FC = () => {
         email: client.email || '',
         phone: client.phone || '',
         address: client.address || '',
+        note: resolveClientNote(client.id, (client as { note?: string | null }).note),
       });
     }
   }, [client]);
@@ -106,7 +114,8 @@ export const ClientForm: React.FC = () => {
         clientNumber = `CLI-${Date.now().toString().slice(-4)}`;
       }
 
-      const payload = {
+      const note = formData.note.trim() || null;
+      const base = {
         client_number: clientNumber,
         name,
         email: formData.email.trim().toLowerCase() || null,
@@ -114,24 +123,49 @@ export const ClientForm: React.FC = () => {
         address: formData.address.trim() || null,
         user_id: session.user.id,
       };
+      const withNote = { ...base, note };
+
+      const persistLocalNote = (savedId: string) => {
+        writeLocalClientNote(savedId, note || '');
+      };
 
       if (id) {
-        const { error } = await supabase
+        const stamp = { updated_at: new Date().toISOString() };
+        let { error } = await supabase
           .from('clients')
-          .update({ ...payload, updated_at: new Date().toISOString() })
+          .update({ ...withNote, ...stamp })
           .eq('id', id)
           .eq('user_id', session.user.id);
+        if (error && isMissingNoteColumnError(error)) {
+          ({ error } = await supabase
+            .from('clients')
+            .update({ ...base, ...stamp })
+            .eq('id', id)
+            .eq('user_id', session.user.id));
+          if (!error) persistLocalNote(id);
+        } else if (!error) {
+          persistLocalNote(id);
+        }
         if (error) throw error;
         return id;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('clients')
-        .insert([payload])
+        .insert([withNote])
         .select('id')
         .single();
+      if (error && isMissingNoteColumnError(error)) {
+        ({ data, error } = await supabase
+          .from('clients')
+          .insert([base])
+          .select('id')
+          .single());
+      }
       if (error) throw error;
-      return data.id as string;
+      const savedId = data!.id as string;
+      persistLocalNote(savedId);
+      return savedId;
     },
     onSuccess: async (savedId) => {
       await queryClient.invalidateQueries({ queryKey: ['clients'] });
@@ -231,8 +265,20 @@ export const ClientForm: React.FC = () => {
             />
           </div>
 
+          <div>
+            <label className="cpc-card-label mb-1 block">Нотатка — необов’язково</label>
+            <textarea
+              value={formData.note}
+              onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+              placeholder="Коротка пам’ятка про контакт"
+              rows={3}
+              className="w-full text-[15px] px-3 py-2.5 outline-none resize-none"
+              style={fieldStyle}
+            />
+          </div>
+
           <p className="cpc-muted text-[11px]">
-            Простий контакт для об’єктів. Нотатки / CRM — не потрібні.
+            Простий контакт для об’єктів — не CRM.
           </p>
 
           <button
