@@ -16,7 +16,6 @@ import {
   uploadProjectReceipt,
   ProjectsSchemaMissingError,
   type Project,
-  type ProjectStatus,
 } from '../lib/projectsApi';
 import { supabase } from '../lib/supabase';
 

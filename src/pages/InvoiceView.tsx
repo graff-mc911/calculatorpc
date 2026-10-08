@@ -808,7 +808,7 @@ export const InvoiceView: React.FC = () => {
             className="bg-white/10 border border-white/10 text-white hover:bg-white/20"
           >
             <Printer size={16} className="mr-2" />
-            {t('print') || 'Print'}
+            {t('print') || 'Друкувати'}
           </Button>
 
           <Button
@@ -817,7 +817,7 @@ export const InvoiceView: React.FC = () => {
             className="bg-white/10 border border-white/10 text-orange-400 hover:bg-white/20"
           >
             <Edit2 size={16} className="mr-2" />
-            {t('edit') || 'Edit'}
+            {t('edit') || 'Редагувати'}
           </Button>
 
           <Button

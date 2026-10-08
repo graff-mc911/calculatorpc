@@ -367,7 +367,8 @@ export const Clients: React.FC = () => {
                           color: 'var(--cpc-copper-light)',
                         }}
                       >
-                        <Phone size={13} /> Call
+                        <Phone size={13} />{' '}
+                        {t('call') === 'call' ? 'Подзвонити' : t('call') || 'Подзвонити'}
                       </a>
                     )}
                     {wa && (
@@ -397,7 +398,10 @@ export const Clients: React.FC = () => {
                           color: 'var(--cpc-copper-light)',
                         }}
                       >
-                        <Mail size={13} /> Email
+                        <Mail size={13} />{' '}
+                        {t('writeEmail') === 'writeEmail'
+                          ? 'Написати'
+                          : t('writeEmail') || 'Написати'}
                       </a>
                     )}
                   </div>

@@ -431,7 +431,7 @@ export default function Settings() {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Bank details">
+            <Field label={t('bankDetails') || 'Банківські реквізити'}>
               <input
                 value={profile.iban}
                 onChange={(e) => setProfile({ ...profile, iban: e.target.value })}

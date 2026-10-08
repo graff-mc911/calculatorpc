@@ -393,7 +393,7 @@ export default function ProjectDetail() {
           overpayment: t('projectOverpayment') || 'Overpayment',
           expenses: t('projectExpenses') || 'Expenses',
           projectedProfit: t('projectProfit') || 'Projected profit',
-          margin: t('projectMargin') || 'Margin',
+          margin: t('projectMargin') || 'Маржа',
           prepayments: t('projectPrepayments') || 'Prepayments',
           ungrouped: t('projectUngrouped') || 'General',
           date: t('date'),
@@ -640,7 +640,8 @@ export default function ProjectDetail() {
               {formatCompact(metrics.projectedProfit, currency)}
             </b>
             <b className="text-[13px] font-medium tabular-nums">
-              Margin {Number.isFinite(metrics.marginPct) ? metrics.marginPct.toFixed(1) : '0'}%
+              {t('projectMargin') || 'Маржа'}{' '}
+              {Number.isFinite(metrics.marginPct) ? metrics.marginPct.toFixed(1) : '0'}%
             </b>
           </div>
         </div>
