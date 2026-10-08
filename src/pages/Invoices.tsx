@@ -1280,18 +1280,21 @@ export const Invoices: React.FC = () => {
 
   /**
    * Вкладки фільтрації.
+   * `unpaid` count = draft + sent (same rule as Home «Неоплачено»).
    */
   const filterTabs: { key: FilterStatus; label: string }[] = [
     { key: 'all', label: t('allStatuses') || 'Усі' },
-    { key: 'draft', label: 'Draft' },
-    { key: 'sent', label: 'Sent' },
-    { key: 'paid', label: 'Paid' },
-    { key: 'overdue', label: 'Overdue' },
+    { key: 'unpaid', label: t('unpaid') || 'Неоплачені' },
+    { key: 'draft', label: t('draft') || 'Чернетки' },
+    { key: 'sent', label: t('sent') || 'Надіслані' },
+    { key: 'paid', label: t('paid') || 'Оплачені' },
+    { key: 'overdue', label: t('overdue') || 'Прострочені' },
   ];
 
   const statusCounts = React.useMemo(() => {
     const counts: Record<string, number> = {
       all: invoices.length,
+      unpaid: 0,
       draft: 0,
       sent: 0,
       paid: 0,
@@ -1301,6 +1304,7 @@ export const Invoices: React.FC = () => {
       const s = resolveInvoiceStatus(inv.status, inv.due_date);
       counts[s] = (counts[s] || 0) + 1;
     }
+    counts.unpaid = (counts.draft || 0) + (counts.sent || 0);
     return counts;
   }, [invoices]);
 
@@ -1476,7 +1480,7 @@ export const Invoices: React.FC = () => {
         </div>
       </div>
 
-      {/* Status chips — Draft / Sent / Paid / Overdue */}
+      {/* Status chips — Усі / Неоплачені / Чернетки / Надіслані / Оплачені / Прострочені */}
       <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-hide">
         {filterTabs.map((tab) => {
           const count = statusCounts[tab.key] || 0;
@@ -1486,7 +1490,7 @@ export const Invoices: React.FC = () => {
               key={tab.key}
               type="button"
               onClick={() => applyFilter(tab.key)}
-              className="shrink-0 min-h-[36px] px-3 text-[12px] font-medium"
+              className="shrink-0 min-h-[44px] px-3 text-[12px] font-medium"
               style={{
                 background: isActive ? 'var(--cpc-copper)' : 'var(--cpc-card)',
                 color: isActive ? 'var(--cpc-on-copper)' : 'var(--cpc-text)',
