@@ -8,7 +8,7 @@ import {
   invoiceStatusLabel,
   invoiceStatusTone,
 } from '../components/cpc/CpcStatusBadge';
-import { CpcStickyQuickActions } from '../components/cpc/CpcStickyQuickActions';
+import { useQuickActionHandlers } from '../components/QuickActionsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -193,6 +193,13 @@ export const Home: React.FC = () => {
     navigate(`/projects/${p.id}?add=${add}`);
   };
 
+  useQuickActionHandlers({
+    onWork: () => goProjectAction('work'),
+    onExpense: () => goProjectAction('expense'),
+    onAdvance: () => goProjectAction('prepayment'),
+    onPdf: () => navigate('/pdf-creator'),
+  });
+
   return (
     <div className="cpc-page flex flex-col gap-2 pb-4">
       {/* Balance — visual spec */}
@@ -314,17 +321,6 @@ export const Home: React.FC = () => {
           );
         })
       )}
-
-      <div className="flex-1 min-h-[4px]" />
-
-      <CpcStickyQuickActions
-        handlers={{
-          onWork: () => goProjectAction('work'),
-          onExpense: () => goProjectAction('expense'),
-          onAdvance: () => goProjectAction('prepayment'),
-          onPdf: () => navigate('/pdf-creator'),
-        }}
-      />
 
       <AnimatePresence>
         {projectOpen && (

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { CpcStickyQuickActions } from '../components/cpc/CpcStickyQuickActions';
+import { useQuickActionHandlers } from '../components/QuickActionsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { POPULAR_TEMPLATES } from '../lib/calcTemplates';
@@ -226,6 +226,13 @@ export default function Calculator() {
     navigate(`/projects/${p.id}?add=${add}`);
   };
 
+  useQuickActionHandlers({
+    onWork: onAddWork,
+    onExpense: () => goProjectAction('expense'),
+    onAdvance: () => goProjectAction('prepayment'),
+    onPdf: () => navigate('/pdf-creator'),
+  });
+
   const balanceLabel =
     t('totalBalance') === 'totalBalance' ? 'Загальний баланс' : t('totalBalance');
   const inputLabel = t('inputData') === 'inputData' ? 'Вхідні дані' : t('inputData');
@@ -391,17 +398,6 @@ export default function Calculator() {
           <b className="text-[12px] font-medium tabular-nums">{profitPct}%</b>
         </div>
       </div>
-
-      <div className="flex-1 min-h-[8px]" aria-hidden />
-
-      <CpcStickyQuickActions
-        handlers={{
-          onWork: onAddWork,
-          onExpense: () => goProjectAction('expense'),
-          onAdvance: () => goProjectAction('prepayment'),
-          onPdf: () => navigate('/pdf-creator'),
-        }}
-      />
 
       <AnimatePresence>
         {projectSheet && (

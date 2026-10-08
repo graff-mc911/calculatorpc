@@ -1,7 +1,7 @@
 /* CPC service worker — network-first, clears stale caches on activate.
- * CACHE_BUST: 2026-10-08-cpc-favicon
+ * CACHE_BUST: 2026-10-08-cpc-plus-qa
  */
-const CACHE_BUST = 'cpc-favicon-20261008';
+const CACHE_BUST = 'cpc-plus-qa-20261008';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

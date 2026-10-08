@@ -8,6 +8,7 @@ import { OwnerRoute } from './components/OwnerRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MobileTopNav } from './components/MobileTopNav';
 import { BottomNav } from './components/BottomNav';
+import { QuickActionsProvider } from './components/QuickActionsContext';
 import { Loading } from './components/Loading';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Home } from './pages/Home';
@@ -120,10 +121,12 @@ function RootPage() {
   return (
     <>
       <MobileTopNav />
-      <div className="pt-14 pb-32">
-        <Home />
-      </div>
-      <BottomNav />
+      <QuickActionsProvider>
+        <div className="pt-14 pb-36">
+          <Home />
+        </div>
+        <BottomNav />
+      </QuickActionsProvider>
     </>
   );
 }
@@ -152,6 +155,7 @@ function AppContent() {
       <SyncInit />
       <OfflineIndicator />
 
+      <QuickActionsProvider>
       {showAppChrome && (
         <ProtectedRoute>
           <>
@@ -161,7 +165,7 @@ function AppContent() {
         </ProtectedRoute>
       )}
 
-      <div className={showAppChrome ? 'pt-14 pb-32 print:pt-0 print:pb-0' : ''}>
+      <div className={showAppChrome ? 'pt-14 pb-36 print:pt-0 print:pb-0' : ''}>
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />
@@ -218,6 +222,7 @@ function AppContent() {
           </Routes>
         </Suspense>
       </div>
+      </QuickActionsProvider>
     </div>
   );
 }
