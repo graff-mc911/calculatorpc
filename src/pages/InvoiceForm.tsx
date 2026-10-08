@@ -12,7 +12,22 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { evalFieldExpression } from '../lib/calculator';
 import { calculateLineTotal } from '../lib/invoiceTotals';
-import { listProjects, ProjectsSchemaMissingError, type Project } from '../lib/projectsApi';
+import {
+  fetchProjectBundle,
+  listProjects,
+  ProjectsSchemaMissingError,
+  type Project,
+} from '../lib/projectsApi';
+
+function mapProjectUnitToInvoice(unit: string): string {
+  const u = (unit || 'm2').toLowerCase().replace(/\s/g, '');
+  if (u === 'm2' || u === 'м2' || u === 'м²') return 'm²';
+  if (u === 'm3' || u === 'м3' || u === 'м³') return 'm³';
+  if (u === 'lm' || u === 'мп' || u === 'пм') return 'm';
+  if (u === 'hrs' || u === 'h' || u === 'год') return 'h';
+  if (u === 'pcs' || u === 'шт') return 'pcs';
+  return unit || 'm²';
+}
 
 interface InvoiceItem {
   quantity: number;
@@ -130,8 +145,46 @@ export const InvoiceForm: React.FC = () => {
         }
 
         const preselectedProjectId = searchParams.get('project_id');
+        const fromProject = searchParams.get('from_project') === '1';
         if (preselectedProjectId) {
           setFormData((prev) => ({ ...prev, project_id: preselectedProjectId }));
+          if (fromProject) {
+            try {
+              const bundle = await fetchProjectBundle(preselectedProjectId);
+              const project = bundle.project;
+              setFormData((prev) => ({
+                ...prev,
+                project_id: preselectedProjectId,
+                client_id: project.client_id || prev.client_id,
+                client_name: project.client_name || prev.client_name,
+                object_address: project.address || prev.object_address,
+                currency: project.currency || prev.currency,
+                notes: prev.notes || `Об'єкт: ${project.name}`,
+              }));
+              if (bundle.workItems.length > 0) {
+                setItems(
+                  bundle.workItems.map((w) => {
+                    const quantity = Number(w.quantity) || 0;
+                    const price = Number(w.unit_price) || 0;
+                    const unit = mapProjectUnitToInvoice(w.unit);
+                    return {
+                      quantity,
+                      quantityDisplay: String(quantity),
+                      unit,
+                      price,
+                      priceDisplay: String(price),
+                      material: '',
+                      materialDisplay: '',
+                      description: w.title,
+                      total: calculateLineTotal(quantity, price, 0),
+                    };
+                  })
+                );
+              }
+            } catch (err) {
+              console.warn('Project prefill failed', err);
+            }
+          }
         }
       }
     } finally {

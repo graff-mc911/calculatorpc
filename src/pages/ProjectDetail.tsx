@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
   Camera,
   ChevronDown,
   ChevronRight,
-  ExternalLink,
+  Copy,
   FileText,
-  Minus,
+  MoreHorizontal,
   Pencil,
-  Plus,
   Trash2,
   X,
 } from 'lucide-react';
@@ -20,7 +19,6 @@ import { useToastContext } from '../contexts/ToastContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { QuickActionsBar } from '../components/QuickActionsBar';
 import { MoneyInput, QtyInput } from '../components/projects/MoneyInput';
 import { EXPENSE_CATEGORIES, categoryI18nKey } from '../lib/expenseCategories';
 import {
@@ -32,7 +30,6 @@ import {
 import { computeProjectMetrics, lineTotal } from '../lib/projectMetrics';
 import { shareProjectEstimatePdf, type ProjectPdfMode } from '../lib/projectPdf';
 import {
-  PROJECT_STATUSES,
   addExpense,
   addPrepayment,
   addWorkItem,
@@ -45,7 +42,6 @@ import {
   updateProject,
   updateWorkItem,
   uploadProjectReceipt,
-  type ProjectStatus,
   type ProjectWorkItem,
 } from '../lib/projectsApi';
 import { CATALOG_WORKS, type WorkCategory } from '../data/priceCatalogSeed';
@@ -57,10 +53,8 @@ import {
 import { translateUnit } from '../lib/languages';
 import { supabase } from '../lib/supabase';
 
-type Tab = 'works' | 'expenses' | 'prepayments';
-type Sheet = null | 'work' | 'expense' | 'prepayment' | 'pdf';
+type Sheet = null | 'work' | 'expense' | 'prepayment' | 'pdf' | 'menu';
 
-/** All catalog categories that have seed works (skip empty `other`). */
 const TEMPLATE_GROUPS: WorkCategory[] = [
   'demolition',
   'masonry',
@@ -79,34 +73,12 @@ const TEMPLATE_GROUPS: WorkCategory[] = [
   'outdoor',
 ];
 
-const STAGE_PRESETS = [
-  { id: 'Bathroom', en: 'Bathroom', uk: 'Ванна', de: 'Bad' },
-  { id: 'Kitchen', en: 'Kitchen', uk: 'Кухня', de: 'Küche' },
-  { id: 'Living', en: 'Living', uk: 'Вітальня', de: 'Wohnzimmer' },
-  { id: 'Hall', en: 'Hall', uk: 'Коридор', de: 'Flur' },
-  { id: 'Facade', en: 'Facade', uk: 'Фасад', de: 'Fassade' },
-  { id: 'Roof', en: 'Roof', uk: 'Дах', de: 'Dach' },
-] as const;
-
-function statusLabel(status: string, t: (k: string) => string): string {
-  const key = `projectStatus_${status}`;
-  const v = t(key);
-  return v === key ? status.replace('_', ' ') : v;
-}
-
-function statusChipClass(status: string): string {
-  switch (status) {
-    case 'draft':
-      return 'cpc-badge-draft border-transparent';
-    case 'in_progress':
-      return 'cpc-badge-wait border-transparent';
-    case 'completed':
-      return 'cpc-badge-paid border-transparent';
-    case 'paid':
-      return 'cpc-badge-paid border-transparent';
-    default:
-      return 'cpc-badge-draft border-transparent';
+function formatCompact(value: number, currency: string) {
+  const n = Number.isFinite(value) ? value : 0;
+  if (Math.abs(n - Math.round(n)) < 0.005) {
+    return formatCurrency(Math.round(n), currency).replace(/,00(?=\s)/, '');
   }
+  return formatCurrency(n, currency);
 }
 
 export default function ProjectDetail() {
@@ -117,17 +89,17 @@ export default function ProjectDetail() {
   const { showSuccess, showError } = useToastContext();
   const receiptRef = useRef<HTMLInputElement>(null);
 
-  const [tab, setTab] = useState<Tab>('works');
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [editingWorkId, setEditingWorkId] = useState<string | null>(null);
 
-  const [workCategory, setWorkCategory] = useState<WorkCategory>('tiling');
+  const [workCategory, setWorkCategory] = useState<WorkCategory>('plaster');
   const [templateId, setTemplateId] = useState('');
   const [workTitle, setWorkTitle] = useState('');
   const [workGroup, setWorkGroup] = useState('');
   const [workQty, setWorkQty] = useState('1');
   const [workUnit, setWorkUnit] = useState('m2');
   const [workPrice, setWorkPrice] = useState('');
-  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({ tiling: true });
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({ plaster: true });
 
   const [expTitle, setExpTitle] = useState('');
   const [expAmount, setExpAmount] = useState('');
@@ -139,13 +111,10 @@ export default function ProjectDetail() {
   const [prepDate, setPrepDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [prepNote, setPrepNote] = useState('');
 
-  const [budgetDraft, setBudgetDraft] = useState('');
-  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
-  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
-  const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
   const [editingMeta, setEditingMeta] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
+  const [clientDraft, setClientDraft] = useState('');
 
   const { data: bundle, isLoading, error, isError } = useQuery({
     queryKey: ['project-bundle', id],
@@ -175,26 +144,8 @@ export default function ProjectDetail() {
     if (!bundle) return;
     setNameDraft(bundle.project.name || '');
     setAddressDraft(bundle.project.address || '');
-    setBudgetDraft(
-      Number(bundle.project.expense_budget)
-        ? formatMoneyInput(Number(bundle.project.expense_budget), 2)
-        : ''
-    );
-    const qd: Record<string, string> = {};
-    const pd: Record<string, string> = {};
-    const gd: Record<string, string> = {};
-    for (const w of bundle.workItems) {
-      qd[w.id] = formatQtyDisplay(Number(w.quantity));
-      pd[w.id] = formatMoneyInput(Number(w.unit_price), 2);
-      gd[w.id] = w.group_key || '';
-    }
-    setQtyDrafts(qd);
-    setPriceDrafts(pd);
-    setGroupDrafts(gd);
-  }, [
-    bundle?.project.updated_at,
-    bundle?.workItems.map((w) => `${w.id}:${w.quantity}:${w.unit_price}:${w.group_key}`).join('|'),
-  ]);
+    setClientDraft(bundle.project.client_id || '');
+  }, [bundle?.project.updated_at]);
 
   const metrics = useMemo(() => {
     if (!bundle) return computeProjectMetrics([], [], [], 0);
@@ -205,17 +156,6 @@ export default function ProjectDetail() {
       Number(bundle.project.expense_budget) || 0
     );
   }, [bundle]);
-
-  const groupedWorks = useMemo(() => {
-    const items = bundle?.workItems || [];
-    const map = new Map<string, typeof items>();
-    for (const item of items) {
-      const key = (item.group_key || '').trim() || '__none__';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(item);
-    }
-    return Array.from(map.entries());
-  }, [bundle?.workItems]);
 
   const templatesByCat = useMemo(() => {
     const map: Record<string, typeof CATALOG_WORKS> = {};
@@ -244,12 +184,49 @@ export default function ProjectDetail() {
     showError(t('saveFailed') || 'Save failed');
   };
 
-  const addWorkMut = useMutation({
+  const resetWorkForm = () => {
+    setEditingWorkId(null);
+    setWorkTitle('');
+    setTemplateId('');
+    setWorkQty('1');
+    setWorkPrice('');
+    setWorkGroup('');
+    setWorkUnit('m2');
+  };
+
+  const openAddWork = () => {
+    resetWorkForm();
+    setSheet('work');
+  };
+
+  const openEditWork = (item: ProjectWorkItem) => {
+    setEditingWorkId(item.id);
+    setWorkTitle(item.title);
+    setWorkCategory((item.category as WorkCategory) || 'other');
+    setTemplateId(item.catalog_work_id || '');
+    setWorkGroup(item.group_key || '');
+    setWorkQty(formatQtyDisplay(Number(item.quantity)));
+    setWorkUnit(item.unit || 'm2');
+    setWorkPrice(formatMoneyInput(Number(item.unit_price), 2));
+    setSheet('work');
+  };
+
+  const saveWorkMut = useMutation({
     mutationFn: async () => {
       const qty = parseMoneyInput(workQty);
       const price = parseMoneyInput(workPrice);
       if (!workTitle.trim() || !Number.isFinite(qty) || qty < 0 || !Number.isFinite(price)) {
         throw new Error('INVALID');
+      }
+      if (editingWorkId) {
+        return updateWorkItem(editingWorkId, {
+          title: workTitle.trim(),
+          category: workCategory,
+          group_key: workGroup,
+          quantity: qty,
+          unit: workUnit,
+          unit_price: price,
+        });
       }
       return addWorkItem({
         project_id: id,
@@ -264,12 +241,9 @@ export default function ProjectDetail() {
       });
     },
     onSuccess: () => {
-      showSuccess(t('projectWorkAdded') || 'Work added');
+      showSuccess(editingWorkId ? t('saved') || 'Saved' : t('projectWorkAdded') || 'Work added');
       setSheet(null);
-      setWorkTitle('');
-      setTemplateId('');
-      setWorkQty('1');
-      setWorkPrice('');
+      resetWorkForm();
       invalidate();
     },
     onError: onSchemaErr,
@@ -324,50 +298,16 @@ export default function ProjectDetail() {
     onError: onSchemaErr,
   });
 
-  const saveStatus = async (status: ProjectStatus) => {
-    try {
-      await updateProject(id, { status });
-      showSuccess(t('saved') || 'Saved');
-      invalidate();
-    } catch (err) {
-      onSchemaErr(err);
-    }
-  };
-
-  const saveClient = async (clientId: string) => {
-    const c = clients.find((x: { id: string }) => x.id === clientId);
-    try {
-      await updateProject(id, {
-        client_id: clientId || null,
-        client_name: c?.name || null,
-        address: c?.address || bundle?.project.address || null,
-      });
-      invalidate();
-    } catch (err) {
-      onSchemaErr(err);
-    }
-  };
-
-  const budgetMut = useMutation({
-    mutationFn: async () => {
-      const n = parseMoneyInput(budgetDraft);
-      if (!Number.isFinite(n) || n < 0) throw new Error('INVALID');
-      return updateProject(id, { expense_budget: n });
-    },
-    onSuccess: () => {
-      showSuccess(t('saved') || 'Saved');
-      invalidate();
-    },
-    onError: onSchemaErr,
-  });
-
   const metaMut = useMutation({
     mutationFn: async () => {
       const name = nameDraft.trim();
       if (!name) throw new Error('INVALID');
+      const c = clients.find((x: { id: string }) => x.id === clientDraft);
       return updateProject(id, {
         name,
         address: addressDraft.trim() || null,
+        client_id: clientDraft || null,
+        client_name: c?.name || bundle?.project.client_name || null,
       });
     },
     onSuccess: () => {
@@ -460,47 +400,34 @@ export default function ProjectDetail() {
     if (labor) setWorkPrice(formatMoneyInput(labor.price, 2));
   };
 
-  const bumpQty = async (itemId: string, quantity: number, delta: number) => {
-    const base = Number.isFinite(quantity) ? quantity : 0;
-    const next = Math.max(0, Math.round((base + delta) * 1000) / 1000);
-    setQtyDrafts((d) => ({ ...d, [itemId]: formatQtyDisplay(next) }));
+  const duplicateWork = async (item: ProjectWorkItem) => {
     try {
-      await updateWorkItem(itemId, { quantity: next });
+      await addWorkItem({
+        project_id: id,
+        title: item.title,
+        category: item.category,
+        catalog_work_id: item.catalog_work_id,
+        group_key: item.group_key,
+        quantity: Number(item.quantity),
+        unit: item.unit,
+        unit_price: Number(item.unit_price),
+        sort_order: (bundle?.workItems.length || 0) + 1,
+      });
+      showSuccess(t('projectWorkAdded') || 'Work added');
       invalidate();
     } catch (err) {
       onSchemaErr(err);
     }
   };
 
-  const commitQty = async (itemId: string, raw: string) => {
-    const n = parseMoneyInput(raw);
-    if (!Number.isFinite(n) || n < 0) return;
-    try {
-      await updateWorkItem(itemId, { quantity: n });
-      invalidate();
-    } catch (err) {
-      onSchemaErr(err);
-    }
-  };
-
-  const commitPrice = async (itemId: string, raw: string) => {
-    const price = parseMoneyInput(raw);
-    if (!Number.isFinite(price)) return;
-    try {
-      await updateWorkItem(itemId, { unit_price: price });
-      invalidate();
-    } catch (err) {
-      onSchemaErr(err);
-    }
-  };
-
-  const commitGroup = async (itemId: string, group_key: string) => {
-    try {
-      await updateWorkItem(itemId, { group_key });
-      invalidate();
-    } catch (err) {
-      onSchemaErr(err);
-    }
+  const createInvoice = () => {
+    if (!bundle) return;
+    const params = new URLSearchParams({
+      project_id: id,
+      from_project: '1',
+    });
+    if (bundle.project.client_id) params.set('client_id', bundle.project.client_id);
+    navigate(`/invoices/new?${params.toString()}`);
   };
 
   if (isLoading) {
@@ -517,7 +444,7 @@ export default function ProjectDetail() {
         <button
           type="button"
           onClick={() => navigate('/projects')}
-          className="text-white/60 text-sm mb-4 inline-flex items-center gap-2 min-h-[44px]"
+          className="cpc-muted text-sm mb-4 inline-flex items-center gap-2 min-h-[44px] bg-transparent border-0"
         >
           <ArrowLeft size={16} /> {t('back')}
         </button>
@@ -531,13 +458,22 @@ export default function ProjectDetail() {
 
   const { project, workItems, expenses, prepayments } = bundle;
   const currency = project.currency || 'EUR';
-  const progressPct = Math.round(metrics.expenseProgressCapped * 100);
-  const rawProgressPct = Math.round(metrics.expenseProgress * 100);
+  const objectPrice =
+    metrics.estimateTotal > 0
+      ? metrics.estimateTotal
+      : Number(project.expense_budget) || 0;
+  const clientLabel = project.client_name || t('noClient') || 'Без клієнта';
+  const recentExpenses = [...expenses].sort((a, b) =>
+    String(b.expense_date || b.created_at).localeCompare(String(a.expense_date || a.created_at))
+  );
+  const recentPayments = [...prepayments].sort((a, b) =>
+    String(b.paid_at || b.created_at).localeCompare(String(a.paid_at || a.created_at))
+  );
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-4">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 mb-3">
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-8">
+      {/* HEADER */}
+      <div className="flex items-start gap-2 mb-3">
         <button
           type="button"
           onClick={() => navigate('/projects')}
@@ -552,22 +488,28 @@ export default function ProjectDetail() {
         >
           <ArrowLeft size={18} />
         </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-medium truncate leading-tight" style={{ color: 'var(--cpc-text)' }}>
+        <div className="flex-1 min-w-0 pt-0.5">
+          <h1 className="text-[18px] font-medium truncate leading-tight" style={{ color: 'var(--cpc-text)' }}>
             {project.name}
           </h1>
-          <p className="text-xs truncate mt-0.5 cpc-muted">
-            {project.client_name || t('noClient') || 'No client'}
-            {project.address ? ` · ${project.address}` : ''}
-          </p>
+          <p className="cpc-muted text-[12px] truncate mt-0.5">{clientLabel}</p>
         </div>
         <button
           type="button"
-          onClick={() => {
-            setNameDraft(project.name || '');
-            setAddressDraft(project.address || '');
-            setEditingMeta((v) => !v);
+          onClick={() => setEditingMeta((v) => !v)}
+          className="min-h-[44px] px-3 text-[12px] font-medium shrink-0"
+          style={{
+            background: 'var(--cpc-card)',
+            border: '1px solid var(--cpc-line)',
+            borderRadius: 10,
+            color: 'var(--cpc-text)',
           }}
+        >
+          Редагувати
+        </button>
+        <button
+          type="button"
+          onClick={() => setSheet('menu')}
           className="w-11 h-11 shrink-0 flex items-center justify-center"
           style={{
             background: 'var(--cpc-card)',
@@ -575,431 +517,357 @@ export default function ProjectDetail() {
             borderRadius: 12,
             color: 'var(--cpc-muted)',
           }}
-          aria-label={t('edit') || 'Edit'}
+          aria-label="More"
         >
-          <Pencil size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm(t('projectDeleteConfirm') || 'Delete this project?')) {
-              deleteMut.mutate();
-            }
-          }}
-          className="w-11 h-11 shrink-0 flex items-center justify-center text-red-300"
-          style={{
-            background: 'rgba(200,80,80,0.1)',
-            border: '1px solid rgba(200,80,80,0.25)',
-            borderRadius: 12,
-          }}
-          aria-label={t('delete')}
-        >
-          <Trash2 size={16} />
+          <MoreHorizontal size={18} />
         </button>
       </div>
 
       {editingMeta && (
-        <div className="mb-3 rounded-2xl border border-white/10 bg-white/[0.05] p-3 space-y-2.5">
+        <div className="cpc-card mb-3 space-y-2.5">
+          <Input label="Назва об’єкта" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
+          {clients.length > 0 && (
+            <Select label="Клієнт" value={clientDraft} onChange={(e) => setClientDraft(e.target.value)}>
+              <option value="">—</option>
+              {clients.map((c: { id: string; name: string }) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          )}
           <Input
-            label={t('projectName') || 'Project name'}
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value)}
-          />
-          <Input
-            label={t('address') || 'Site address'}
+            label="Адреса"
             value={addressDraft}
             onChange={(e) => setAddressDraft(e.target.value)}
-            placeholder={t('projectAddressPlaceholder') || 'Site / object address'}
           />
           <div className="flex gap-2">
             <Button
-              type="button"
-              className="flex-1"
+              className="flex-1 min-h-[44px]"
+              style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
               disabled={metaMut.isPending || !nameDraft.trim()}
               onClick={() => metaMut.mutate()}
             >
-              {t('save') || 'Save'}
+              {t('save') || 'Зберегти'}
             </Button>
             <Button
-              type="button"
               variant="secondary"
-              className="flex-1"
+              className="flex-1 min-h-[44px]"
               onClick={() => setEditingMeta(false)}
             >
-              {t('cancel') || 'Cancel'}
+              {t('cancel') || 'Скасувати'}
             </Button>
           </div>
         </div>
       )}
 
-      {/* Status chips */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {PROJECT_STATUSES.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => saveStatus(s)}
-            className={`min-h-[44px] px-3 rounded-full text-[11px] font-semibold border transition-all ${
-              project.status === s
-                ? statusChipClass(s)
-                : 'bg-transparent text-white/35 border-white/10'
-            }`}
-          >
-            {statusLabel(s, t)}
-          </button>
-        ))}
-      </div>
-
-      {clients.length > 0 && (
-        <div className="mb-3">
-          <Select
-            label={t('clients') || 'Client'}
-            value={project.client_id || ''}
-            onChange={(e) => saveClient(e.target.value)}
-          >
-            <option value="">{t('noClient') || 'No client'}</option>
-            {clients.map((c: { id: string; name: string }) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      )}
-
-      {/* Balance + invoice count — calculator mockup header card */}
-      <div className="cpc-card flex items-center justify-between gap-2 mb-2">
-        <div>
-          <small className="cpc-card-label">{t('totalBalance') === 'totalBalance' ? 'Загальний баланс' : t('totalBalance')}</small>
-          <b className="block text-[18px] font-medium cpc-copper tabular-nums">
-            {formatCurrency(metrics.projectedProfit, currency)}
-          </b>
-        </div>
-        <div className="text-right cpc-muted text-[12px]">
-          {t('invoices') || 'Рахунків'}:{' '}
-          <b style={{ color: 'var(--cpc-text)' }}>{workItems.length}</b>
-        </div>
-      </div>
-
-      {/* Metrics dashboard */}
-      <div className="grid grid-cols-2 gap-1.5 mb-2">
-        {[
-          { label: t('projectEstimate') || 'Estimate', value: metrics.estimateTotal, copper: false },
-          { label: t('projectReceived') || 'Received', value: metrics.received, copper: false },
-          { label: t('projectBalanceDue') || 'Balance due', value: metrics.balanceDue, copper: true },
-          { label: t('projectExpenses') || 'Expenses', value: metrics.expenses, copper: false },
-        ].map((m) => (
-          <div key={m.label} className="cpc-card">
-            <small className="cpc-card-label">{m.label}</small>
-            <b
-              className={`block text-[15px] font-medium leading-tight tabular-nums ${m.copper ? 'cpc-copper' : ''}`}
-              style={m.copper ? undefined : { color: 'var(--cpc-text)' }}
-            >
-              {formatCurrency(m.value, currency)}
+      {/* ФІНАНСОВИЙ БЛОК */}
+      <div className="cpc-card mb-3">
+        <div className="flex items-end justify-between gap-2 mb-2">
+          <div>
+            <small className="cpc-card-label">Ціна об’єкта</small>
+            <b className="block text-[22px] font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+              {formatCompact(objectPrice, currency)}
             </b>
           </div>
-        ))}
-      </div>
-
-      {/* Client cost + profit card (mockup calculator) */}
-      <div className="flex items-center justify-between px-0.5 mb-2">
-        <span className="cpc-muted text-[12px]">{t('projectEstimate') || 'Вартість для клієнта'}</span>
-        <b className="text-[16px] font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
-          {formatCurrency(metrics.estimateTotal, currency)}
-        </b>
-      </div>
-      <div className="cpc-profit mb-3">
-        <div className="text-[11px]">{t('projectProfit') || 'Прогнозований прибуток'}</div>
-        <div className="flex items-center justify-between gap-2">
-          <b className="text-[22px] font-medium tabular-nums">
-            {formatCurrency(metrics.projectedProfit, currency)}
-          </b>
-          <b className="text-[12px] font-medium tabular-nums">
-            {Number.isFinite(metrics.marginPct) ? `${metrics.marginPct.toFixed(0)}%` : '0%'}
-          </b>
         </div>
-      </div>
-
-      {/* Overpayment — separate from balance due, never breaks UI */}
-      {metrics.overpayment > 0 && (
-        <div className="mb-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-3">
-          <p className="text-emerald-200/70 text-[10px] uppercase tracking-wider mb-1">
-            {t('projectOverpayment') || 'Overpayment'}
-          </p>
-          <p className="text-emerald-200 text-[15px] font-semibold tabular-nums">
-            {formatCurrency(metrics.overpayment, currency)}
-          </p>
-          <p className="text-emerald-200/50 text-[10px] mt-1">
-            {t('projectOverpaymentHint') || 'Prepayments exceed estimate'}
-          </p>
-        </div>
-      )}
-
-      {/* Budget progress — bar capped 100%, exceeded label when over */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-3 mb-3">
-        <div className="flex items-end justify-between gap-2 mb-2">
-          <p className="text-white/50 text-xs pb-2">{t('projectExpenseBudget') || 'Expense budget'}</p>
-          <div className="w-36">
-            <MoneyInput
-              value={budgetDraft}
-              onChange={setBudgetDraft}
-              onCommit={() => budgetMut.mutate()}
-              currencyHint={currencySymbol}
-              inputClassName="!py-2 !text-sm"
-            />
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] mb-3">
+          <div className="flex justify-between gap-2">
+            <span className="cpc-muted">Отримано</span>
+            <b className="tabular-nums font-medium" style={{ color: 'var(--cpc-text)' }}>
+              {formatCompact(metrics.received, currency)}
+            </b>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="cpc-muted">Залишок</span>
+            <b className="tabular-nums font-medium cpc-copper">
+              {formatCompact(metrics.balanceDue, currency)}
+            </b>
+          </div>
+          <div className="flex justify-between gap-2 col-span-2">
+            <span className="cpc-muted">Витрачено</span>
+            <b className="tabular-nums font-medium" style={{ color: 'var(--cpc-text)' }}>
+              {formatCompact(metrics.expenses, currency)}
+            </b>
           </div>
         </div>
-        <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-          <motion.div
-            className={`h-full ${metrics.budgetExceeded ? 'bg-red-400' : 'bg-teal-400'}`}
-            initial={{ width: 0 }}
-            animate={{ width: `${progressPct}%` }}
-            transition={{ duration: 0.4 }}
-          />
-        </div>
-        <div className="flex items-center justify-between gap-2 mt-1.5">
-          <p className="text-white/35 text-[10px] tabular-nums">
-            {formatCurrency(metrics.expenses, currency)} /{' '}
-            {formatCurrency(metrics.budgetBase, currency)} ({progressPct}%)
-          </p>
-          {metrics.budgetExceeded && (
-            <p className="text-red-300 text-[10px] font-semibold shrink-0">
-              {t('projectBudgetExceeded') || 'Budget exceeded'}
-              {rawProgressPct > 100 ? ` · ${rawProgressPct}%` : ''}
-            </p>
-          )}
+        <div className="cpc-profit">
+          <div className="text-[11px] font-medium tracking-wide">ПРИБУТОК</div>
+          <div className="flex items-end justify-between gap-2 mt-0.5">
+            <b className="text-[26px] font-semibold tabular-nums leading-none">
+              {formatCompact(metrics.projectedProfit, currency)}
+            </b>
+            <b className="text-[13px] font-medium tabular-nums">
+              Margin {Number.isFinite(metrics.marginPct) ? metrics.marginPct.toFixed(1) : '0'}%
+            </b>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-2xl bg-white/[0.06] border border-white/10 mb-3">
-        {(
-          [
-            ['works', t('projectWorks') || 'Works'],
-            ['expenses', t('projectExpenses') || 'Expenses'],
-            ['prepayments', t('projectPrepayments') || 'Prepayments'],
-          ] as const
-        ).map(([key, label]) => (
+      {/* ШВИДКІ ДІЇ */}
+      <div className="grid grid-cols-4 gap-1.5 mb-4">
+        {[
+          { key: 'work', label: 'Робота', onClick: openAddWork },
+          { key: 'exp', label: 'Витрата', onClick: () => setSheet('expense') },
+          { key: 'adv', label: 'Аванс', onClick: () => setSheet('prepayment') },
+          { key: 'inv', label: 'Рахунок', onClick: createInvoice },
+        ].map((a) => (
           <button
-            key={key}
+            key={a.key}
             type="button"
-            onClick={() => setTab(key)}
-            className={`flex-1 min-h-[44px] text-xs rounded-xl transition-all ${
-              tab === key ? 'bg-white/12 text-white font-semibold shadow' : 'text-white/45'
-            }`}
+            onClick={a.onClick}
+            className="min-h-[52px] text-[12px] font-medium active:scale-[0.98] transition-transform"
+            style={{
+              background: 'var(--cpc-card)',
+              border: '1px solid var(--cpc-line)',
+              borderRadius: 10,
+              color: 'var(--cpc-copper-light)',
+            }}
           >
-            {label}
+            + {a.label}
           </button>
         ))}
       </div>
 
-      {tab === 'works' && (
-        <div className="space-y-3">
-          {workItems.length === 0 ? (
-            <p className="text-white/40 text-sm text-center py-6">
-              {t('projectWorksEmpty') || 'Add works from templates'}
-            </p>
-          ) : (
-            groupedWorks.map(([groupKey, items]) => (
-              <div key={groupKey} className="space-y-2">
-                <p className="text-orange-300/80 text-[11px] font-semibold uppercase tracking-wider px-1">
-                  {groupKey === '__none__' ? t('projectUngrouped') || 'General' : groupKey}
-                </p>
-                {items.map((item: ProjectWorkItem) => (
-                  <div
-                    key={item.id}
-                    className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.03] px-3 py-3"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="min-w-0">
-                        <p className="text-white text-sm font-medium leading-snug">{item.title}</p>
-                        <p className="text-white/35 text-[10px] mt-0.5">
-                          {localizedCategoryName(item.category, language)} ·{' '}
-                          {translateUnit(item.unit, t)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={async () => {
+      {/* РОБОТИ */}
+      <section className="mb-4">
+        <div className="flex items-center justify-between mb-2 px-0.5">
+          <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
+            Роботи
+          </h2>
+          <button
+            type="button"
+            onClick={openAddWork}
+            className="text-[12px] cpc-copper bg-transparent border-0 min-h-[36px]"
+          >
+            + Робота
+          </button>
+        </div>
+        {workItems.length === 0 ? (
+          <div className="cpc-card text-center py-5">
+            <p className="cpc-muted text-sm mb-2">Ще немає робіт</p>
+            <button type="button" className="cpc-btn-primary" onClick={openAddWork}>
+              Додати роботу
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {workItems.map((item) => {
+              const qty = Number(item.quantity) || 0;
+              const price = Number(item.unit_price) || 0;
+              const sum = lineTotal(qty, price);
+              const unitLabel = translateUnit(item.unit, t) || item.unit;
+              return (
+                <div key={item.id} className="cpc-card">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-[14px] truncate" style={{ color: 'var(--cpc-text)' }}>
+                        {item.title}
+                      </p>
+                      <p className="cpc-muted text-[12px] mt-0.5 tabular-nums">
+                        {formatQtyDisplay(qty)} {unitLabel} × {formatCompact(price, currency)}
+                      </p>
+                    </div>
+                    <b className="tabular-nums text-[14px] font-medium shrink-0" style={{ color: 'var(--cpc-text)' }}>
+                      {formatCompact(sum, currency)}
+                    </b>
+                  </div>
+                  <div className="flex gap-1 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditWork(item)}
+                      className="flex-1 min-h-[40px] text-[11px] inline-flex items-center justify-center gap-1"
+                      style={{
+                        background: 'var(--cpc-bg)',
+                        border: '1px solid var(--cpc-line)',
+                        borderRadius: 8,
+                        color: 'var(--cpc-muted)',
+                      }}
+                    >
+                      <Pencil size={12} /> Редаг.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => duplicateWork(item)}
+                      className="flex-1 min-h-[40px] text-[11px] inline-flex items-center justify-center gap-1"
+                      style={{
+                        background: 'var(--cpc-bg)',
+                        border: '1px solid var(--cpc-line)',
+                        borderRadius: 8,
+                        color: 'var(--cpc-muted)',
+                      }}
+                    >
+                      <Copy size={12} /> Дубль
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!window.confirm('Видалити роботу?')) return;
+                        try {
                           await deleteWorkItem(item.id, id);
                           invalidate();
-                        }}
-                        className="w-11 h-11 flex items-center justify-center text-white/30 hover:text-red-300"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-
-                    <input
-                      value={groupDrafts[item.id] ?? item.group_key ?? ''}
-                      onChange={(e) =>
-                        setGroupDrafts((d) => ({ ...d, [item.id]: e.target.value }))
-                      }
-                      onBlur={(e) => commitGroup(item.id, e.target.value.trim())}
-                      placeholder={t('projectGroup') || 'Room / stage'}
-                      className="w-full mb-2 min-h-[44px] bg-black/25 border border-white/10 rounded-lg text-white/80 text-xs px-2.5 py-2 focus:outline-none focus:border-orange-400/50"
-                    />
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
-                        onClick={() => bumpQty(item.id, Number(item.quantity), -1)}
-                        aria-label="−"
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <QtyInput
-                        value={qtyDrafts[item.id] ?? formatQtyDisplay(Number(item.quantity))}
-                        onChange={(v) => setQtyDrafts((d) => ({ ...d, [item.id]: v }))}
-                        onCommit={() => commitQty(item.id, qtyDrafts[item.id] ?? '')}
-                        ariaLabel={t('quantity')}
-                      />
-                      <button
-                        type="button"
-                        className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
-                        onClick={() => bumpQty(item.id, Number(item.quantity), 1)}
-                        aria-label="+"
-                      >
-                        <Plus size={16} />
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <MoneyInput
-                          value={
-                            priceDrafts[item.id] ?? formatMoneyInput(Number(item.unit_price), 2)
-                          }
-                          onChange={(v) => setPriceDrafts((d) => ({ ...d, [item.id]: v }))}
-                          onCommit={() => commitPrice(item.id, priceDrafts[item.id] ?? '')}
-                          currencyHint={currencySymbol}
-                          inputClassName="!py-2.5 !text-sm !rounded-lg"
-                        />
-                      </div>
-                      <span className="text-white/85 text-xs font-semibold tabular-nums shrink-0 w-[76px] text-right">
-                        {formatCurrency(lineTotal(item.quantity, item.unit_price), currency)}
-                      </span>
-                    </div>
+                        } catch (err) {
+                          onSchemaErr(err);
+                        }
+                      }}
+                      className="min-h-[40px] px-3 text-[11px] inline-flex items-center justify-center"
+                      style={{
+                        background: 'rgba(200,80,80,0.12)',
+                        border: '1px solid rgba(200,80,80,0.25)',
+                        borderRadius: 8,
+                        color: '#f0a0a0',
+                      }}
+                      aria-label={t('delete')}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-      {tab === 'expenses' && (
-        <div className="space-y-2">
-          {expenses.length === 0 ? (
-            <p className="text-white/40 text-sm text-center py-10">
-              {t('projectExpensesEmpty') || 'No expenses yet'}
-            </p>
-          ) : (
-            expenses.map((e) => (
-              <div
-                key={e.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-3.5 flex items-center gap-2"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{e.title}</p>
-                  <p className="text-white/35 text-[10px]">
-                    {t(categoryI18nKey(e.category)) || e.category} · {e.expense_date}
+      {/* ВИТРАТИ */}
+      <section className="mb-4">
+        <div className="flex items-center justify-between mb-2 px-0.5">
+          <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
+            Витрати
+          </h2>
+          <button
+            type="button"
+            onClick={() => setSheet('expense')}
+            className="text-[12px] cpc-copper bg-transparent border-0 min-h-[36px]"
+          >
+            + Витрата
+          </button>
+        </div>
+        {recentExpenses.length === 0 ? (
+          <div className="cpc-card cpc-muted text-sm text-center py-4">Витрат ще немає</div>
+        ) : (
+          <div className="cpc-card divide-y" style={{ borderColor: 'var(--cpc-line)' }}>
+            {recentExpenses.slice(0, 8).map((e) => (
+              <div key={e.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  <p className="text-[13px] truncate" style={{ color: 'var(--cpc-text)' }}>
+                    {e.title || t(categoryI18nKey(String(e.category))) || e.category}
+                  </p>
+                  <p className="cpc-muted text-[11px]">
+                    {t(categoryI18nKey(String(e.category))) || e.category}
                   </p>
                 </div>
-                <p className="text-red-300 text-sm font-semibold tabular-nums shrink-0">
-                  {formatCurrency(Number(e.amount), currency)}
-                </p>
-                {e.receipt_url ? (
-                  <a
-                    href={e.receipt_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-11 h-11 shrink-0 text-sky-300/80 hover:text-sky-200 flex items-center justify-center"
-                    aria-label={t('projectReceiptOpen') || 'Open receipt'}
-                    title={t('projectReceiptOpen') || 'Open receipt'}
+                <div className="flex items-center gap-1 shrink-0">
+                  <b className="tabular-nums text-[13px]" style={{ color: 'var(--cpc-text)' }}>
+                    {formatCompact(Number(e.amount), currency)}
+                  </b>
+                  <button
+                    type="button"
+                    className="w-9 h-9 flex items-center justify-center bg-transparent border-0"
+                    style={{ color: 'var(--cpc-muted)' }}
+                    onClick={async () => {
+                      try {
+                        await deleteExpense(e.id, id);
+                        invalidate();
+                      } catch (err) {
+                        onSchemaErr(err);
+                      }
+                    }}
+                    aria-label={t('delete')}
                   >
-                    <ExternalLink size={15} />
-                  </a>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await deleteExpense(e.id, id);
-                    invalidate();
-                  }}
-                  className="w-11 h-11 shrink-0 text-white/30 hover:text-red-300 flex items-center justify-center"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {tab === 'prepayments' && (
-        <div className="space-y-2">
-          {prepayments.length === 0 ? (
-            <p className="text-white/40 text-sm text-center py-10">
-              {t('projectPrepaymentsEmpty') || 'No prepayments yet'}
-            </p>
-          ) : (
-            prepayments.map((p) => (
-              <div
-                key={p.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-3.5 flex items-center gap-3"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-green-300 text-sm font-semibold tabular-nums">
-                    {formatCurrency(Number(p.amount), currency)}
-                  </p>
-                  <p className="text-white/35 text-[10px]">
-                    {p.paid_at}
-                    {p.note ? ` · ${p.note}` : ''}
-                  </p>
+                    <Trash2 size={13} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await deletePrepayment(p.id, id);
-                    invalidate();
-                  }}
-                  className="w-11 h-11 text-white/30 hover:text-red-300 flex items-center justify-center"
-                >
-                  <Trash2 size={14} />
-                </button>
               </div>
-            ))
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </section>
 
-      {/* Sticky Quick Actions — above BottomNav */}
-      <div
-        className="fixed inset-x-0 z-40 px-3 pointer-events-none"
-        style={{ bottom: 'calc(52px + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <div className="max-w-[430px] mx-auto pointer-events-auto">
-          <QuickActionsBar
-            handlers={{
-              onWork: () => {
-                setTab('works');
-                setSheet('work');
-              },
-              onExpense: () => {
-                setTab('expenses');
-                setSheet('expense');
-              },
-              onAdvance: () => {
-                setTab('prepayments');
-                setSheet('prepayment');
-              },
-              onPdf: () => setSheet('pdf'),
-            }}
-          />
+      {/* ОПЛАТИ */}
+      <section className="mb-4">
+        <div className="flex items-center justify-between mb-2 px-0.5">
+          <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
+            Оплати
+          </h2>
+          <button
+            type="button"
+            onClick={() => setSheet('prepayment')}
+            className="text-[12px] cpc-copper bg-transparent border-0 min-h-[36px]"
+          >
+            + Аванс
+          </button>
         </div>
-      </div>
-      <div className="h-16" aria-hidden />
+        {recentPayments.length === 0 ? (
+          <div className="cpc-card cpc-muted text-sm text-center py-4">Оплат ще немає</div>
+        ) : (
+          <div className="cpc-card">
+            <div className="divide-y" style={{ borderColor: 'var(--cpc-line)' }}>
+              {recentPayments.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-2 py-2 first:pt-0">
+                  <div className="min-w-0">
+                    <p className="text-[13px]" style={{ color: 'var(--cpc-text)' }}>
+                      {p.note?.trim() || 'Аванс / оплата'}
+                    </p>
+                    <p className="cpc-muted text-[11px]">{p.paid_at}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <b className="tabular-nums text-[13px] cpc-copper">
+                      {formatCompact(Number(p.amount), currency)}
+                    </b>
+                    <button
+                      type="button"
+                      className="w-9 h-9 flex items-center justify-center bg-transparent border-0"
+                      style={{ color: 'var(--cpc-muted)' }}
+                      onClick={async () => {
+                        try {
+                          await deletePrepayment(p.id, id);
+                          invalidate();
+                        } catch (err) {
+                          onSchemaErr(err);
+                        }
+                      }}
+                      aria-label={t('delete')}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              className="flex justify-between pt-2 mt-1 text-[13px]"
+              style={{ borderTop: '1px solid var(--cpc-line)' }}
+            >
+              <span className="cpc-muted">Отримано</span>
+              <b className="tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+                {formatCompact(metrics.received, currency)}
+              </b>
+            </div>
+          </div>
+        )}
+      </section>
 
-      {/* Sheets */}
+      {/* РАХУНОК */}
+      <section className="mb-2">
+        <h2 className="text-[13px] font-medium mb-2 px-0.5" style={{ color: 'var(--cpc-text)' }}>
+          Рахунок
+        </h2>
+        <button
+          type="button"
+          onClick={createInvoice}
+          className="cpc-btn-primary w-full min-h-[52px] text-[15px] inline-flex items-center justify-center gap-2"
+          disabled={workItems.length === 0}
+        >
+          <FileText size={18} />
+          Створити рахунок
+        </button>
+        {workItems.length === 0 && (
+          <p className="cpc-muted text-[11px] text-center mt-2">Додайте роботи, щоб виставити рахунок</p>
+        )}
+      </section>
+
+      {/* SHEETS */}
       <AnimatePresence>
         {sheet && (
           <motion.div
@@ -1007,220 +875,186 @@ export default function ProjectDetail() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setSheet(null)}
+            onClick={() => {
+              setSheet(null);
+              resetWorkForm();
+            }}
           >
             <motion.div
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 50, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[430px] max-h-[88vh] overflow-y-auto rounded-2xl bg-[#24313a] border border-white/10 p-4 pb-6"
+              className="w-full max-w-[430px] max-h-[88vh] overflow-y-auto p-4 pb-6"
+              style={{
+                background: 'var(--cpc-card)',
+                border: '1px solid var(--cpc-line)',
+                borderRadius: 16,
+              }}
             >
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-white font-semibold text-sm">
-                  {sheet === 'work' && (t('projectAddWork') || 'Add work')}
-                  {sheet === 'expense' && (t('projectAddExpense') || 'Add expense')}
-                  {sheet === 'prepayment' && (t('projectAddPrepayment') || 'Add prepayment')}
-                  {sheet === 'pdf' && (t('projectPdfShare') || 'Share PDF')}
+                <h2 className="font-semibold text-sm" style={{ color: 'var(--cpc-text)' }}>
+                  {sheet === 'work' && (editingWorkId ? 'Редагувати роботу' : 'Додати роботу')}
+                  {sheet === 'expense' && 'Додати витрату'}
+                  {sheet === 'prepayment' && 'Додати аванс'}
+                  {sheet === 'pdf' && 'PDF'}
+                  {sheet === 'menu' && 'Меню'}
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setSheet(null)}
-                  className="w-11 h-11 flex items-center justify-center text-white/50"
+                  onClick={() => {
+                    setSheet(null);
+                    resetWorkForm();
+                  }}
+                  className="w-11 h-11 flex items-center justify-center bg-transparent border-0"
+                  style={{ color: 'var(--cpc-muted)' }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
+              {sheet === 'menu' && (
+                <div className="space-y-2">
+                  <Button
+                    className="w-full min-h-[48px]"
+                    style={{ background: 'var(--cpc-bg)', color: 'var(--cpc-text)' }}
+                    onClick={() => setSheet('pdf')}
+                  >
+                    PDF кошторис
+                  </Button>
+                  <Button
+                    className="w-full min-h-[48px] !bg-red-500/20 !text-red-200"
+                    onClick={() => {
+                      if (window.confirm(t('projectDeleteConfirm') || 'Видалити об’єкт?')) {
+                        deleteMut.mutate();
+                      }
+                    }}
+                  >
+                    Видалити об’єкт
+                  </Button>
+                </div>
+              )}
+
               {sheet === 'pdf' && (
                 <div className="space-y-2">
-                  <p className="text-white/45 text-xs mb-2">
-                    {t('projectPdfShareHint') ||
-                      'Client estimate hides expenses. Internal report includes costs.'}
-                  </p>
                   <Button
-                    className="w-full min-h-[48px] !bg-cyan-500/25 !text-cyan-100"
+                    className="w-full min-h-[48px]"
+                    style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
                     disabled={pdfMut.isPending}
                     onClick={() => pdfMut.mutate('client')}
                   >
-                    {t('projectPdfClient') || 'Client estimate (commercial)'}
+                    Для клієнта
                   </Button>
                   <Button
-                    className="w-full min-h-[48px] !bg-white/10 !text-white/80"
+                    className="w-full min-h-[48px]"
+                    style={{ background: 'var(--cpc-bg)', color: 'var(--cpc-text)' }}
                     disabled={pdfMut.isPending}
                     onClick={() => pdfMut.mutate('internal')}
                   >
-                    {t('projectPdfInternal') || 'Internal cost report'}
+                    Внутрішній звіт
                   </Button>
                 </div>
               )}
 
               {sheet === 'work' && (
                 <div className="space-y-3">
-                  {/* Expandable work templates */}
-                  <div>
-                    <p className="text-xs text-white/55 mb-1.5 uppercase tracking-wide">
-                      {t('projectTemplates') || 'Templates'}
-                    </p>
-                    <div className="rounded-xl border border-white/10 overflow-hidden divide-y divide-white/10">
-                      {TEMPLATE_GROUPS.map((cat) => {
-                        const open = !!expandedCats[cat];
-                        const list = templatesByCat[cat] || [];
-                        return (
-                          <div key={cat}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedCats((s) => ({ ...s, [cat]: !s[cat] }))
-                              }
-                              className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 text-left bg-white/[0.04] hover:bg-white/[0.07]"
-                            >
-                              {open ? (
-                                <ChevronDown size={16} className="text-orange-300 shrink-0" />
-                              ) : (
-                                <ChevronRight size={16} className="text-white/40 shrink-0" />
-                              )}
-                              <span className="text-white text-sm font-medium flex-1">
-                                {localizedCategoryName(cat, language)}
-                              </span>
-                              <span className="text-white/35 text-[10px]">{list.length}</span>
-                            </button>
-                            {open && (
-                              <div className="max-h-40 overflow-y-auto bg-black/20">
-                                {list.length === 0 ? (
-                                  <p className="text-white/30 text-xs px-3 py-2">—</p>
+                  {!editingWorkId && (
+                    <div>
+                      <p className="cpc-muted text-xs mb-1.5">Шаблони</p>
+                      <div
+                        className="rounded-xl overflow-hidden divide-y"
+                        style={{ border: '1px solid var(--cpc-line)', borderColor: 'var(--cpc-line)' }}
+                      >
+                        {TEMPLATE_GROUPS.map((cat) => {
+                          const open = !!expandedCats[cat];
+                          const list = templatesByCat[cat] || [];
+                          return (
+                            <div key={cat} style={{ borderColor: 'var(--cpc-line)' }}>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedCats((s) => ({ ...s, [cat]: !s[cat] }))}
+                                className="w-full min-h-[44px] flex items-center gap-2 px-3 py-2 text-left bg-transparent border-0"
+                                style={{ color: 'var(--cpc-text)' }}
+                              >
+                                {open ? (
+                                  <ChevronDown size={16} className="cpc-copper shrink-0" />
                                 ) : (
-                                  list.map((w) => (
+                                  <ChevronRight size={16} className="cpc-muted shrink-0" />
+                                )}
+                                <span className="text-sm font-medium flex-1">
+                                  {localizedCategoryName(cat, language)}
+                                </span>
+                                <span className="cpc-muted text-[10px]">{list.length}</span>
+                              </button>
+                              {open && (
+                                <div className="max-h-36 overflow-y-auto" style={{ background: 'var(--cpc-bg)' }}>
+                                  {list.map((w) => (
                                     <button
                                       key={w.id}
                                       type="button"
                                       onClick={() => applyTemplate(w.id, cat)}
-                                      className={`w-full min-h-[44px] text-left px-3 py-2 text-sm border-t border-white/5 ${
-                                        templateId === w.id
-                                          ? 'bg-orange-500/20 text-orange-100'
-                                          : 'text-white/75 hover:bg-white/5'
-                                      }`}
+                                      className="w-full min-h-[44px] text-left px-3 py-2 text-sm border-0"
+                                      style={{
+                                        background:
+                                          templateId === w.id ? 'rgba(200,121,74,0.2)' : 'transparent',
+                                        color:
+                                          templateId === w.id
+                                            ? 'var(--cpc-copper-light)'
+                                            : 'var(--cpc-muted)',
+                                      }}
                                     >
                                       {localizedWorkName(w, language)}
                                     </button>
-                                  ))
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <Input
-                    label={t('description')}
+                    label="Назва"
                     value={workTitle}
                     onChange={(e) => setWorkTitle(e.target.value)}
                   />
-                  <div>
-                    <p className="text-xs text-white/55 mb-1.5 uppercase tracking-wide">
-                      {t('projectGroup') || 'Room / stage'}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {STAGE_PRESETS.map((p) => {
-                        const label =
-                          language === 'uk' ? p.uk : language === 'de' ? p.de : p.en;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setWorkGroup(label)}
-                            className={`min-h-[44px] px-3 rounded-full text-[11px] border ${
-                              workGroup === label || workGroup === p.id
-                                ? 'bg-orange-500/25 text-orange-100 border-orange-400/40'
-                                : 'bg-white/5 text-white/50 border-white/10'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <Input
-                      value={workGroup}
-                      onChange={(e) => setWorkGroup(e.target.value)}
-                      placeholder={t('projectGroupPlaceholder') || 'e.g. Bathroom'}
-                    />
-                  </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <p className="text-xs text-white/55 mb-1.5 uppercase tracking-wide">
-                        {t('quantity')}
-                      </p>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
-                          onClick={() => {
-                            const n = parseMoneyInput(workQty);
-                            const base = Number.isFinite(n) ? n : 0;
-                            setWorkQty(formatQtyDisplay(Math.max(0, base - 1)));
-                          }}
-                        >
-                          <Minus size={14} />
-                        </button>
-                        <QtyInput
-                          value={workQty}
-                          onChange={setWorkQty}
-                          className="!w-full !flex-1"
-                          ariaLabel={t('quantity')}
-                        />
-                        <button
-                          type="button"
-                          className="w-11 h-11 flex items-center justify-center rounded-lg bg-black/25 text-white/70 border border-white/10"
-                          onClick={() => {
-                            const n = parseMoneyInput(workQty);
-                            const base = Number.isFinite(n) ? n : 0;
-                            setWorkQty(formatQtyDisplay(base + 1));
-                          }}
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
+                      <p className="cpc-muted text-xs mb-1.5">Кількість</p>
+                      <QtyInput value={workQty} onChange={setWorkQty} className="!w-full" ariaLabel="qty" />
                     </div>
-                    <Input
-                      label={t('unit')}
-                      value={workUnit}
-                      onChange={(e) => setWorkUnit(e.target.value)}
-                    />
+                    <Input label="Од." value={workUnit} onChange={(e) => setWorkUnit(e.target.value)} />
                     <MoneyInput
-                      label={t('price')}
+                      label="Ціна"
                       value={workPrice}
                       onChange={setWorkPrice}
                       currencyHint={currencySymbol}
                     />
                   </div>
                   <Button
-                    className="w-full min-h-[48px] !bg-orange-500/30 !text-orange-100"
-                    disabled={addWorkMut.isPending}
-                    onClick={() => addWorkMut.mutate()}
+                    className="w-full min-h-[48px]"
+                    style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
+                    disabled={saveWorkMut.isPending}
+                    onClick={() => saveWorkMut.mutate()}
                   >
-                    {t('save')}
+                    {t('save') || 'Зберегти'}
                   </Button>
                 </div>
               )}
 
               {sheet === 'expense' && (
                 <div className="space-y-3">
-                  <Input
-                    label={t('description')}
-                    value={expTitle}
-                    onChange={(e) => setExpTitle(e.target.value)}
-                  />
+                  <Input label="Опис" value={expTitle} onChange={(e) => setExpTitle(e.target.value)} />
                   <MoneyInput
-                    label={t('projectAmount') || 'Amount'}
+                    label="Сума"
                     value={expAmount}
                     onChange={setExpAmount}
                     currencyHint={currencySymbol}
                   />
                   <Select
-                    label={t('category') || 'Category'}
+                    label="Категорія"
                     value={expCategory}
                     onChange={(e) => setExpCategory(e.target.value)}
                   >
@@ -1231,7 +1065,7 @@ export default function ProjectDetail() {
                     ))}
                   </Select>
                   <Input
-                    label={t('date')}
+                    label="Дата"
                     type="date"
                     value={expDate}
                     onChange={(e) => setExpDate(e.target.value)}
@@ -1247,19 +1081,24 @@ export default function ProjectDetail() {
                   <button
                     type="button"
                     onClick={() => receiptRef.current?.click()}
-                    className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 text-white/70 text-sm"
+                    className="w-full min-h-[48px] flex items-center justify-center gap-2 text-sm"
+                    style={{
+                      background: 'var(--cpc-bg)',
+                      border: '1px solid var(--cpc-line)',
+                      borderRadius: 10,
+                      color: 'var(--cpc-muted)',
+                    }}
                   >
                     <Camera size={18} />
-                    {expReceipt
-                      ? expReceipt.name
-                      : t('projectAddReceiptPhoto') || 'Receipt photo (optional)'}
+                    {expReceipt ? expReceipt.name : 'Фото чека (необов’язково)'}
                   </button>
                   <Button
-                    className="w-full min-h-[48px] !bg-orange-500/30 !text-orange-100"
+                    className="w-full min-h-[48px]"
+                    style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
                     disabled={addExpMut.isPending}
                     onClick={() => addExpMut.mutate()}
                   >
-                    {t('save')}
+                    {t('save') || 'Зберегти'}
                   </Button>
                 </div>
               )}
@@ -1267,28 +1106,30 @@ export default function ProjectDetail() {
               {sheet === 'prepayment' && (
                 <div className="space-y-3">
                   <MoneyInput
-                    label={t('projectAmount') || 'Amount'}
+                    label="Сума"
                     value={prepAmount}
                     onChange={setPrepAmount}
                     currencyHint={currencySymbol}
                   />
                   <Input
-                    label={t('date')}
+                    label="Дата"
                     type="date"
                     value={prepDate}
                     onChange={(e) => setPrepDate(e.target.value)}
                   />
                   <Input
-                    label={t('notes')}
+                    label="Нотатка"
                     value={prepNote}
                     onChange={(e) => setPrepNote(e.target.value)}
+                    placeholder="Аванс / оплата"
                   />
                   <Button
-                    className="w-full min-h-[48px] !bg-orange-500/30 !text-orange-100"
+                    className="w-full min-h-[48px]"
+                    style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
                     disabled={addPrepMut.isPending}
                     onClick={() => addPrepMut.mutate()}
                   >
-                    {t('save')}
+                    {t('save') || 'Зберегти'}
                   </Button>
                 </div>
               )}
