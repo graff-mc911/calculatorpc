@@ -29,7 +29,7 @@ const TABS: Tab[] = [
     match: (p) => p === '/projects',
     icon: '▤',
     labelKey: 'navProjects',
-    fallback: 'Проекти',
+    fallback: 'Об’єкти',
   },
   {
     id: 'calculator',
