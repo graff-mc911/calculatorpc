@@ -44,6 +44,30 @@
   --cpc-muted: #9a958c;
   --cpc-on-copper: #1b120c;
   --cpc-page: #0b0d10;
+  /* Keep shell tokens after Tailwind so desktop widths always win */
+  --cpc-shell-max: 430px;
+  --cpc-top-offset: 56px;
+  --cpc-bottom-offset: 140px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --cpc-shell-max: 720px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --cpc-shell-max: 980px;
+    --cpc-top-offset: 112px;
+    --cpc-bottom-offset: 24px;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --cpc-shell-max: 1120px;
+  }
 }
 
 * {
