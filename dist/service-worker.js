@@ -1,7 +1,7 @@
 /* CPC service worker — network-first, clears stale caches on activate.
- * CACHE_BUST: 2026-10-08-cpc-chrome-v2
+ * CACHE_BUST: 2026-10-08-cpc-calc-mockup
  */
-const CACHE_BUST = 'cpc-chrome-v2-20261008';
+const CACHE_BUST = 'cpc-calc-mockup-20261008';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
