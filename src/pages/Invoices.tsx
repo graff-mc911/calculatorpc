@@ -1308,6 +1308,29 @@ export const Invoices: React.FC = () => {
     return counts;
   }, [invoices]);
 
+  /** Same rule as Home «Неоплачено»: draft + sent total_gross. */
+  const unpaidTotal = React.useMemo(
+    () =>
+      invoices
+        .filter((inv) => inv.status === 'sent' || inv.status === 'draft')
+        .reduce((sum, inv) => sum + Number(inv.total_gross ?? inv.gross_total ?? 0), 0),
+    [invoices]
+  );
+
+  /** Paid invoices whose list date (`date`) falls in the current calendar month. */
+  const paidThisMonthTotal = React.useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    return invoices
+      .filter((inv) => {
+        if (inv.status !== 'paid' || !inv.date) return false;
+        const d = new Date(inv.date);
+        return !Number.isNaN(d.getTime()) && d.getFullYear() === y && d.getMonth() === m;
+      })
+      .reduce((sum, inv) => sum + Number(inv.total_gross ?? inv.gross_total ?? 0), 0);
+  }, [invoices]);
+
   return (
     <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
       <div className="flex justify-between items-center mb-3 gap-2">
@@ -1333,6 +1356,26 @@ export const Invoices: React.FC = () => {
           <Plus size={16} />
           Новий рахунок
         </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="cpc-card text-left min-w-0">
+          <small className="cpc-card-label">{t('unpaid') || 'Неоплачено'}</small>
+          <b className="block font-medium cpc-copper tabular-nums truncate">
+            {formatCurrency(unpaidTotal, 'EUR')}
+          </b>
+        </div>
+        <div className="cpc-card text-left min-w-0">
+          <small className="cpc-card-label">
+            {t('paidThisMonth') || 'Оплачено цього місяця'}
+          </small>
+          <b
+            className="block font-medium tabular-nums truncate"
+            style={{ color: 'var(--cpc-text)' }}
+          >
+            {formatCurrency(paidThisMonthTotal, 'EUR')}
+          </b>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
