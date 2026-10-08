@@ -19,6 +19,7 @@ import {
   ProjectsSchemaMissingError,
   type Project,
 } from '../lib/projectsApi';
+import { formatInvoiceNumber, loadCpcSettings } from '../lib/cpcSettings';
 
 interface InvoiceItem {
   quantity: number;
@@ -44,12 +45,14 @@ const emptyItem = (): InvoiceItem => ({
   total: 0,
 });
 
-function defaultDueDate(issueDate: string): string {
+function defaultDueDate(issueDate: string, termsDays?: number): string {
+  const days =
+    typeof termsDays === 'number' ? termsDays : loadCpcSettings().paymentTermsDays;
   const d = new Date(issueDate || new Date().toISOString().split('T')[0]);
   if (Number.isNaN(d.getTime())) {
     return new Date().toISOString().split('T')[0];
   }
-  d.setDate(d.getDate() + 14);
+  d.setDate(d.getDate() + Math.max(0, days));
   return d.toISOString().split('T')[0];
 }
 
@@ -86,18 +89,19 @@ export const InvoiceForm: React.FC = () => {
   const [companyProfile, setCompanyProfile] = useState<any>(null);
 
   const today = new Date().toISOString().split('T')[0];
+  const appDefaults = loadCpcSettings();
   const [formData, setFormData] = useState({
     client_id: '',
     client_name: '',
     document_number: '',
     date: today,
-    due_date: defaultDueDate(today),
+    due_date: defaultDueDate(today, appDefaults.paymentTermsDays),
     work_period_start: today,
     work_period_end: today,
-    currency: 'EUR',
+    currency: appDefaults.currency || 'EUR',
     status: 'draft',
-    vat_enabled: false,
-    vat_rate: 20,
+    vat_enabled: appDefaults.defaultVatPercent > 0,
+    vat_rate: appDefaults.defaultVatPercent > 0 ? appDefaults.defaultVatPercent : 20,
     document_type: 'invoice',
     project_id: '',
     project_area: '',
@@ -252,8 +256,7 @@ export const InvoiceForm: React.FC = () => {
       }
     }
 
-    const year = new Date().getFullYear();
-    const docNumber = `INV-${year}-${String(nextNumber).padStart(4, '0')}`;
+    const docNumber = formatInvoiceNumber(loadCpcSettings(), nextNumber);
 
     setFormData((prev) => ({
       ...prev,

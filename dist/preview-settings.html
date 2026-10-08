@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>CPC Settings preview</title>
+  <style>
+    :root {
+      --cpc-bg: #1a1612;
+      --cpc-card: #241f1a;
+      --cpc-text: #f3ebe3;
+      --cpc-muted: #9a8f84;
+      --cpc-line: #3a322b;
+      --cpc-copper: #b87333;
+      --cpc-copper-light: #d4a574;
+      --cpc-on-copper: #1a120a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(180deg, #221c16, #14110e);
+      color: var(--cpc-text);
+    }
+    .phone {
+      max-width: 390px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding: 16px 12px 40px;
+    }
+    h1 { font-size: 20px; font-weight: 500; margin: 0 0 4px; }
+    .sub { color: var(--cpc-muted); font-size: 13px; margin: 0 0 16px; }
+    .sec { margin-bottom: 16px; }
+    .sec h2 {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cpc-muted);
+      margin: 0 0 8px 2px;
+      font-weight: 600;
+    }
+    .card {
+      background: var(--cpc-card);
+      border: 1px solid var(--cpc-line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    label { display: block; font-size: 12px; color: var(--cpc-muted); margin-bottom: 4px; }
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .inp {
+      width: 100%;
+      min-height: 44px;
+      background: var(--cpc-bg);
+      border: 1px solid var(--cpc-line);
+      border-radius: 10px;
+      color: var(--cpc-text);
+      padding: 0 12px;
+      font-size: 15px;
+    }
+    .row { display: flex; gap: 6px; }
+    .chip {
+      flex: 1;
+      min-height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--cpc-line);
+      background: var(--cpc-bg);
+      color: var(--cpc-text);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .chip.on {
+      background: var(--cpc-copper);
+      border-color: var(--cpc-copper);
+      color: var(--cpc-on-copper);
+    }
+    .btn {
+      width: 100%;
+      min-height: 48px;
+      margin-top: 4px;
+      border: none;
+      border-radius: 10px;
+      background: var(--cpc-copper);
+      color: var(--cpc-on-copper);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 48px;
+      font-size: 14px;
+      border-top: 1px solid var(--cpc-line);
+    }
+    .line:first-child { border-top: 0; }
+    .muted { color: var(--cpc-muted); font-size: 12px; }
+    .copper { color: var(--cpc-copper-light); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <h1>Налаштування</h1>
+    <p class="sub">Бізнес, рахунки, додаток — коротко і по суті</p>
+
+    <div class="sec">
+      <h2>Business · Бізнес</h2>
+      <div class="card">
+        <div class="field"><label>Ім’я</label><div class="inp" style="display:flex;align-items:center">Іван Петренко</div></div>
+        <div class="field"><label>Компанія</label><div class="inp" style="display:flex;align-items:center">ФОП Петренко</div></div>
+        <div class="field"><label>Телефон</label><div class="inp" style="display:flex;align-items:center">+49 170 1234567</div></div>
+        <div class="field"><label>Email</label><div class="inp" style="display:flex;align-items:center">ivan@mail.com</div></div>
+        <div class="field"><label>VAT number</label><div class="inp" style="display:flex;align-items:center">DE123456789</div></div>
+        <div class="field"><label>Bank details</label><div class="inp" style="display:flex;align-items:center">DE89 3704 0044 0532 0130 00</div></div>
+        <button class="btn">Зберегти бізнес</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Documents · Документи</h2>
+      <div class="card">
+        <div class="field"><label>Logo</label><div class="muted">На рахунках PDF</div></div>
+        <div class="field"><label>Invoice prefix</label><div class="inp" style="display:flex;align-items:center">INV</div></div>
+        <div class="field"><label>Invoice numbering</label><div class="muted">Наступний: <span class="copper">INV-2026-0001</span></div></div>
+        <div class="field"><label>Payment terms</label><div class="muted">14 днів на оплату</div></div>
+        <div class="field"><label>VAT %</label><div class="muted">19 для нових рахунків</div></div>
+        <button class="btn">Зберегти документи</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>App · Додаток</h2>
+      <div class="card">
+        <div class="field">
+          <label>Language</label>
+          <div class="row">
+            <button class="chip on">UK</button>
+            <button class="chip">EN</button>
+            <button class="chip">DE</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Currency</label>
+          <div class="row">
+            <button class="chip on">EUR</button>
+            <button class="chip">UAH</button>
+            <button class="chip">USD</button>
+          </div>
+        </div>
+        <div class="line" style="border:0">
+          <div><div>Theme</div><div class="muted">Темна</div></div>
+          <span class="copper">Світла</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Data · Дані</h2>
+      <div class="card">
+        <div class="line"><span>Export data</span><span class="muted">CSV</span></div>
+        <div class="line"><span>Backup</span><span class="muted">JSON</span></div>
+        <div class="line"><span>Account</span><span class="muted">ivan@mail.com</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
