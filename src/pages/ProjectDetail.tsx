@@ -20,7 +20,11 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { MoneyInput, QtyInput } from '../components/projects/MoneyInput';
-import { EXPENSE_CATEGORIES, categoryI18nKey } from '../lib/expenseCategories';
+import {
+  EXPENSE_CATEGORIES,
+  categoryI18nKey,
+  categoryLabelUk,
+} from '../lib/expenseCategories';
 import {
   formatCurrency,
   formatMoneyInput,
@@ -105,6 +109,7 @@ export default function ProjectDetail() {
   const [expAmount, setExpAmount] = useState('');
   const [expCategory, setExpCategory] = useState('materials');
   const [expDate, setExpDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expNote, setExpNote] = useState('');
   const [expReceipt, setExpReceipt] = useState<File | null>(null);
 
   const [prepAmount, setPrepAmount] = useState('');
@@ -264,6 +269,7 @@ export default function ProjectDetail() {
         amount,
         expense_date: expDate,
         receipt_url,
+        notes: expNote.trim() || null,
       });
     },
     onSuccess: () => {
@@ -271,6 +277,7 @@ export default function ProjectDetail() {
       setSheet(null);
       setExpTitle('');
       setExpAmount('');
+      setExpNote('');
       setExpReceipt(null);
       invalidate();
     },
@@ -602,6 +609,26 @@ export default function ProjectDetail() {
             </b>
           </div>
         </div>
+        {metrics.budgetExceeded && (
+          <div
+            className="mt-3 px-3 py-2 text-[12px] font-medium"
+            style={{
+              background: 'rgba(200,80,80,0.14)',
+              border: '1px solid rgba(200,80,80,0.35)',
+              borderRadius: 10,
+              color: '#f0a8a8',
+            }}
+            role="alert"
+          >
+            {t('projectBudgetExceeded') || 'Бюджет перевищено'}
+            {metrics.budgetBase > 0 && (
+              <span className="block font-normal mt-0.5 opacity-90">
+                Витрачено {formatCompact(metrics.expenses, currency)} з{' '}
+                {formatCompact(metrics.budgetBase, currency)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ШВИДКІ ДІЇ */}
@@ -747,14 +774,23 @@ export default function ProjectDetail() {
           <div className="cpc-card cpc-muted text-sm text-center py-4">Витрат ще немає</div>
         ) : (
           <div className="cpc-card divide-y" style={{ borderColor: 'var(--cpc-line)' }}>
-            {recentExpenses.slice(0, 8).map((e) => (
+            {recentExpenses.slice(0, 8).map((e) => {
+              const catKey = categoryI18nKey(String(e.category));
+              const cat =
+                t(catKey) !== catKey ? t(catKey) : categoryLabelUk(String(e.category));
+              const dateStr = String(e.expense_date || '').slice(0, 10);
+              const dateLabel = dateStr
+                ? dateStr.split('-').reverse().join('.')
+                : '';
+              return (
               <div key={e.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="text-[13px] truncate" style={{ color: 'var(--cpc-text)' }}>
-                    {e.title || t(categoryI18nKey(String(e.category))) || e.category}
+                    {e.title || cat}
                   </p>
                   <p className="cpc-muted text-[11px]">
-                    {t(categoryI18nKey(String(e.category))) || e.category}
+                    {cat}
+                    {dateLabel ? ` · ${dateLabel}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -779,7 +815,8 @@ export default function ProjectDetail() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -1046,29 +1083,57 @@ export default function ProjectDetail() {
 
               {sheet === 'expense' && (
                 <div className="space-y-3">
-                  <Input label="Опис" value={expTitle} onChange={(e) => setExpTitle(e.target.value)} />
+                  <Input
+                    label="Що купили?"
+                    value={expTitle}
+                    onChange={(e) => setExpTitle(e.target.value)}
+                    placeholder="Цемент"
+                  />
                   <MoneyInput
                     label="Сума"
                     value={expAmount}
                     onChange={setExpAmount}
                     currencyHint={currencySymbol}
                   />
-                  <Select
-                    label="Категорія"
-                    value={expCategory}
-                    onChange={(e) => setExpCategory(e.target.value)}
-                  >
-                    {EXPENSE_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {t(categoryI18nKey(c)) || c}
-                      </option>
-                    ))}
-                  </Select>
+                  <div>
+                    <label className="cpc-card-label mb-1.5 block">Категорія</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {EXPENSE_CATEGORIES.map((c) => {
+                        const key = categoryI18nKey(c);
+                        const label = t(key) !== key ? t(key) : categoryLabelUk(c);
+                        const active = expCategory === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setExpCategory(c)}
+                            className="min-h-[40px] px-2.5 text-[12px] font-medium"
+                            style={{
+                              background: active ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                              color: active ? 'var(--cpc-on-copper)' : 'var(--cpc-text)',
+                              border: `1px solid ${
+                                active ? 'var(--cpc-copper)' : 'var(--cpc-line)'
+                              }`,
+                              borderRadius: 9,
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <Input
                     label="Дата"
                     type="date"
                     value={expDate}
                     onChange={(e) => setExpDate(e.target.value)}
+                  />
+                  <Input
+                    label="Нотатка — необов’язково"
+                    value={expNote}
+                    onChange={(e) => setExpNote(e.target.value)}
+                    placeholder="Склад / доставка"
                   />
                   <input
                     ref={receiptRef}

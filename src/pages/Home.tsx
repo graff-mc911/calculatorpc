@@ -225,7 +225,7 @@ export const Home: React.FC = () => {
         <button
           type="button"
           className="cpc-card text-left"
-          onClick={() => navigate('/receipts')}
+          onClick={() => navigate('/expenses')}
         >
           <small className="cpc-card-label">{spentLabel}</small>
           <b className="block font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
@@ -296,7 +296,7 @@ export const Home: React.FC = () => {
       <QuickActionsBar
         handlers={{
           onWork: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : setProjectOpen(true)),
-          onExpense: () => navigate('/scan'),
+          onExpense: () => navigate('/expenses'),
           onAdvance: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : navigate('/projects')),
           onPdf: () => navigate('/pdf-creator'),
         }}

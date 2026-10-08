@@ -81,10 +81,10 @@ const DOCUMENT_TYPES = [
 //
 const EXPENSE_CATEGORIES = [
   { value: 'materials', label: 'Матеріали' },
-  { value: 'labor', label: 'Робота' },
+  { value: 'salary', label: 'Зарплата' },
   { value: 'transport', label: 'Транспорт' },
-  { value: 'tools', label: 'Інструменти' },
-  { value: 'rent', label: 'Оренда' },
+  { value: 'tools', label: 'Інструмент' },
+  { value: 'subcontractor', label: 'Субпідрядник' },
   { value: 'other', label: 'Інше' },
 ];
 

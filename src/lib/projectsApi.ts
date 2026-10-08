@@ -363,6 +363,23 @@ export async function deleteExpense(id: string, projectId: string): Promise<void
   await touchProject(projectId);
 }
 
+/** All project expenses for the signed-in user (newest first). */
+export async function listProjectExpenses(): Promise<ProjectExpense[]> {
+  const uid = await requireUserId();
+  const { data, error } = await supabase
+    .from('project_expenses')
+    .select('*')
+    .eq('user_id', uid)
+    .order('expense_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    if (isMissingRelation(error)) throw new ProjectsSchemaMissingError();
+    throw error;
+  }
+  return (data || []) as ProjectExpense[];
+}
+
 export async function addPrepayment(input: {
   project_id: string;
   amount: number;

@@ -32,7 +32,7 @@ export const QuickActionsBar: React.FC<{
       key: 'expense',
       label: t('qaExpense') === 'qaExpense' ? '+ Витрата' : t('qaExpense'),
       copper: true,
-      onClick: handlers?.onExpense ?? (() => navigate('/scan')),
+      onClick: handlers?.onExpense ?? (() => navigate('/expenses')),
     },
     {
       key: 'advance',
