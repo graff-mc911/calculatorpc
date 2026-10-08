@@ -1,21 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookmarkPlus, Delete, Equal, X } from 'lucide-react';
+import { X } from 'lucide-react';
+import { QuickActionsBar } from '../components/QuickActionsBar';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
-import { evalFieldExpression } from '../lib/calculator';
+import { POPULAR_TEMPLATES } from '../lib/calcTemplates';
+import { computeHomeMoney } from '../lib/homeMoney';
+import { getLastProjectId } from '../lib/lastProject';
 import {
-  CALC_UNITS,
-  POPULAR_TEMPLATES,
-  addCustomTemplate,
-  loadCustomTemplates,
-  removeCustomTemplate,
-  unitToStorage,
-  type CalcTemplate,
-} from '../lib/calcTemplates';
-import { formatCurrency, formatMoneyInput, formatQtyDisplay } from '../lib/moneyMask';
+  getStoredPriceCountry,
+  getWorkDetailLocal,
+} from '../lib/priceCatalog';
 import {
   addWorkItem,
   listProjects,
@@ -24,18 +21,26 @@ import {
 } from '../lib/projectsApi';
 import { supabase } from '../lib/supabase';
 
-type ActiveField = 'qty' | 'price';
+const DEFAULT_WORK_ID = 'work-gypsum-plaster';
+const DEFAULT_AREA = 150;
+const DEFAULT_PRICE = 25;
 
-const KEYS: string[][] = [
-  ['7', '8', '9', '/'],
-  ['4', '5', '6', '*'],
-  ['1', '2', '3', '-'],
-  ['0', '.', '%', '+'],
-];
+function formatEuro(v: number, digits = 0) {
+  return (
+    new Intl.NumberFormat('uk-UA', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(v) + ' €'
+  );
+}
 
-function formatTotal(n: number) {
-  if (!Number.isFinite(n)) return '—';
-  return formatCurrency(Math.round(n * 100) / 100, 'EUR').replace(/,00(?=\s)/, '');
+function formatEuroBalance(v: number) {
+  return (
+    new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(v) + ' €'
+  );
 }
 
 export default function Calculator() {
@@ -44,21 +49,44 @@ export default function Calculator() {
   const qc = useQueryClient();
   const { showSuccess, showError } = useToastContext();
 
-  const [title, setTitle] = useState('Штукатурка');
-  const [unit, setUnit] = useState('m²');
-  const [qtyDisplay, setQtyDisplay] = useState('150');
-  const [priceDisplay, setPriceDisplay] = useState('25');
-  const [activeField, setActiveField] = useState<ActiveField>('qty');
-  const [customTemplates, setCustomTemplates] = useState<CalcTemplate[]>(() => loadCustomTemplates());
+  const [workId, setWorkId] = useState(DEFAULT_WORK_ID);
+  const [area, setArea] = useState(DEFAULT_AREA);
+  const [pricePerM2, setPricePerM2] = useState(DEFAULT_PRICE);
   const [projectSheet, setProjectSheet] = useState(false);
-  const [catalogId, setCatalogId] = useState<string | null>('work-gypsum-plaster');
-  const [category, setCategory] = useState('plaster');
+  const priceCountry = getStoredPriceCountry();
 
   const { data: session } = useQuery({
     queryKey: ['session'],
     queryFn: async () => {
       const { data } = await supabase.auth.getSession();
       return data.session;
+    },
+  });
+
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*, clients(name)')
+        .eq('user_id', session?.user?.id || '')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: expenseDocuments = [] } = useQuery({
+    queryKey: ['expense_documents', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('expense_documents')
+        .select('*')
+        .eq('user_id', session?.user?.id || '');
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -69,84 +97,91 @@ export default function Calculator() {
     retry: false,
   });
 
-  const qty = useMemo(() => evalFieldExpression(qtyDisplay), [qtyDisplay]);
-  const price = useMemo(() => evalFieldExpression(priceDisplay), [priceDisplay]);
-  const total =
-    qty != null && price != null && Number.isFinite(qty) && Number.isFinite(price)
-      ? qty * price
-      : NaN;
+  const uploadedInvoices = invoices.filter(
+    (inv) => inv.source === 'uploaded' || inv.uploaded_pdf_url
+  );
+  const incomeInvoices = invoices.filter(
+    (inv) => !(inv.source === 'uploaded' || inv.uploaded_pdf_url)
+  );
+  const expenseInvoiceIds = new Set(
+    expenseDocuments
+      .map((exp: { invoice_id?: string | null }) => exp.invoice_id)
+      .filter((id) => !!id)
+  );
+  const uploadedExpenses = uploadedInvoices
+    .filter((inv) => !expenseInvoiceIds.has(inv.id))
+    .map((inv) => ({
+      total_amount: Number(inv.uploaded_amount ?? inv.total_gross ?? inv.total_net ?? 0),
+      document_date: inv.date || inv.created_at,
+      created_at: inv.created_at,
+    }));
+  const money = computeHomeMoney(incomeInvoices, [...expenseDocuments, ...uploadedExpenses]);
+  const invoiceCount = incomeInvoices.length;
 
-  const setActiveValue = (updater: (prev: string) => string) => {
-    if (activeField === 'qty') setQtyDisplay(updater);
-    else setPriceDisplay(updater);
-  };
+  const workOptions = POPULAR_TEMPLATES;
+  const activeTpl = workOptions.find((w) => w.catalogWorkId === workId) || workOptions[0];
+  const detail = useMemo(
+    () => getWorkDetailLocal(workId, priceCountry),
+    [workId, priceCountry]
+  );
 
-  const commitActive = () => {
-    const raw = activeField === 'qty' ? qtyDisplay : priceDisplay;
-    const n = evalFieldExpression(raw);
-    if (n == null) return;
-    if (activeField === 'qty') setQtyDisplay(formatQtyDisplay(n));
-    else setPriceDisplay(formatMoneyInput(n, 2));
-  };
-
-  const onKey = (key: string) => {
-    if (key === 'C') {
-      setActiveValue(() => '');
+  const skipPriceSeed = useRef(true);
+  useEffect(() => {
+    if (skipPriceSeed.current) {
+      skipPriceSeed.current = false;
       return;
     }
-    if (key === '⌫') {
-      setActiveValue((p) => p.slice(0, -1));
-      return;
+    if (!detail) return;
+    const labor = Number(detail.labor?.price);
+    if (Number.isFinite(labor) && labor > 0) {
+      setPricePerM2(Math.round(labor * 1.15 * 100) / 100);
     }
-    if (key === '=') {
-      commitActive();
-      return;
-    }
-    setActiveValue((p) => {
-      // Replace plain result when starting a new digit after commit
-      if (p === '0' && key >= '0' && key <= '9') return key;
-      return p + key;
-    });
-  };
+  }, [workId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const applyTemplate = (tpl: CalcTemplate) => {
-    setTitle(tpl.title);
-    setUnit(tpl.unit);
-    setPriceDisplay(formatMoneyInput(tpl.price, 2));
-    setCatalogId(tpl.catalogWorkId || null);
-    setCategory(tpl.category || 'other');
-    setActiveField('qty');
-  };
+  const materialsPerM2 = useMemo(() => {
+    if (!detail) return 0;
+    return detail.bom.reduce((sum, row) => sum + row.lineTotal, 0);
+  }, [detail]);
 
-  const saveAsTemplate = () => {
-    if (!title.trim()) {
-      showError('Вкажіть назву роботи');
-      return;
+  const laborPerM2 = Number(detail?.labor?.price) || 0;
+  const materials = Math.round(materialsPerM2 * area);
+  const brigade = Math.round(laborPerM2 * area);
+  const totalCosts = materials + brigade;
+  const clientCost = Math.round(pricePerM2 * area);
+  const profit = clientCost - totalCosts;
+  const profitPct = clientCost > 0 ? Math.round((profit / clientCost) * 100) : 0;
+
+  const bumpArea = (delta: number) =>
+    setArea((a) => Math.max(0, Math.round((a + delta) * 10) / 10));
+  const bumpPrice = (delta: number) =>
+    setPricePerM2((p) => Math.max(0, Math.round((p + delta) * 100) / 100));
+
+  const resolveTargetProject = (): Project | null => {
+    const list = projects as Project[];
+    if (!list.length) return null;
+    const last = getLastProjectId();
+    if (last) {
+      const found = list.find((p) => p.id === last);
+      if (found) return found;
     }
-    const p = evalFieldExpression(priceDisplay) ?? 0;
-    const tpl = addCustomTemplate({ title: title.trim(), unit, price: p });
-    setCustomTemplates(loadCustomTemplates());
-    showSuccess(`Шаблон «${tpl.title}» збережено`);
+    return list[0] || null;
   };
 
   const addMut = useMutation({
     mutationFn: async (projectId: string) => {
-      const q = evalFieldExpression(qtyDisplay);
-      const p = evalFieldExpression(priceDisplay);
-      if (!title.trim()) throw new Error('NO_TITLE');
-      if (q == null || p == null) throw new Error('INVALID');
+      const work = detail?.work;
       return addWorkItem({
         project_id: projectId,
-        title: title.trim(),
-        category,
-        catalog_work_id: catalogId,
-        quantity: q,
-        unit: unitToStorage(unit),
-        unit_price: p,
+        title: activeTpl?.title || work?.names?.uk || 'Робота',
+        category: activeTpl?.category || work?.category || 'other',
+        catalog_work_id: work?.id || workId,
+        quantity: area,
+        unit: work?.unit || 'm2',
+        unit_price: pricePerM2,
       });
     },
     onSuccess: (_item, projectId) => {
-      showSuccess('Роботу додано до об’єкта');
+      showSuccess(t('projectWorkAdded') || 'Роботу додано до об’єкта');
       qc.invalidateQueries({ queryKey: ['projects'] });
       qc.invalidateQueries({ queryKey: ['project-bundle', projectId] });
       qc.invalidateQueries({ queryKey: ['projects-work-summary'] });
@@ -158,15 +193,11 @@ export default function Calculator() {
         showError(t('projectsSchemaMissing') || 'Apply projects migration');
         return;
       }
-      if (err instanceof Error && err.message === 'NO_TITLE') {
-        showError('Вкажіть назву роботи');
-        return;
-      }
       showError('Не вдалося додати. Перевірте кількість і ціну.');
     },
   });
 
-  const onAddToProject = () => {
+  const onAddWork = () => {
     const list = projects as Project[];
     if (list.length === 0) {
       showError('Спочатку створіть об’єкт');
@@ -177,241 +208,209 @@ export default function Calculator() {
       addMut.mutate(list[0].id);
       return;
     }
+    const resolved = resolveTargetProject();
+    if (resolved && list.length > 1) {
+      setProjectSheet(true);
+      return;
+    }
     setProjectSheet(true);
   };
 
-  const allTemplates = [...POPULAR_TEMPLATES, ...customTemplates];
+  const goProjectAction = (add: 'expense' | 'prepayment') => {
+    const p = resolveTargetProject();
+    if (!p) {
+      showError('Спочатку створіть об’єкт');
+      navigate('/projects');
+      return;
+    }
+    navigate(`/projects/${p.id}?add=${add}`);
+  };
+
+  const balanceLabel =
+    t('totalBalance') === 'totalBalance' ? 'Загальний баланс' : t('totalBalance');
+  const inputLabel = t('inputData') === 'inputData' ? 'Вхідні дані' : t('inputData');
+  const workLabel = t('work') === 'work' ? 'Робота' : t('work');
+  const areaLabel = 'Площа, м²';
+  const priceLabel = 'Ціна за м², €';
+  const materialsLabel =
+    t('expenseCat_materials') === 'expenseCat_materials'
+      ? 'Матеріали'
+      : t('expenseCat_materials');
+  const brigadeLabel = 'Зарплата бригади';
+  const totalCostsLabel = 'Разом витрат';
+  const clientCostLabel = 'Вартість для клієнта';
+  const profitLabel =
+    t('projectProfit') === 'projectProfit' ? 'Прогнозований прибуток' : t('projectProfit');
+  const accountsLabel = 'Рахунків';
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-4">
-      <h1 className="text-xl font-medium mb-3" style={{ color: 'var(--cpc-text)' }}>
-        Калькулятор
-      </h1>
-
-      {/* Templates */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1.5 px-0.5">
-          <span className="cpc-muted text-[11px]">Шаблони</span>
-          <button
-            type="button"
-            onClick={saveAsTemplate}
-            className="inline-flex items-center gap-1 text-[11px] min-h-[32px] bg-transparent border-0 cpc-copper"
-          >
-            <BookmarkPlus size={13} /> Зберегти шаблон
-          </button>
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 flex flex-col gap-2 pb-4">
+      {/* 1. Balance */}
+      <div className="cpc-card flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <small className="cpc-card-label">{balanceLabel}</small>
+          <b className="block text-[18px] font-medium cpc-copper tabular-nums truncate">
+            {formatEuroBalance(money.profit)}
+          </b>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {allTemplates.map((tpl) => (
-            <button
-              key={tpl.id}
-              type="button"
-              onClick={() => applyTemplate(tpl)}
-              onContextMenu={(e) => {
-                if (!tpl.custom) return;
-                e.preventDefault();
-                if (window.confirm(`Видалити шаблон «${tpl.title}»?`)) {
-                  removeCustomTemplate(tpl.id);
-                  setCustomTemplates(loadCustomTemplates());
-                }
-              }}
-              className="min-h-[36px] px-2.5 text-[12px] font-medium"
-              style={{
-                background:
-                  title === tpl.title ? 'rgba(200,121,74,0.22)' : 'var(--cpc-card)',
-                border: `1px solid ${
-                  title === tpl.title ? 'rgba(224,151,95,0.45)' : 'var(--cpc-line)'
-                }`,
-                borderRadius: 9,
-                color: title === tpl.title ? 'var(--cpc-copper-light)' : 'var(--cpc-text)',
-              }}
-            >
-              {tpl.title}
-              {tpl.custom ? ' ★' : ''}
-            </button>
-          ))}
+        <div className="text-right cpc-muted text-[12px] shrink-0">
+          {accountsLabel}:{' '}
+          <b style={{ color: 'var(--cpc-text)' }}>{invoiceCount}</b>
         </div>
       </div>
 
-      {/* Main form */}
-      <div className="cpc-card mb-3 space-y-3">
-        <div>
-          <label className="cpc-card-label mb-1">Назва роботи</label>
-          <input
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              setCatalogId(null);
-              setCategory('other');
-            }}
-            className="w-full min-h-[48px] text-[16px] px-3 bg-transparent outline-none"
-            style={{
-              background: 'var(--cpc-bg)',
-              border: '1px solid var(--cpc-line)',
-              borderRadius: 10,
-              color: 'var(--cpc-text)',
-            }}
-            placeholder="Штукатурка"
-          />
-        </div>
+      {/* 2. Input data */}
+      <div className="cpc-card">
+        <small className="cpc-card-label">{inputLabel}</small>
 
-        {/* Units */}
-        <div>
-          <label className="cpc-card-label mb-1">Одиниця</label>
-          <div className="flex flex-wrap gap-1.5">
-            {CALC_UNITS.map((u) => (
-              <button
-                key={u}
-                type="button"
-                onClick={() => setUnit(u)}
-                className="min-h-[40px] min-w-[44px] px-2.5 text-[13px] font-medium"
-                style={{
-                  background: unit === u ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
-                  color: unit === u ? 'var(--cpc-on-copper)' : 'var(--cpc-text)',
-                  border: `1px solid ${unit === u ? 'var(--cpc-copper)' : 'var(--cpc-line)'}`,
-                  borderRadius: 9,
-                }}
-              >
-                {u}
-              </button>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <span className="text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {workLabel}
+          </span>
+          <select
+            value={workId}
+            onChange={(e) => setWorkId(e.target.value)}
+            className="cpc-input-pill text-[12px] min-h-[44px] min-w-[130px] max-w-[58%] truncate appearance-none"
+            style={{ color: 'var(--cpc-text)' }}
+            aria-label={workLabel}
+          >
+            {workOptions.map((w) => (
+              <option key={w.id} value={w.catalogWorkId || w.id}>
+                {w.title}
+              </option>
             ))}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <span className="text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {areaLabel}
+          </span>
+          <div className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              className="cpc-step min-h-[44px] min-w-[44px]"
+              style={{ width: 44, height: 44 }}
+              onClick={() => bumpArea(-1)}
+              aria-label="−"
+            >
+              −
+            </button>
+            <b
+              className="min-w-[44px] text-center font-medium tabular-nums text-[13px]"
+              style={{ color: 'var(--cpc-text)' }}
+            >
+              {area}
+            </b>
+            <button
+              type="button"
+              className="cpc-step min-h-[44px] min-w-[44px]"
+              style={{ width: 44, height: 44 }}
+              onClick={() => bumpArea(1)}
+              aria-label="+"
+            >
+              +
+            </button>
           </div>
         </div>
 
-        {/* Qty + Price */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveField('qty')}
-            className="text-left p-3 min-h-[72px]"
-            style={{
-              background: 'var(--cpc-bg)',
-              border: `2px solid ${
-                activeField === 'qty' ? 'var(--cpc-copper)' : 'var(--cpc-line)'
-              }`,
-              borderRadius: 12,
-            }}
-          >
-            <span className="cpc-card-label">Кількість</span>
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <span className="text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {priceLabel}
+          </span>
+          <div className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              className="cpc-step min-h-[44px] min-w-[44px]"
+              style={{ width: 44, height: 44 }}
+              onClick={() => bumpPrice(-1)}
+              aria-label="−"
+            >
+              −
+            </button>
             <b
-              className="block text-[22px] font-medium tabular-nums mt-0.5 truncate"
+              className="min-w-[44px] text-center font-medium tabular-nums text-[13px]"
               style={{ color: 'var(--cpc-text)' }}
             >
-              {qtyDisplay || '0'}
+              {pricePerM2.toFixed(2).replace('.', ',')}
             </b>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveField('price')}
-            className="text-left p-3 min-h-[72px]"
-            style={{
-              background: 'var(--cpc-bg)',
-              border: `2px solid ${
-                activeField === 'price' ? 'var(--cpc-copper)' : 'var(--cpc-line)'
-              }`,
-              borderRadius: 12,
-            }}
-          >
-            <span className="cpc-card-label">Ціна за од., €</span>
-            <b
-              className="block text-[22px] font-medium tabular-nums mt-0.5 truncate"
-              style={{ color: 'var(--cpc-text)' }}
+            <button
+              type="button"
+              className="cpc-step min-h-[44px] min-w-[44px]"
+              style={{ width: 44, height: 44 }}
+              onClick={() => bumpPrice(1)}
+              aria-label="+"
             >
-              {priceDisplay || '0'}
-            </b>
-          </button>
-        </div>
-
-        {/* Total */}
-        <div
-          className="flex items-end justify-between px-1 pt-1"
-          style={{ borderTop: '1px solid var(--cpc-line)' }}
-        >
-          <div>
-            <span className="cpc-card-label">TOTAL</span>
-            <b className="block text-[28px] font-semibold tabular-nums cpc-copper leading-tight">
-              {formatTotal(total)}
-            </b>
+              +
+            </button>
           </div>
-          <span className="cpc-muted text-[12px] pb-1">
-            {qtyDisplay || '0'} {unit} × {priceDisplay || '0'} €
+        </div>
+      </div>
+
+      {/* 3. Cost breakdown */}
+      <div className="cpc-card">
+        <div className="flex items-center justify-between gap-2">
+          <span className="cpc-muted text-[12px]">{materialsLabel}</span>
+          <span className="tabular-nums text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {formatEuro(materials)}
           </span>
         </div>
-      </div>
-
-      {/* Keypad */}
-      <div className="mb-3">
-        <p className="cpc-muted text-[11px] mb-1.5 px-0.5">
-          Клавіатура · {activeField === 'qty' ? 'кількість' : 'ціна'} · 100-15% · 25*4
-        </p>
-        <div className="grid grid-cols-4 gap-1.5">
-          {KEYS.flat().map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => onKey(k)}
-              className="min-h-[52px] text-[20px] font-medium active:scale-[0.97] transition-transform"
-              style={{
-                background: 'var(--cpc-card)',
-                border: '1px solid var(--cpc-line)',
-                borderRadius: 12,
-                color: /[+\-*/%]/.test(k) ? 'var(--cpc-copper-light)' : 'var(--cpc-text)',
-              }}
-            >
-              {k}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => onKey('C')}
-            className="min-h-[52px] text-[15px] font-medium"
-            style={{
-              background: 'var(--cpc-card)',
-              border: '1px solid var(--cpc-line)',
-              borderRadius: 12,
-              color: 'var(--cpc-muted)',
-            }}
-          >
-            C
-          </button>
-          <button
-            type="button"
-            onClick={() => onKey('⌫')}
-            className="min-h-[52px] flex items-center justify-center"
-            style={{
-              background: 'var(--cpc-card)',
-              border: '1px solid var(--cpc-line)',
-              borderRadius: 12,
-              color: 'var(--cpc-muted)',
-            }}
-            aria-label="Backspace"
-          >
-            <Delete size={20} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onKey('=')}
-            className="col-span-2 min-h-[52px] flex items-center justify-center gap-1 text-[18px] font-medium"
-            style={{
-              background: 'rgba(200,121,74,0.22)',
-              border: '1px solid rgba(224,151,95,0.4)',
-              borderRadius: 12,
-              color: 'var(--cpc-copper-light)',
-            }}
-          >
-            <Equal size={20} /> =
-          </button>
+        <div className="flex items-center justify-between gap-2 mt-0.5">
+          <span className="cpc-muted text-[12px]">{brigadeLabel}</span>
+          <span className="tabular-nums text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {formatEuro(brigade)}
+          </span>
+        </div>
+        <div
+          className="flex items-center justify-between gap-2 mt-1 pt-1"
+          style={{ borderTop: '1px solid var(--cpc-line)' }}
+        >
+          <b className="font-medium text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {totalCostsLabel}
+          </b>
+          <b className="font-medium tabular-nums text-[12px]" style={{ color: 'var(--cpc-text)' }}>
+            {formatEuro(totalCosts)}
+          </b>
         </div>
       </div>
 
-      {/* CTA */}
-      <button
-        type="button"
-        onClick={onAddToProject}
-        disabled={addMut.isPending || !title.trim() || !Number.isFinite(total)}
-        className="cpc-btn-primary w-full min-h-[56px] text-[16px] font-medium disabled:opacity-40"
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <span className="cpc-muted text-[12px]">{clientCostLabel}</span>
+        <b className="text-[16px] font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+          {formatEuro(clientCost)}
+        </b>
+      </div>
+
+      {/* 4. Profit banner */}
+      <div className="cpc-profit">
+        <div className="text-[11px]">{profitLabel}</div>
+        <div className="flex items-end justify-between gap-2">
+          <b className="text-[22px] font-medium tabular-nums leading-tight">
+            {formatEuro(profit)}
+          </b>
+          <b className="text-[12px] font-medium tabular-nums">{profitPct}%</b>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-[8px]" aria-hidden />
+
+      {/* 5. Quick actions — above BottomNav + FAB */}
+      <div
+        className="fixed inset-x-0 z-40 px-3 pointer-events-none no-print"
+        style={{ bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))' }}
       >
-        {addMut.isPending ? 'Додаємо…' : 'Додати до об’єкта'}
-      </button>
+        <div className="max-w-[430px] mx-auto pointer-events-auto">
+          <QuickActionsBar
+            handlers={{
+              onWork: onAddWork,
+              onExpense: () => goProjectAction('expense'),
+              onAdvance: () => goProjectAction('prepayment'),
+              onPdf: () => navigate('/pdf-creator'),
+            }}
+          />
+        </div>
+      </div>
+      <div className="h-20" aria-hidden />
 
       <AnimatePresence>
         {projectSheet && (
@@ -441,8 +440,9 @@ export default function Calculator() {
                 <button
                   type="button"
                   onClick={() => setProjectSheet(false)}
-                  className="w-10 h-10 bg-transparent border-0"
+                  className="w-11 h-11 bg-transparent border-0"
                   style={{ color: 'var(--cpc-muted)' }}
+                  aria-label={t('cancel') || 'Скасувати'}
                 >
                   <X size={18} />
                 </button>
