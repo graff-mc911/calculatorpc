@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { QuickActionsBar } from '../components/QuickActionsBar';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -125,8 +124,6 @@ export const Home: React.FC = () => {
     .reduce((sum, inv) => sum + Number(inv.total_gross || 0), 0);
 
   const recentInvoices = incomeInvoices.slice(0, 5);
-  const lastProject = (projects as Project[])[0];
-
   const formatAmount = (v: number) =>
     new Intl.NumberFormat('de-DE', {
       minimumFractionDigits: 2,
@@ -293,14 +290,10 @@ export const Home: React.FC = () => {
 
       <div className="flex-1 min-h-2" />
 
-      <QuickActionsBar
-        handlers={{
-          onWork: () => (lastProject ? navigate(`/projects/${lastProject.id}`) : setProjectOpen(true)),
-          onExpense: () => navigate('/expenses'),
-          onAdvance: () => navigate('/payments'),
-          onPdf: () => navigate('/pdf-creator'),
-        }}
-      />
+      <p className="cpc-muted text-[12px] text-center px-2 pb-2">
+        На об’єкті тисніть <span className="cpc-copper font-medium">+</span> внизу —
+        робота, витрата, аванс або рахунок
+      </p>
 
       <AnimatePresence>
         {projectOpen && (

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>CPC Bottom Nav preview</title>
+  <style>
+    :root {
+      --cpc-bg: #1a1612;
+      --cpc-card: #241f1a;
+      --cpc-text: #f3ebe3;
+      --cpc-muted: #9a8f84;
+      --cpc-line: #3a322b;
+      --cpc-copper: #b87333;
+      --cpc-copper-light: #d4a574;
+      --cpc-on-copper: #1a120a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #14110e;
+      color: var(--cpc-text);
+      min-height: 100vh;
+    }
+    .phone {
+      max-width: 390px;
+      margin: 0 auto;
+      min-height: 100vh;
+      position: relative;
+      background: linear-gradient(180deg, #221c16, #14110e);
+      padding-bottom: 96px;
+    }
+    .content { padding: 20px 14px; }
+    h1 { font-size: 20px; font-weight: 500; margin: 0 0 8px; }
+    .sub { color: var(--cpc-muted); font-size: 13px; margin: 0 0 20px; }
+    .card {
+      background: var(--cpc-card);
+      border: 1px solid var(--cpc-line);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+    .nav {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 0;
+      width: 100%;
+      max-width: 390px;
+      background: var(--cpc-bg);
+      border-top: 1px solid var(--cpc-line);
+      padding: 10px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    .tabs { display: flex; }
+    .tab {
+      flex: 1;
+      text-align: center;
+      font-size: 10px;
+      color: var(--cpc-muted);
+      line-height: 1.2;
+    }
+    .tab.on { color: var(--cpc-copper-light); }
+    .tab .ico { font-size: 18px; display: block; margin-bottom: 2px; }
+    .fab {
+      position: absolute;
+      left: 50%;
+      top: -28px;
+      transform: translateX(-50%);
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      background: var(--cpc-copper);
+      color: var(--cpc-on-copper);
+      border: none;
+      font-size: 32px;
+      font-weight: 500;
+      line-height: 1;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }
+    .sheet-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 20;
+    }
+    .sheet {
+      width: 100%;
+      max-width: 390px;
+      padding: 12px 12px 20px;
+    }
+    .sheet-inner {
+      background: var(--cpc-card);
+      border: 1px solid var(--cpc-line);
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .act {
+      min-height: 72px;
+      background: var(--cpc-bg);
+      border: 1px solid var(--cpc-line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .act b { color: var(--cpc-copper-light); font-size: 14px; display: block; }
+    .act span { color: var(--cpc-muted); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="phone" id="screen">
+    <div class="content">
+      <h1>Головна</h1>
+      <p class="sub">Польовий сценарій: Об’єкт → + → готово</p>
+      <div class="card">Останній об’єкт · Квартира 12</div>
+      <div class="card">Борг · €3 200</div>
+      <p class="sub" style="text-align:center;margin-top:24px">
+        На об’єкті тисніть <b style="color:var(--cpc-copper-light)">+</b> внизу
+      </p>
+    </div>
+
+    <nav class="nav">
+      <button class="fab" id="fab" type="button" aria-label="Додати">+</button>
+      <div class="tabs">
+        <div class="tab on"><span class="ico">⌂</span>Головна</div>
+        <div class="tab"><span class="ico">▤</span>Об’єкти</div>
+        <div class="tab"><span class="ico">▦</span>Калькулятор</div>
+        <div class="tab"><span class="ico">▭</span>Рахунки</div>
+        <div class="tab"><span class="ico">☺</span>Клієнти</div>
+      </div>
+    </nav>
+  </div>
+
+  <div class="sheet-bg" id="sheet" style="display:none">
+    <div class="sheet">
+      <div class="sheet-inner">
+        <p style="margin:0 0 4px;font-weight:500">Додати</p>
+        <p class="sub" style="margin-bottom:12px">На об’єкті — без зайвих меню</p>
+        <div class="grid">
+          <div class="act"><b>+ Робота</b><span>кількість · ціна</span></div>
+          <div class="act"><b>+ Витрата</b><span>сума → готово</span></div>
+          <div class="act"><b>+ Аванс</b><span>сума → готово</span></div>
+          <div class="act"><b>+ Рахунок</b><span>з об’єкта</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fab = document.getElementById('fab');
+    const sheet = document.getElementById('sheet');
+    fab.onclick = () => { sheet.style.display = 'flex'; };
+    sheet.onclick = (e) => { if (e.target === sheet) sheet.style.display = 'none'; };
+  </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -36,6 +36,7 @@ import {
   composePaymentNote,
   parsePaymentNote,
 } from '../lib/paymentNote';
+import { setLastProjectId } from '../lib/lastProject';
 import { computeProjectMetrics, lineTotal } from '../lib/projectMetrics';
 import { shareProjectEstimatePdf, type ProjectPdfMode } from '../lib/projectPdf';
 import {
@@ -92,6 +93,7 @@ function formatCompact(value: number, currency: string) {
 
 export default function ProjectDetail() {
   const { id = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -158,6 +160,10 @@ export default function ProjectDetail() {
     setClientDraft(bundle.project.client_id || '');
   }, [bundle?.project.updated_at]);
 
+  useEffect(() => {
+    if (id) setLastProjectId(id);
+  }, [id]);
+
   const metrics = useMemo(() => {
     if (!bundle) return computeProjectMetrics([], [], [], 0);
     return computeProjectMetrics(
@@ -209,6 +215,20 @@ export default function ProjectDetail() {
     resetWorkForm();
     setSheet('work');
   };
+
+  // Deep-link from global + FAB: /projects/:id?add=work|expense|prepayment
+  useEffect(() => {
+    if (!id || !bundle) return;
+    const add = searchParams.get('add');
+    if (!add) return;
+    if (add === 'work') openAddWork();
+    else if (add === 'expense') setSheet('expense');
+    else if (add === 'prepayment') setSheet('prepayment');
+    const next = new URLSearchParams(searchParams);
+    next.delete('add');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, bundle?.project.id, searchParams.get('add')]);
 
   const openEditWork = (item: ProjectWorkItem) => {
     setEditingWorkId(item.id);

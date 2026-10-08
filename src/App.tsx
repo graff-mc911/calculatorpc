@@ -120,7 +120,7 @@ function RootPage() {
   return (
     <>
       <MobileTopNav />
-      <div className="pt-14 pb-28">
+      <div className="pt-14 pb-32">
         <Home />
       </div>
       <BottomNav />
@@ -161,7 +161,7 @@ function AppContent() {
         </ProtectedRoute>
       )}
 
-      <div className={showAppChrome ? 'pt-14 pb-28 print:pt-0 print:pb-0' : ''}>
+      <div className={showAppChrome ? 'pt-14 pb-32 print:pt-0 print:pb-0' : ''}>
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />
