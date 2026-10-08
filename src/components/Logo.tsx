@@ -92,10 +92,10 @@ export const Logo: React.FC<LogoProps> = ({
     </div>
   )
 
-  /** Compact square mark for header (same asset as favicon / PWA icons). */
+  /** Compact mark for small badges (favicon / PWA share the same square asset). */
   const GlassLogo = () => (
     <div
-      className={`${glassSize} rounded-2xl overflow-hidden bg-[#141415]
+      className={`${glassSize} rounded-2xl overflow-hidden bg-[#1e2126]
       flex items-center justify-center shadow-2xl
       border border-white/10 relative shrink-0 ${className}`}
     >
@@ -106,9 +106,16 @@ export const Logo: React.FC<LogoProps> = ({
   const content = (() => {
     if (variant === 'glass') return <GlassLogo />
     if (variant === 'icon') {
+      // Wide copper wordmark reads better than a cramped square in app chrome
       return (
-        <div className={`inline-flex shrink-0 ${className}`}>
-          <MarkImg px={iconSize} boxClass="rounded-lg" />
+        <div className={`inline-flex shrink-0 items-center ${className}`}>
+          <img
+            src={FULL_SRC}
+            alt="CPC"
+            className="object-contain rounded-md"
+            style={{ height: iconSize, width: 'auto', maxWidth: iconSize * 3.2 }}
+            draggable={false}
+          />
         </div>
       )
     }

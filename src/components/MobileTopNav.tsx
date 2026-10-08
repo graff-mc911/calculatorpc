@@ -70,9 +70,9 @@ export const MobileTopNav: React.FC = () => {
           aria-label="Home"
         >
           <img
-            src="/logo-cpc-mark.png"
+            src="/logo-cpc-full.jpg"
             alt="CPC"
-            className="h-[30px] w-auto rounded-md object-contain block"
+            className="h-8 w-auto max-w-[9.5rem] rounded-md object-contain block"
             draggable={false}
           />
         </button>

@@ -39,14 +39,11 @@ export const TopNav: React.FC = () => {
             aria-label="Home"
           >
             <img
-              src="/logo-cpc-mark.png"
-              alt="CPC"
-              className="h-9 w-auto rounded-md object-contain"
+              src="/logo-cpc-full.jpg"
+              alt="CPC — Construction Project Calculator"
+              className="h-9 w-auto max-w-[11rem] rounded-md object-contain"
               draggable={false}
             />
-            <span className="text-sm font-medium" style={{ color: 'var(--cpc-text)' }}>
-              CPC
-            </span>
           </button>
 
           <HeaderAnnouncement />
