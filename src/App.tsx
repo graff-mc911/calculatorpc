@@ -148,7 +148,7 @@ function AppContent() {
   const showAppChrome = !hideChrome;
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--cpc-bg)' }} key={language}>
+    <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--cpc-page)' }} key={language}>
       <SyncInit />
       <OfflineIndicator />
 

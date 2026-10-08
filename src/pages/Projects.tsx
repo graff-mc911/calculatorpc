@@ -2,7 +2,15 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Plus, Search, X } from 'lucide-react';
+import { Building2, Plus, X } from 'lucide-react';
+import { CpcFilterChips } from '../components/cpc/CpcFilterChips';
+import { CpcPageHeader } from '../components/cpc/CpcPageHeader';
+import { CpcSearch } from '../components/cpc/CpcSearch';
+import {
+  CpcStatusBadge,
+  projectStatusLabel,
+  projectStatusTone,
+} from '../components/cpc/CpcStatusBadge';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { Button } from '../components/ui/Button';
@@ -19,7 +27,8 @@ import {
 } from '../lib/projectsApi';
 import { supabase } from '../lib/supabase';
 
-type FilterKey = 'all' | 'draft' | 'in_progress' | 'completed' | 'paid';
+/** Screenshot chips: Усі / В роботі / Завершені / Оплачені (`active` = draft + in_progress). */
+type FilterKey = 'all' | 'active' | 'completed' | 'paid';
 
 function formatCompact(value: number, currency: string) {
   const n = Number.isFinite(value) ? value : 0;
@@ -211,7 +220,11 @@ export default function Projects() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return cards.filter(({ project }) => {
-      if (filter !== 'all' && project.status !== filter) return false;
+      if (filter === 'active') {
+        if (project.status !== 'draft' && project.status !== 'in_progress') return false;
+      } else if (filter !== 'all' && project.status !== filter) {
+        return false;
+      }
       if (!q) return true;
       const hay = [project.name, project.client_name || '', project.address || '']
         .join(' ')
@@ -223,116 +236,32 @@ export default function Projects() {
   const statusCounts = useMemo(() => {
     const counts: Record<FilterKey, number> = {
       all: projects.length,
-      draft: 0,
-      in_progress: 0,
+      active: 0,
       completed: 0,
       paid: 0,
     };
     for (const p of projects) {
-      const s = p.status as FilterKey;
-      if (s in counts && s !== 'all') counts[s] += 1;
+      if (p.status === 'draft' || p.status === 'in_progress') counts.active += 1;
+      else if (p.status === 'completed') counts.completed += 1;
+      else if (p.status === 'paid') counts.paid += 1;
     }
     return counts;
   }, [projects]);
 
-  const title = t('projectsNav') === 'projectsNav' ? 'Об’єкти' : t('projectsNav');
-  const newLabel = t('projectNew') === 'projectNew' ? 'Новий об’єкт' : t('projectNew');
-  const sumLabel = 'Сума';
-  const receivedLabel =
-    t('projectReceived') === 'projectReceived' ? 'Отримано' : t('projectReceived');
-  const balanceLabel = 'Залишок';
-  const expensesLabel =
-    t('projectExpenses') === 'projectExpenses' ? 'Витрати' : t('projectExpenses');
-  const profitLabel = 'Прибуток';
-  const progressLabel = 'Прогрес';
-  const searchPlaceholder = 'Пошук об’єкта або клієнта…';
-  const filters: { key: FilterKey; label: string }[] = [
-    { key: 'all', label: t('allStatuses') || 'Усі' },
-    { key: 'draft', label: t('projectStatus_draft') || 'Чернетки' },
-    { key: 'in_progress', label: t('projectStatus_in_progress') || 'В роботі' },
-    { key: 'completed', label: t('projectStatus_completed') || 'Завершені' },
-    { key: 'paid', label: t('projectStatus_paid') || 'Оплачені' },
+  const newLabel = 'Новий';
+  const searchPlaceholder = 'Пошук за адресою або клієнтом';
+  const chips = [
+    { key: 'all' as const, label: 'Усі', count: statusCounts.all },
+    { key: 'active' as const, label: 'В роботі', count: statusCounts.active },
+    { key: 'completed' as const, label: 'Завершені', count: statusCounts.completed },
+    { key: 'paid' as const, label: 'Оплачені', count: statusCounts.paid },
   ];
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-4">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <h1 className="flex-1 text-xl font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
-          {title}
-        </h1>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-[13px] font-medium shrink-0"
-          style={{
-            background: 'var(--cpc-copper)',
-            color: 'var(--cpc-on-copper)',
-            borderRadius: 10,
-            border: 'none',
-          }}
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          {newLabel}
-        </button>
-      </div>
-
-      {/* Search */}
-      <div
-        className="flex items-center gap-2 mb-2 px-2.5 min-h-[44px]"
-        style={{
-          background: 'var(--cpc-card)',
-          border: '1px solid var(--cpc-line)',
-          borderRadius: 12,
-        }}
-      >
-        <Search size={16} style={{ color: 'var(--cpc-muted)' }} aria-hidden />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="flex-1 bg-transparent border-0 outline-none text-[13px] min-w-0"
-          style={{ color: 'var(--cpc-text)' }}
-          aria-label={searchPlaceholder}
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery('')}
-            className="p-1 bg-transparent border-0"
-            style={{ color: 'var(--cpc-muted)' }}
-            aria-label="Clear"
-          >
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
-      {/* Filters — Усі / Чернетки / В роботі / Завершені / Оплачені */}
-      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-        {filters.map((f) => {
-          const active = filter === f.key;
-          const count = statusCounts[f.key] || 0;
-          return (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFilter(f.key)}
-              className="shrink-0 min-h-[44px] px-3 text-[12px] font-medium"
-              style={{
-                background: active ? 'rgba(200,121,74,0.22)' : 'var(--cpc-card)',
-                border: `1px solid ${active ? 'rgba(224,151,95,0.45)' : 'var(--cpc-line)'}`,
-                borderRadius: 9,
-                color: active ? 'var(--cpc-copper-light)' : 'var(--cpc-muted)',
-              }}
-            >
-              {f.label}
-              {count > 0 ? ` · ${count}` : ''}
-            </button>
-          );
-        })}
-      </div>
+    <div className="cpc-page pb-4">
+      <CpcPageHeader title="Проекти" onNew={() => setOpen(true)} newLabel={newLabel} />
+      <CpcSearch value={query} onChange={setQuery} placeholder={searchPlaceholder} />
+      <CpcFilterChips chips={chips} active={filter} onChange={setFilter} />
 
       {schemaMissing && (
         <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm">
@@ -371,110 +300,81 @@ export default function Projects() {
               project.client_name ||
               clients.find((c: { id: string }) => c.id === project.client_id)?.name ||
               '—';
-            const barWidth = `${progressPct}%`;
+            const budgetCap =
+              Number(project.expense_budget) > 0
+                ? Number(project.expense_budget)
+                : metrics.estimateTotal;
+            const spentPct =
+              budgetCap > 0
+                ? Math.min(100, Math.round((metrics.expenses / budgetCap) * 100))
+                : progressPct;
             return (
               <motion.button
                 key={project.id}
                 type="button"
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.03, 0.2) }}
+                transition={{ delay: Math.min(i * 0.02, 0.12) }}
                 onClick={() => navigate(`/projects/${project.id}`)}
                 className="cpc-card w-full text-left active:scale-[0.99] transition-transform"
               >
-                <div className="mb-2">
+                <div className="flex items-start justify-between gap-2 mb-0.5">
                   <p
-                    className="font-medium text-[15px] leading-snug truncate"
+                    className="font-semibold text-[14px] leading-snug truncate min-w-0"
                     style={{ color: 'var(--cpc-text)' }}
                   >
                     {project.name}
                   </p>
-                  <p className="cpc-muted text-[12px] mt-0.5 truncate">{client}</p>
+                  <CpcStatusBadge
+                    label={projectStatusLabel(project.status)}
+                    tone={projectStatusTone(project.status)}
+                  />
+                </div>
+                <p className="cpc-muted text-[12px] mb-2 truncate">{client}</p>
+
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="cpc-muted text-[11px] tabular-nums">
+                    Витрати {formatCompact(metrics.expenses, project.currency)}
+                    {budgetCap > 0
+                      ? ` / ${formatCompact(budgetCap, project.currency)}`
+                      : ''}
+                  </span>
+                  <span
+                    className="text-[11px] font-medium tabular-nums"
+                    style={{ color: 'var(--cpc-text)' }}
+                  >
+                    {spentPct}%
+                  </span>
+                </div>
+                <div
+                  className="cpc-progress mb-2.5"
+                  role="progressbar"
+                  aria-valuenow={spentPct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <span style={{ width: `${spentPct}%` }} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px]">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="cpc-muted">{sumLabel}</span>
-                    <b className="font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+                <div className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="cpc-muted">
+                    Кошторис{' '}
+                    <b className="font-medium" style={{ color: 'var(--cpc-text)' }}>
                       {formatCompact(metrics.estimateTotal, project.currency)}
                     </b>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="cpc-muted">{receivedLabel}</span>
-                    <b className="font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
-                      {formatCompact(metrics.received, project.currency)}
-                    </b>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="cpc-muted">{balanceLabel}</span>
-                    <b className="font-medium tabular-nums cpc-copper">
-                      {formatCompact(metrics.balanceDue, project.currency)}
-                    </b>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="cpc-muted">{expensesLabel}</span>
-                    <b className="font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
-                      {formatCompact(metrics.expenses, project.currency)}
-                    </b>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-2 col-span-2">
-                    <span className="cpc-muted">{profitLabel}</span>
-                    <b className="font-medium tabular-nums cpc-copper">
+                  </span>
+                  <span className="cpc-muted">
+                    Прибуток{' '}
+                    <b className="font-medium cpc-copper tabular-nums">
                       {formatCompact(metrics.projectedProfit, project.currency)}
                     </b>
-                  </div>
-                </div>
-
-                <div className="mt-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="cpc-muted text-[11px]">{progressLabel}</span>
-                    <span
-                      className="text-[11px] font-medium tabular-nums"
-                      style={{ color: 'var(--cpc-text)' }}
-                    >
-                      {progressPct}%
-                    </span>
-                  </div>
-                  <div
-                    className="h-2 w-full overflow-hidden"
-                    style={{ background: 'var(--cpc-line)', borderRadius: 4 }}
-                    role="progressbar"
-                    aria-valuenow={progressPct}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  >
-                    <div
-                      className="h-full transition-[width] duration-300"
-                      style={{
-                        width: barWidth,
-                        background: 'var(--cpc-copper)',
-                        borderRadius: 4,
-                      }}
-                    />
-                  </div>
+                  </span>
                 </div>
               </motion.button>
             );
           })}
         </div>
       )}
-
-      {/* FAB — always easy on mobile */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed z-40 right-4 w-14 h-14 flex items-center justify-center shadow-lg"
-        style={{
-          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-          background: 'var(--cpc-copper)',
-          color: 'var(--cpc-on-copper)',
-          borderRadius: 16,
-          border: 'none',
-        }}
-        aria-label={newLabel}
-      >
-        <Plus size={26} strokeWidth={2.5} />
-      </button>
 
       <AnimatePresence>
         {open && (

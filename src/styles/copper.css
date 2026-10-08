@@ -1,8 +1,8 @@
-/* CPC Copper Hybrid — tokens from CPC____________________1a92.html mockup */
+/* CPC visual specification — tokens from strict screenshot reference */
 :root {
-  --cpc-bg: #15181d;
-  --cpc-card: #20242b;
-  --cpc-line: #2f353e;
+  --cpc-bg: #12151a;
+  --cpc-card: #1c2128;
+  --cpc-line: #2a313a;
   --cpc-copper: #c8794a;
   --cpc-copper-light: #e0975f;
   --cpc-text: #ebe5db;
@@ -13,23 +13,28 @@
   --cpc-badge-wait-fg: #e8a56d;
   --cpc-badge-paid-bg: #1d3326;
   --cpc-badge-paid-fg: #7ad9a0;
-  --cpc-radius-card: 12px;
-  --cpc-radius-btn: 9px;
-  --cpc-radius-step: 7px;
+  --cpc-radius-card: 14px;
+  --cpc-radius-btn: 10px;
+  --cpc-radius-chip: 999px;
+  --cpc-radius-step: 8px;
+  --cpc-shell-max: 430px;
 }
 
 @layer components {
   .cpc-page {
-    @apply min-h-screen;
+    @apply min-h-screen w-full mx-auto min-w-0;
+    max-width: var(--cpc-shell-max);
     background: var(--cpc-bg);
     color: var(--cpc-text);
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .cpc-card {
     background: var(--cpc-card);
     border: 1px solid var(--cpc-line);
     border-radius: var(--cpc-radius-card);
-    padding: 9px 10px;
+    padding: 12px 12px;
   }
 
   .cpc-card-label {
@@ -57,7 +62,7 @@
   .cpc-btn-primary {
     background: var(--cpc-copper);
     color: var(--cpc-on-copper);
-    border-radius: 10px;
+    border-radius: var(--cpc-radius-btn);
     padding: 10px 14px;
     font-size: 13px;
     font-weight: 500;
@@ -68,6 +73,43 @@
 
   .cpc-btn-primary:hover {
     background: var(--cpc-copper-light);
+  }
+
+  .cpc-btn-secondary {
+    background: var(--cpc-card);
+    color: var(--cpc-copper-light);
+    border: 1px solid rgba(200, 121, 74, 0.45);
+    border-radius: var(--cpc-radius-btn);
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .cpc-search {
+    background: var(--cpc-card);
+    border: 1px solid var(--cpc-line);
+    border-radius: 12px;
+  }
+
+  .cpc-chip {
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: var(--cpc-radius-chip);
+    border: 1px solid var(--cpc-line);
+    background: var(--cpc-card);
+    color: var(--cpc-muted);
+    cursor: pointer;
+  }
+
+  .cpc-chip[data-active='true'] {
+    background: var(--cpc-copper);
+    border-color: var(--cpc-copper);
+    color: var(--cpc-on-copper);
   }
 
   .cpc-step {
@@ -116,5 +158,46 @@
     border-radius: 8px;
     padding: 4px 10px;
     color: var(--cpc-text);
+  }
+
+  .cpc-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--cpc-line);
+    overflow: hidden;
+  }
+
+  .cpc-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--cpc-copper);
+  }
+
+  .cpc-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(200, 121, 74, 0.18);
+    color: var(--cpc-copper-light);
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .cpc-icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--cpc-bg);
+    border: 1px solid var(--cpc-line);
+    color: var(--cpc-copper-light);
+    text-decoration: none;
   }
 }

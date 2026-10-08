@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, MessageCircle, Phone, Plus, Search, Trash2, Users } from 'lucide-react';
+import { Mail, Phone, Users } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CpcPageHeader } from '../components/cpc/CpcPageHeader';
+import { CpcSearch } from '../components/cpc/CpcSearch';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
@@ -9,7 +11,6 @@ import {
   emptyClientStats,
   mailtoHref,
   telHref,
-  whatsappHref,
   type ClientMoneyStats,
 } from '../lib/clientContact';
 import { formatCurrency } from '../lib/moneyMask';
@@ -17,6 +18,16 @@ import { offlineStore } from '../lib/offlineStore';
 import { computeProjectMetrics } from '../lib/projectMetrics';
 import { listProjects, type Project } from '../lib/projectsApi';
 import { supabase } from '../lib/supabase';
+
+function clientInitials(name?: string | null) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 type Client = {
   id: string;
@@ -221,50 +232,18 @@ export const Clients: React.FC = () => {
   }, [clients, search]);
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <h1 className="flex-1 text-xl font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
-          Клієнти
-        </h1>
-        <button
-          type="button"
-          onClick={() => navigate('/clients/new')}
-          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-[13px] font-medium shrink-0"
-          style={{
-            background: 'var(--cpc-copper)',
-            color: 'var(--cpc-on-copper)',
-            borderRadius: 10,
-            border: 'none',
-          }}
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          Новий
-        </button>
-      </div>
-
-      <div
-        className="flex items-center gap-2 mb-3 px-2.5 min-h-[44px]"
-        style={{
-          background: 'var(--cpc-card)',
-          border: '1px solid var(--cpc-line)',
-          borderRadius: 12,
-        }}
-      >
-        <Search size={16} style={{ color: 'var(--cpc-muted)' }} aria-hidden />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Пошук клієнта…"
-          className="flex-1 bg-transparent border-0 outline-none text-[13px] min-w-0"
-          style={{ color: 'var(--cpc-text)' }}
-        />
-      </div>
+    <div className="cpc-page pb-6">
+      <CpcPageHeader title="Клієнти" onNew={() => navigate('/clients/new')} newLabel="Новий" />
+      <CpcSearch
+        value={search}
+        onChange={setSearch}
+        placeholder="Пошук за іменем або телефоном"
+      />
 
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="cpc-card h-28 animate-pulse" />
+            <div key={i} className="cpc-card h-20 animate-pulse" />
           ))}
         </div>
       ) : filteredClients.length === 0 ? (
@@ -273,9 +252,7 @@ export const Clients: React.FC = () => {
           <p className="text-[15px] font-medium mb-1" style={{ color: 'var(--cpc-text)' }}>
             {search ? 'Нічого не знайдено' : 'Клієнтів ще немає'}
           </p>
-          <p className="cpc-muted text-sm mb-4">
-            Простий контакт для об’єктів — не CRM
-          </p>
+          <p className="cpc-muted text-sm mb-4">Простий контакт для проектів</p>
           {!search && (
             <button
               type="button"
@@ -291,121 +268,62 @@ export const Clients: React.FC = () => {
           {filteredClients.map((client) => {
             const stats = statsByClient.get(client.id) || emptyClientStats();
             const call = telHref(client.phone);
-            const wa = whatsappHref(client.phone);
             const mail = mailtoHref(client.email);
+            const overdue = stats.debt > 0;
             return (
               <article
                 key={client.id}
                 className="cpc-card cursor-pointer active:scale-[0.99] transition-transform"
                 onClick={() => navigate(`/clients/${client.id}`)}
               >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="cpc-avatar" aria-hidden>
+                    {clientInitials(client.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <h2
-                      className="text-[16px] font-medium truncate"
+                      className="text-[14px] font-semibold truncate"
                       style={{ color: 'var(--cpc-text)' }}
                     >
                       {client.name || '—'}
                     </h2>
-                    {client.phone && (
-                      <p className="cpc-muted text-[12px] mt-0.5 tabular-nums">{client.phone}</p>
-                    )}
+                    <p className="cpc-muted text-[12px] mt-0.5 tabular-nums truncate">
+                      {client.phone || client.email || '—'}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) =>
-                      handleDeleteClick(e, client.id, client.name || 'Без назви')
-                    }
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border-0 shrink-0"
-                    style={{ color: 'var(--cpc-muted)' }}
-                    aria-label="Видалити"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] mb-2.5">
-                  <div className="flex justify-between gap-2">
-                    <span className="cpc-muted">Проекти</span>
-                    <b className="tabular-nums" style={{ color: 'var(--cpc-text)' }}>
-                      {stats.projectCount}
-                    </b>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="cpc-muted">Рахунки</span>
-                    <b className="tabular-nums" style={{ color: 'var(--cpc-text)' }}>
-                      {stats.invoiceCount}
-                    </b>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="cpc-muted">Отримано</span>
-                    <b className="tabular-nums cpc-copper">
-                      {formatCompact(stats.received)}
-                    </b>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="cpc-muted">Борг</span>
+                  <div className="text-right shrink-0">
                     <b
-                      className="tabular-nums"
-                      style={{ color: stats.debt > 0 ? '#f0a8a8' : 'var(--cpc-text)' }}
+                      className="block text-[14px] font-semibold tabular-nums"
+                      style={{ color: overdue ? '#f0a8a8' : 'var(--cpc-text)' }}
                     >
                       {formatCompact(stats.debt)}
                     </b>
+                    <span
+                      className="text-[10px]"
+                      style={{ color: overdue ? '#f0a8a8' : 'var(--cpc-muted)' }}
+                    >
+                      {overdue ? 'прострочено' : 'до сплати'}
+                    </span>
                   </div>
                 </div>
 
-                {(call || wa || mail) && (
+                <div className="flex items-center justify-between gap-2 mt-2.5 pt-2" style={{ borderTop: '1px solid var(--cpc-line)' }}>
+                  <span className="cpc-muted text-[11px]">
+                    {stats.projectCount} проекти · {stats.invoiceCount} рахунки
+                  </span>
                   <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
                     {call && (
-                      <a
-                        href={call}
-                        className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-1 text-[11px] font-medium no-underline"
-                        style={{
-                          background: 'var(--cpc-bg)',
-                          border: '1px solid var(--cpc-line)',
-                          borderRadius: 9,
-                          color: 'var(--cpc-copper-light)',
-                        }}
-                      >
-                        <Phone size={13} />{' '}
-                        {t('call') === 'call' ? 'Подзвонити' : t('call') || 'Подзвонити'}
-                      </a>
-                    )}
-                    {wa && (
-                      <a
-                        href={wa}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-1 text-[11px] font-medium no-underline"
-                        style={{
-                          background: 'var(--cpc-bg)',
-                          border: '1px solid var(--cpc-line)',
-                          borderRadius: 9,
-                          color: 'var(--cpc-copper-light)',
-                        }}
-                      >
-                        <MessageCircle size={13} /> WhatsApp
+                      <a href={call} className="cpc-icon-btn" aria-label="Подзвонити">
+                        <Phone size={14} />
                       </a>
                     )}
                     {mail && (
-                      <a
-                        href={mail}
-                        className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-1 text-[11px] font-medium no-underline"
-                        style={{
-                          background: 'var(--cpc-bg)',
-                          border: '1px solid var(--cpc-line)',
-                          borderRadius: 9,
-                          color: 'var(--cpc-copper-light)',
-                        }}
-                      >
-                        <Mail size={13} />{' '}
-                        {t('writeEmail') === 'writeEmail'
-                          ? 'Написати'
-                          : t('writeEmail') || 'Написати'}
+                      <a href={mail} className="cpc-icon-btn" aria-label="Написати">
+                        <Mail size={14} />
                       </a>
                     )}
                   </div>
-                )}
+                </div>
               </article>
             );
           })}

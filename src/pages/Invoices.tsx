@@ -3,11 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   FileText,
-  ChevronRight,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Send,
   Trash2,
   Upload,
   ExternalLink,
@@ -17,9 +12,17 @@ import {
   X,
   Check,
   FileSpreadsheet,
-  Search,
+  Share2,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { CpcFilterChips } from '../components/cpc/CpcFilterChips';
+import { CpcPageHeader } from '../components/cpc/CpcPageHeader';
+import { CpcSearch } from '../components/cpc/CpcSearch';
+import {
+  CpcStatusBadge,
+  invoiceStatusLabel,
+  invoiceStatusTone,
+} from '../components/cpc/CpcStatusBadge';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -128,36 +131,17 @@ const InvoiceThumbnail: React.FC<{ invoice: Record<string, unknown> }> = () => {
   );
 };
 
-/**
- * Simple status badge — Draft / Sent / Paid / Overdue only.
- */
+/** Status pill — visual-spec tones. */
 const StatusBadge: React.FC<{ status: string; dueDate?: string | null }> = ({
   status,
   dueDate,
 }) => {
   const resolved = resolveInvoiceStatus(status, dueDate);
-  const label = STATUS_LABELS_UK[resolved];
-  const style =
-    resolved === 'paid'
-      ? { color: '#9fd4a8' }
-      : resolved === 'sent'
-        ? { color: 'var(--cpc-copper-light)' }
-        : resolved === 'overdue'
-          ? { color: '#f0a8a8' }
-          : { color: 'var(--cpc-muted)' };
-  const Icon =
-    resolved === 'paid'
-      ? CheckCircle
-      : resolved === 'sent'
-        ? Send
-        : resolved === 'overdue'
-          ? AlertCircle
-          : Clock;
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={style}>
-      <Icon size={12} />
-      {label}
-    </span>
+    <CpcStatusBadge
+      label={invoiceStatusLabel(resolved) || STATUS_LABELS_UK[resolved]}
+      tone={invoiceStatusTone(resolved)}
+    />
   );
 };
 
@@ -1282,13 +1266,13 @@ export const Invoices: React.FC = () => {
    * Вкладки фільтрації.
    * `unpaid` count = draft + sent (same rule as Home «Неоплачено»).
    */
+  /** Visual-spec chips; unpaid kept for Home deep-link. */
   const filterTabs: { key: FilterStatus; label: string }[] = [
-    { key: 'all', label: t('allStatuses') || 'Усі' },
-    { key: 'unpaid', label: t('unpaid') || 'Неоплачені' },
-    { key: 'draft', label: t('draft') || 'Чернетки' },
-    { key: 'sent', label: t('sent') || 'Надіслані' },
-    { key: 'paid', label: t('paid') || 'Оплачені' },
-    { key: 'overdue', label: t('overdue') || 'Прострочені' },
+    { key: 'all', label: 'Усі' },
+    { key: 'unpaid', label: 'Неоплачені' },
+    { key: 'draft', label: 'Чернетки' },
+    { key: 'sent', label: 'Очікують' },
+    { key: 'paid', label: 'Оплачені' },
   ];
 
   const statusCounts = React.useMemo(() => {
@@ -1331,46 +1315,34 @@ export const Invoices: React.FC = () => {
       .reduce((sum, inv) => sum + Number(inv.total_gross ?? inv.gross_total ?? 0), 0);
   }, [invoices]);
 
-  return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
-      <div className="flex justify-between items-center mb-3 gap-2">
-        <h1 className="text-xl font-medium" style={{ color: 'var(--cpc-text)' }}>
-          Рахунки
-        </h1>
-        <button
-          type="button"
-          onClick={() => {
-            if ((projects as Project[]).length === 0) {
-              showError('Спочатку створіть об’єкт');
-              navigate('/projects');
-              return;
-            }
-            if ((projects as Project[]).length === 1) {
-              startNewInvoice(projects[0]);
-              return;
-            }
-            setProjectPickerOpen(true);
-          }}
-          className="cpc-btn-primary min-h-[44px] px-3 text-[13px] font-medium inline-flex items-center gap-1.5"
-        >
-          <Plus size={16} />
-          Новий рахунок
-        </button>
-      </div>
+  const startCreate = () => {
+    if ((projects as Project[]).length === 0) {
+      showError('Спочатку створіть об’єкт');
+      navigate('/projects');
+      return;
+    }
+    if ((projects as Project[]).length === 1) {
+      startNewInvoice(projects[0]);
+      return;
+    }
+    setProjectPickerOpen(true);
+  };
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
+  return (
+    <div className="cpc-page pb-6">
+      <CpcPageHeader title="Рахунки" onNew={startCreate} newLabel="Новий" />
+
+      <div className="grid grid-cols-2 gap-2 mb-2.5">
         <div className="cpc-card text-left min-w-0">
-          <small className="cpc-card-label">{t('unpaid') || 'Неоплачено'}</small>
-          <b className="block font-medium cpc-copper tabular-nums truncate">
+          <small className="cpc-card-label">Неоплачено</small>
+          <b className="block text-[18px] font-semibold cpc-copper tabular-nums truncate">
             {formatCurrency(unpaidTotal, 'EUR')}
           </b>
         </div>
         <div className="cpc-card text-left min-w-0">
-          <small className="cpc-card-label">
-            {t('paidThisMonth') || 'Оплачено цього місяця'}
-          </small>
+          <small className="cpc-card-label">Оплачено цього місяця</small>
           <b
-            className="block font-medium tabular-nums truncate"
+            className="block text-[18px] font-semibold tabular-nums truncate"
             style={{ color: 'var(--cpc-text)' }}
           >
             {formatCurrency(paidThisMonthTotal, 'EUR')}
@@ -1378,37 +1350,21 @@ export const Invoices: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3">
-        <button
-          onClick={() => setUploadModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 min-h-[36px] text-[11px] font-medium"
-          style={{
-            background: 'var(--cpc-card)',
-            border: '1px solid var(--cpc-line)',
-            borderRadius: 9,
-            color: 'var(--cpc-muted)',
-          }}
-          type="button"
-        >
-          <Upload size={13} />
-          PDF
-        </button>
-        <button
-          onClick={handleExportCSV}
-          disabled={!invoices.length}
-          className="inline-flex items-center gap-1.5 px-3 min-h-[36px] text-[11px] font-medium disabled:opacity-40"
-          style={{
-            background: 'var(--cpc-card)',
-            border: '1px solid var(--cpc-line)',
-            borderRadius: 9,
-            color: 'var(--cpc-muted)',
-          }}
-          type="button"
-        >
-          <FileSpreadsheet size={13} />
-          CSV
-        </button>
-      </div>
+      <CpcSearch
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Пошук рахунку або клієнта"
+      />
+
+      <CpcFilterChips
+        chips={filterTabs.map((tab) => ({
+          key: tab.key,
+          label: tab.label,
+          count: statusCounts[tab.key] || 0,
+        }))}
+        active={activeFilter}
+        onChange={applyFilter}
+      />
 
       {/* Панель дій для обраних рахунків */}
       <AnimatePresence>
@@ -1417,23 +1373,24 @@ export const Invoices: React.FC = () => {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="mb-4 flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl bg-white/8 border border-white/10 backdrop-blur-xl"
+            className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5 cpc-card"
           >
             <div className="flex items-center gap-2 min-w-0">
               <button
                 onClick={toggleSelectAllFiltered}
-                className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
-                  allFilteredSelected
-                    ? 'bg-cyan-500 border-cyan-400 text-white'
-                    : 'border-white/30 bg-white/5 text-transparent'
-                }`}
+                className="w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: allFilteredSelected ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                  borderColor: allFilteredSelected ? 'var(--cpc-copper)' : 'var(--cpc-line)',
+                  color: allFilteredSelected ? 'var(--cpc-on-copper)' : 'transparent',
+                }}
                 title={t('selectAll') || 'Select all'}
                 type="button"
               >
                 <Check size={12} className={allFilteredSelected ? 'opacity-100' : 'opacity-0'} />
               </button>
-              <p className="text-sm text-white/80 truncate">
-                {t('selectedCount') || 'Selected'}: {selectionCount}
+              <p className="text-sm truncate" style={{ color: 'var(--cpc-text)' }}>
+                Обрано: {selectionCount}
               </p>
             </div>
 
@@ -1441,26 +1398,20 @@ export const Invoices: React.FC = () => {
               <button
                 onClick={handleShareSelected}
                 disabled={selectionBusy}
-                className="p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 transition-all disabled:opacity-50 active:scale-95"
-                title={t('sendToAccountant') || t('share') || 'Send'}
+                className="cpc-icon-btn disabled:opacity-50"
+                title={t('share') || 'Поділитися'}
+                type="button"
               >
-                <ShareIcon size={15} />
+                <Share2 size={15} />
               </button>
               <button
                 onClick={handleSaveSelected}
                 disabled={selectionBusy}
-                className="p-2 rounded-xl bg-white/10 border border-white/10 text-white/80 hover:bg-white/15 transition-all disabled:opacity-50 active:scale-95"
-                title={t('saveToDevice') || 'Export'}
+                className="cpc-icon-btn disabled:opacity-50"
+                title={t('saveToDevice') || 'Зберегти'}
+                type="button"
               >
                 <Save size={15} />
-              </button>
-              <button
-                onClick={handleExportCSV}
-                disabled={selectionBusy || selectionCount === 0}
-                className="p-2 rounded-xl bg-white/10 border border-white/10 text-white/70 hover:bg-white/15 transition-all disabled:opacity-50 active:scale-95"
-                title={t('export') || 'CSV'}
-              >
-                <FileSpreadsheet size={15} />
               </button>
               <button
                 onClick={() => {
@@ -1468,16 +1419,19 @@ export const Invoices: React.FC = () => {
                   setDeleteDialogOpen(true);
                 }}
                 disabled={selectionBusy}
-                className="p-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 transition-all disabled:opacity-50 active:scale-95"
-                title={t('deleteSelected') || 'Delete selected'}
+                className="cpc-icon-btn disabled:opacity-50"
+                style={{ color: '#f0a8a8' }}
+                title={t('deleteSelected') || 'Видалити'}
+                type="button"
               >
                 <Trash2 size={15} />
               </button>
               <button
                 onClick={clearSelection}
                 disabled={selectionBusy}
-                className="p-2 rounded-xl text-white/40 hover:text-white/70 hover:bg-white/10 transition-all disabled:opacity-50 active:scale-95"
-                title={t('clearSelection') || 'Clear selection'}
+                className="cpc-icon-btn disabled:opacity-50"
+                title={t('clearSelection') || 'Скинути'}
+                type="button"
               >
                 <X size={15} />
               </button>
@@ -1486,244 +1440,156 @@ export const Invoices: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Пошук архіву + групування за датою */}
-      <div className="mb-3 space-y-2">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('invoiceArchiveSearch') || t('searchInvoices')}
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/6 border border-white/10 text-white text-sm outline-none focus:border-orange-400/40"
-          />
-        </div>
-        <div className="flex gap-1.5">
-          {(
-            [
-              { key: 'day' as const, label: t('groupByDay') || 'Day' },
-              { key: 'month' as const, label: t('groupByMonth') },
-              { key: 'year' as const, label: t('groupByYear') },
-              { key: 'none' as const, label: t('allStatuses') || 'All' },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setGroupMode(opt.key)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                groupMode === opt.key
-                  ? 'bg-white/15 text-white'
-                  : 'bg-white/5 text-white/45 hover:text-white/70'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Status chips — Усі / Неоплачені / Чернетки / Надіслані / Оплачені / Прострочені */}
-      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-        {filterTabs.map((tab) => {
-          const count = statusCounts[tab.key] || 0;
-          const isActive = activeFilter === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => applyFilter(tab.key)}
-              className="shrink-0 min-h-[44px] px-3 text-[12px] font-medium"
-              style={{
-                background: isActive ? 'var(--cpc-copper)' : 'var(--cpc-card)',
-                color: isActive ? 'var(--cpc-on-copper)' : 'var(--cpc-text)',
-                border: `1px solid ${isActive ? 'var(--cpc-copper)' : 'var(--cpc-line)'}`,
-                borderRadius: 9,
-              }}
-            >
-              {tab.label}
-              {count > 0 ? ` · ${count}` : ''}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Основний блок зі списком рахунків */}
-      <div className="cpc-card overflow-hidden !p-0">
+      {/* Список рахунків — компактні картки (visual spec) */}
+      <div className="space-y-2">
         {isLoading ? (
-          <div>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 px-4 py-4 border-b border-white/5 animate-pulse last:border-0"
-              >
-                <div className="w-12 h-14 rounded-lg bg-white/10 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="h-3 bg-white/10 rounded w-24 mb-2" />
-                  <div className="h-4 bg-white/15 rounded w-40 mb-2" />
-                  <div className="h-3 bg-white/8 rounded w-16" />
-                </div>
-                <div className="text-right">
-                  <div className="h-4 bg-white/15 rounded w-20 mb-1" />
-                  <div className="h-3 bg-white/8 rounded w-16" />
-                </div>
-              </div>
-            ))}
-          </div>
+          [1, 2, 3, 4].map((i) => <div key={i} className="cpc-card h-16 animate-pulse" />)
         ) : filteredInvoices.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <div className="w-16 h-16 bg-orange-500/20 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <FileText size={32} className="text-orange-400" />
-            </div>
-
-            <h3 className="text-lg font-semibold text-white mb-2">{t('noInvoicesMessage')}</h3>
-            <p className="text-white/60 mb-6 text-sm">{t('createFirstIn30Sec')}</p>
-
+          <div className="cpc-card text-center py-12">
+            <FileText size={28} className="mx-auto mb-3 cpc-copper" />
+            <h3 className="text-[15px] font-semibold mb-1" style={{ color: 'var(--cpc-text)' }}>
+              {t('noInvoicesMessage') || 'Рахунків ще немає'}
+            </h3>
+            <p className="cpc-muted text-sm mb-4">{t('createFirstIn30Sec') || ''}</p>
             {activeFilter === 'all' && (
-              <button
-                type="button"
-                onClick={() => setProjectPickerOpen(true)}
-                className="cpc-btn-primary px-5 min-h-[44px]"
-              >
-                + Новий рахунок
+              <button type="button" onClick={startCreate} className="cpc-btn-primary px-5 min-h-[44px]">
+                + Новий
               </button>
             )}
           </div>
         ) : (
-          <div>
-            {groupedInvoices.map((group) => (
-              <div key={group.key}>
-                {group.label ? (
-                  <div
-                    className="px-3 py-2"
-                    style={{ borderBottom: '1px solid var(--cpc-line)', background: 'var(--cpc-bg)' }}
-                  >
-                    <p className="cpc-muted text-[11px] font-medium uppercase tracking-wide">
-                      {group.label}
-                    </p>
-                  </div>
-                ) : null}
-                {group.items.map((invoice, index) => {
+          groupedInvoices.flatMap((group) =>
+            group.items.map((invoice) => {
               const isUploaded = invoice.source === 'uploaded';
               const isSelected = selectedIds.has(invoice.id);
               const clientLabel =
                 invoice.clients?.name || invoice.client_name || t('noClient') || '—';
               const numberLabel =
                 invoice.document_no || invoice.document_number || '—';
-              const objectLabel = invoice.projectName || '—';
-
+              const dateLabel = invoice.date
+                ? format(new Date(invoice.date), 'dd.MM.yyyy')
+                : '—';
+              const resolved = resolveInvoiceStatus(invoice.status, invoice.due_date);
               return (
-                <motion.div
+                <div
                   key={invoice.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index * 0.03, 0.3) }}
+                  className="cpc-card flex items-center gap-2"
+                  style={{
+                    background: isSelected ? 'rgba(200,121,74,0.12)' : 'var(--cpc-card)',
+                  }}
                 >
-                  <div
-                    className="flex items-stretch"
+                  <button
+                    type="button"
+                    onClick={() => toggleInvoiceSelection(invoice.id)}
+                    className="w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0"
                     style={{
-                      background: isSelected
-                        ? 'rgba(200,121,74,0.12)'
-                        : 'transparent',
-                      borderBottom: '1px solid var(--cpc-line)',
+                      background: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                      borderColor: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-line)',
+                      color: isSelected ? 'var(--cpc-on-copper)' : 'transparent',
+                    }}
+                    aria-label="Обрати"
+                    aria-pressed={isSelected}
+                  >
+                    {isSelected && <Check size={12} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center gap-2 text-left bg-transparent border-0 min-w-0 p-0"
+                    onClick={() => {
+                      if (isUploaded && invoice.uploaded_pdf_url) {
+                        window.open(
+                          invoice.uploaded_pdf_url as string,
+                          '_blank',
+                          'noopener,noreferrer'
+                        );
+                      } else {
+                        navigate(`/invoices/${invoice.id}/view`);
+                      }
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleInvoiceSelection(invoice.id);
-                      }}
-                      className="ml-2.5 w-5 h-5 mt-4 rounded-md border flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
-                        borderColor: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-line)',
-                        color: isSelected ? 'var(--cpc-on-copper)' : 'transparent',
-                      }}
-                      aria-label={t('select') || 'Select'}
-                      aria-pressed={isSelected}
-                    >
-                      {isSelected && <Check size={12} />}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="flex-1 flex items-start gap-2 px-2.5 py-3 text-left bg-transparent border-0 min-w-0"
-                      onClick={() => {
-                        if (isUploaded && invoice.uploaded_pdf_url) {
-                          window.open(invoice.uploaded_pdf_url as string, '_blank', 'noopener,noreferrer');
-                        } else {
-                          navigate(`/invoices/${invoice.id}/view`);
-                        }
-                      }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="cpc-muted text-[11px] tabular-nums truncate">
-                            {numberLabel}
-                          </span>
-                          {isUploaded && (
-                            <span className="text-[10px] cpc-copper">PDF</span>
-                          )}
-                        </div>
-                        <p
-                          className="text-[14px] font-medium truncate leading-tight"
-                          style={{ color: 'var(--cpc-text)' }}
-                        >
-                          {clientLabel}
-                        </p>
-                        <p className="cpc-muted text-[11px] truncate mt-0.5">
-                          {objectLabel}
-                        </p>
-                        <div className="mt-1.5">
-                          {isUploaded ? (
-                            <span className="cpc-muted text-[11px] inline-flex items-center gap-1">
-                              <ExternalLink size={11} /> External
-                            </span>
-                          ) : (
-                            <StatusBadge status={invoice.status} dueDate={invoice.due_date} />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0 pl-1">
-                        <div className="cpc-muted text-[11px] mb-0.5 tabular-nums">
-                          {invoice.date ? format(new Date(invoice.date), 'dd.MM.yyyy') : '—'}
-                        </div>
-                        <b
-                          className="tabular-nums text-[14px] font-semibold cpc-copper block"
-                        >
-                          {formatCurrency(
-                            Number(invoice.total_gross ?? invoice.gross_total ?? 0),
-                            invoice.currency || 'EUR'
-                          )}
-                        </b>
-                        <ChevronRight size={14} className="inline mt-1" style={{ color: 'var(--cpc-muted)' }} />
-                      </div>
-                    </button>
-
-                    {isUploaded && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditUploadedInvoice(invoice);
-                        }}
-                        className="pr-3 pl-1 py-3 bg-transparent border-0"
-                        style={{ color: 'var(--cpc-muted)' }}
-                        title={t('edit') || 'Редагувати'}
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-[13px] font-semibold tabular-nums truncate"
+                        style={{ color: 'var(--cpc-text)' }}
                       >
-                        <Pencil size={15} />
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
+                        № {numberLabel}
+                        {isUploaded ? ' · PDF' : ''}
+                      </p>
+                      <p className="cpc-muted text-[11px] truncate mt-0.5">
+                        {clientLabel} · {dateLabel}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <b
+                        className="tabular-nums text-[14px] font-semibold block"
+                        style={{ color: 'var(--cpc-text)' }}
+                      >
+                        {formatCurrency(
+                          Number(invoice.total_gross ?? invoice.gross_total ?? 0),
+                          invoice.currency || 'EUR'
+                        )}
+                      </b>
+                      <div className="mt-1 flex justify-end">
+                        {isUploaded ? (
+                          <span className="cpc-muted text-[10px] inline-flex items-center gap-1">
+                            <ExternalLink size={10} /> Зовнішній
+                          </span>
+                        ) : (
+                          <StatusBadge status={resolved} dueDate={invoice.due_date} />
+                        )}
+                      </div>
+                    </div>
+                  </button>
+
+                  {isUploaded && (
+                    <button
+                      type="button"
+                      onClick={() => setEditUploadedInvoice(invoice)}
+                      className="cpc-icon-btn"
+                      title={t('edit') || 'Редагувати'}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                </div>
               );
-                })}
-              </div>
-            ))}
-          </div>
+            })
+          )
         )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (selectionCount === 0) {
+              showError('Оберіть рахунки для експорту');
+              return;
+            }
+            handleSaveSelected();
+          }}
+          disabled={selectionBusy}
+          className="cpc-btn-secondary inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+        >
+          <Upload size={15} />
+          Експорт у PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (selectionCount === 0) {
+              showError('Оберіть рахунки, щоб поділитися');
+              return;
+            }
+            handleShareSelected();
+          }}
+          disabled={selectionBusy}
+          className="cpc-btn-secondary inline-flex items-center justify-center gap-1.5 disabled:opacity-40"
+        >
+          <Share2 size={15} />
+          Поділитися
+        </button>
       </div>
 
       <AnimatePresence>

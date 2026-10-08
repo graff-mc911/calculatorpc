@@ -33,14 +33,14 @@ const TABS: Tab[] = [
     id: 'home',
     path: '/',
     match: (p) => p === '/',
-    label: 'Головна',
+    label: 'Огляд',
     Icon: Home,
   },
   {
     id: 'projects',
     path: '/projects',
     match: (p) => p === '/projects' || p.startsWith('/projects/'),
-    label: 'Об’єкти',
+    label: 'Проекти',
     Icon: Building2,
   },
   {
