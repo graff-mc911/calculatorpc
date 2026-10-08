@@ -35,6 +35,7 @@ const InvoiceView = lazy(() =>
 const ClientForm = lazy(() =>
   import('./pages/ClientForm').then((module) => ({ default: module.ClientForm }))
 );
+const ClientDetail = lazy(() => import('./pages/ClientDetail'));
 const Onboarding = lazy(() =>
   import('./pages/Onboarding').then((module) => ({ default: module.Onboarding }))
 );
@@ -181,6 +182,7 @@ function AppContent() {
             <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
             <Route path="/clients/:id/edit" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
             <Route path="/clients/:id/invoices" element={<ProtectedRoute><ClientInvoices /></ProtectedRoute>} />
+            <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
 
             <Route path="/receipts" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
             <Route path="/scan" element={<ProtectedRoute><ScanReceipt /></ProtectedRoute>} />

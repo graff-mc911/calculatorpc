@@ -1,17 +1,23 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Search, CreditCard as Edit2, Trash2, Eye } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
+import { Mail, MessageCircle, Phone, Plus, Search, Trash2, Users } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
-import { supabase } from '../lib/supabase';
+import {
+  emptyClientStats,
+  mailtoHref,
+  telHref,
+  whatsappHref,
+  type ClientMoneyStats,
+} from '../lib/clientContact';
+import { formatCurrency } from '../lib/moneyMask';
 import { offlineStore } from '../lib/offlineStore';
+import { computeProjectMetrics } from '../lib/projectMetrics';
+import { listProjects, type Project } from '../lib/projectsApi';
+import { supabase } from '../lib/supabase';
 
-// Тип одного клієнта.
-// Описує, які поля ми очікуємо отримати з таблиці clients.
 type Client = {
   id: string;
   user_id?: string;
@@ -22,59 +28,41 @@ type Client = {
   address?: string | null;
 };
 
-// Головна сторінка списку клієнтів.
+function formatCompact(value: number, currency = 'EUR') {
+  const n = Number.isFinite(value) ? value : 0;
+  if (Math.abs(n - Math.round(n)) < 0.005) {
+    return formatCurrency(Math.round(n), currency).replace(/,00(?=\s)/, '');
+  }
+  return formatCurrency(n, currency);
+}
+
 export const Clients: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { showSuccess, showError } = useToastContext();
   const queryClient = useQueryClient();
 
-  // Стан тексту пошуку.
   const [search, setSearch] = useState('');
-
-  // Стан модального вікна підтвердження видалення.
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(
+    null
+  );
 
-  // Тут зберігаємо клієнта, якого користувач хоче видалити.
-  const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null);
-
-  // ---------------------------------------------------------
-  // 1. Отримання поточної сесії
-  // ---------------------------------------------------------
-  // Потрібно, щоб:
-  // - знати ID поточного користувача
-  // - завантажувати лише його клієнтів
-  // - видаляти лише його записи
   const { data: session } = useQuery({
     queryKey: ['session'],
     queryFn: async () => {
       const { data, error } = await supabase.auth.getSession();
-
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data.session;
     },
   });
 
-  // ---------------------------------------------------------
-  // 2. Завантаження списку клієнтів
-  // ---------------------------------------------------------
-  // Логіка:
-  // - якщо офлайн -> беремо з локального сховища
-  // - якщо онлайн -> беремо з Supabase
-  // - якщо Supabase повернув помилку -> fallback на локальне сховище
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ['clients', session?.user?.id],
     queryFn: async () => {
       const userId = session?.user?.id || '';
-
       if (!userId) return [];
-
-      if (!navigator.onLine) {
-        return offlineStore.getClients(userId);
-      }
+      if (!navigator.onLine) return offlineStore.getClients(userId);
 
       const { data, error } = await supabase
         .from('clients')
@@ -86,314 +74,351 @@ export const Clients: React.FC = () => {
         console.error('Помилка завантаження клієнтів:', error);
         return offlineStore.getClients(userId);
       }
-
       const rows = (data as Client[]) || [];
-
       await offlineStore.saveClients(rows);
-
       return rows;
     },
     enabled: !!session?.user?.id,
   });
 
-  // ---------------------------------------------------------
-  // 3. Видалення клієнта
-  // ---------------------------------------------------------
-  // Видаляємо тільки той запис, який належить поточному користувачу.
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: listProjects,
+    retry: false,
+  });
+
+  const projectIds = useMemo(() => (projects as Project[]).map((p) => p.id), [projects]);
+
+  const { data: workByProject = {} } = useQuery({
+    queryKey: ['projects-work-summary', session?.user?.id, projectIds.join(',')],
+    enabled: !!session?.user?.id && projectIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('project_work_items')
+        .select('project_id, quantity, unit_price')
+        .in('project_id', projectIds);
+      if (error) throw error;
+      const map: Record<string, Array<{ quantity: number; unit_price: number }>> = {};
+      for (const row of data || []) {
+        const pid = row.project_id as string;
+        if (!map[pid]) map[pid] = [];
+        map[pid].push({
+          quantity: Number(row.quantity),
+          unit_price: Number(row.unit_price),
+        });
+      }
+      return map;
+    },
+  });
+
+  const { data: moneyByProject = {} } = useQuery({
+    queryKey: ['projects-money-summary', session?.user?.id, projectIds.join(',')],
+    enabled: !!session?.user?.id && projectIds.length > 0,
+    queryFn: async () => {
+      const [exp, prep] = await Promise.all([
+        supabase.from('project_expenses').select('project_id, amount').in('project_id', projectIds),
+        supabase
+          .from('project_prepayments')
+          .select('project_id, amount')
+          .in('project_id', projectIds),
+      ]);
+      if (exp.error) throw exp.error;
+      if (prep.error) throw prep.error;
+      const map: Record<
+        string,
+        { expenses: { amount: number }[]; prepayments: { amount: number }[] }
+      > = {};
+      for (const id of projectIds) map[id] = { expenses: [], prepayments: [] };
+      for (const row of exp.data || []) {
+        map[row.project_id as string]?.expenses.push({ amount: Number(row.amount) });
+      }
+      for (const row of prep.data || []) {
+        map[row.project_id as string]?.prepayments.push({ amount: Number(row.amount) });
+      }
+      return map;
+    },
+  });
+
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices-client-rollups', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('id, client_id, status, total_gross, gross_total')
+        .eq('user_id', session!.user!.id);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const statsByClient = useMemo(() => {
+    const map = new Map<string, ClientMoneyStats>();
+    for (const c of clients) map.set(c.id, emptyClientStats());
+
+    for (const p of projects as Project[]) {
+      if (!p.client_id || !map.has(p.client_id)) continue;
+      const stats = map.get(p.client_id)!;
+      stats.projectCount += 1;
+      const metrics = computeProjectMetrics(
+        workByProject[p.id] || [],
+        moneyByProject[p.id]?.expenses || [],
+        moneyByProject[p.id]?.prepayments || [],
+        Number(p.expense_budget) || 0
+      );
+      stats.received += metrics.received;
+      stats.debt += metrics.balanceDue;
+    }
+
+    for (const inv of invoices) {
+      const cid = inv.client_id as string | null;
+      if (!cid || !map.has(cid)) continue;
+      map.get(cid)!.invoiceCount += 1;
+    }
+
+    return map;
+  }, [clients, projects, workByProject, moneyByProject, invoices]);
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const userId = session?.user?.id;
-
-      if (!userId) {
-        throw new Error('Користувач не авторизований');
-      }
-
+      if (!userId) throw new Error('Користувач не авторизований');
       const { error } = await supabase
         .from('clients')
         .delete()
         .eq('id', id)
         .eq('user_id', userId);
-
       if (error) throw error;
     },
-
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['clients'] });
-
       showSuccess(t('clientDeleted') || 'Контакт видалено');
-
       setDeleteDialogOpen(false);
       setClientToDelete(null);
     },
-
     onError: (error: any) => {
-      console.error('Помилка видалення клієнта:', error);
       showError(error?.message || t('errorDeletingClient') || 'Не вдалося видалити контакт');
     },
   });
 
-  // ---------------------------------------------------------
-  // 4. Відкриття діалогу видалення
-  // ---------------------------------------------------------
-  // stopPropagation потрібен, щоб не спрацьовував клік по всій картці.
-  const handleDeleteClick = useCallback(
-    (e: React.MouseEvent, id: string, name: string) => {
-      e.stopPropagation();
-      setClientToDelete({ id, name });
-      setDeleteDialogOpen(true);
-    },
-    []
-  );
+  const handleDeleteClick = useCallback((e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation();
+    setClientToDelete({ id, name });
+    setDeleteDialogOpen(true);
+  }, []);
 
-  // ---------------------------------------------------------
-  // 5. Підтвердження видалення
-  // ---------------------------------------------------------
-  const handleDeleteConfirm = useCallback(() => {
-    if (clientToDelete) {
-      deleteMutation.mutate(clientToDelete.id);
-    }
-  }, [clientToDelete, deleteMutation]);
-
-  // ---------------------------------------------------------
-  // 6. Перегляд контакту
-  // ---------------------------------------------------------
-  // БЕЗПЕЧНИЙ варіант:
-  // ведемо на вже існуючий маршрут редагування,
-  // щоб кнопка "око" точно не викидала на головну.
-  const handleViewClient = useCallback(
-    (e: React.MouseEvent, clientId: string) => {
-      e.stopPropagation();
-      navigate(`/clients/${clientId}/edit`);
-    },
-    [navigate]
-  );
-
-  // ---------------------------------------------------------
-  // 7. Редагування контакту
-  // ---------------------------------------------------------
-  const handleEditClient = useCallback(
-    (e: React.MouseEvent, clientId: string) => {
-      e.stopPropagation();
-      navigate(`/clients/${clientId}/edit`);
-    },
-    [navigate]
-  );
-
-  // ---------------------------------------------------------
-  // 8. Клік по картці
-  // ---------------------------------------------------------
-  // Теж веде на вже існуючий маршрут, щоб нічого не ламалося.
-  const handleCardClick = useCallback(
-    (clientId: string) => {
-      navigate(`/clients/${clientId}/edit`);
-    },
-    [navigate]
-  );
-
-  // ---------------------------------------------------------
-  // 9. Фільтрація клієнтів
-  // ---------------------------------------------------------
-  // useMemo тут не обов'язковий, але зручний:
-  // список не буде перераховуватись зайвий раз без потреби.
   const filteredClients = useMemo(() => {
-    const searchValue = search.toLowerCase().trim();
-
-    return clients.filter((client) => {
-      return (
-        client.name?.toLowerCase().includes(searchValue) ||
-        client.email?.toLowerCase().includes(searchValue) ||
-        client.address?.toLowerCase().includes(searchValue) ||
-        client.client_number?.toLowerCase().includes(searchValue)
-      );
-    });
+    const q = search.toLowerCase().trim();
+    if (!q) return clients;
+    return clients.filter((client) =>
+      [client.name, client.email, client.phone, client.address, client.client_number]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    );
   }, [clients, search]);
 
   return (
-    <div className="cpc-page px-3 md:px-6 w-full max-w-[430px] md:max-w-6xl mx-auto">
-      {/* Верх сторінки */}
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-xl font-medium" style={{ color: 'var(--cpc-text)' }}>
-            {t('clients') || 'Клієнти'}
-          </h2>
-          <p className="cpc-muted text-sm mt-1">
-            {t('manageClients') || 'Керуйте своїми клієнтами'}
-          </p>
-        </div>
-
-        {/* Кнопка створення нового клієнта */}
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/clients/new')}
-            className="p-2.5 transition-all active:scale-95"
-            style={{
-              background: 'rgba(200,121,74,0.22)',
-              border: '1px solid rgba(224,151,95,0.4)',
-              borderRadius: 12,
-              color: 'var(--cpc-copper-light)',
-            }}
-            title={t('addClient') || 'Новий клієнт'}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <h1 className="flex-1 text-xl font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
+          Клієнти
+        </h1>
+        <button
+          type="button"
+          onClick={() => navigate('/clients/new')}
+          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-[13px] font-medium shrink-0"
+          style={{
+            background: 'var(--cpc-copper)',
+            color: 'var(--cpc-on-copper)',
+            borderRadius: 10,
+            border: 'none',
+          }}
+        >
+          <Plus size={16} strokeWidth={2.5} />
+          Новий
+        </button>
       </div>
 
-      {/* Блок списку */}
-      <div className="cpc-card p-4 md:p-6">
-        {/* Поле пошуку */}
-        <div className="relative mb-4">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 cpc-muted"
-          />
-          <input
-            type="text"
-            placeholder={t('searchClients') || 'Пошук по імені, адресі, номеру...'}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm focus:outline-none transition-colors"
-            style={{
-              background: 'var(--cpc-bg)',
-              border: '1px solid var(--cpc-line)',
-              color: 'var(--cpc-text)',
-            }}
-          />
+      <div
+        className="flex items-center gap-2 mb-3 px-2.5 min-h-[44px]"
+        style={{
+          background: 'var(--cpc-card)',
+          border: '1px solid var(--cpc-line)',
+          borderRadius: 12,
+        }}
+      >
+        <Search size={16} style={{ color: 'var(--cpc-muted)' }} aria-hidden />
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Пошук клієнта…"
+          className="flex-1 bg-transparent border-0 outline-none text-[13px] min-w-0"
+          style={{ color: 'var(--cpc-text)' }}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="cpc-card h-28 animate-pulse" />
+          ))}
         </div>
-
-        {/* Стан завантаження */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="px-4 py-3 rounded-xl animate-pulse">
-                <div className="h-4 bg-white/10 rounded w-48 mb-2" />
-                <div className="h-3 bg-white/5 rounded w-32" />
-              </div>
-            ))}
-          </div>
-        ) : filteredClients.length === 0 ? (
-          // Порожній стан
-          <div className="text-center py-16">
-            <div className="w-16 h-16 bg-orange-500/20 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <Users size={32} className="text-orange-400" />
-            </div>
-
-            <h3 className="text-lg font-semibold text-white mb-2">
-              {search
-                ? t('noSearchResults') || 'Нічого не знайдено'
-                : t('noClients') || 'Клієнтів ще немає'}
-            </h3>
-
-            <p className="text-white/60 mb-6 text-sm">
-              {search
-                ? t('tryDifferentSearch') || 'Спробуйте інший пошуковий запит'
-                : t('addFirstClient') || 'Додайте першого клієнта'}
-            </p>
-
-            {!search && (
-              <button
-                type="button"
-                onClick={() => navigate('/clients/new')}
-                className="bg-white/10 backdrop-blur-xl border border-white/10 text-orange-500 hover:bg-white/20 px-6 py-2.5 rounded-xl font-medium transition-all active:scale-95"
-              >
-                {t('addClient') || 'Додати клієнта'}
-              </button>
-            )}
-          </div>
-        ) : (
-          // Список клієнтів
-          <div className="space-y-3">
-            {/* Заголовки колонок для desktop */}
-            <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_auto] gap-4 px-4 py-2 text-xs font-medium text-white/50 uppercase">
-              <div>{t('name') || "Ім'я"}</div>
-              <div>{t('address') || 'Адреса'}</div>
-              <div>{t('clientNumber') || 'Номер'}</div>
-              <div className="text-right pr-2">{t('actions') || 'Дії'}</div>
-            </div>
-
-            {filteredClients.map((client, index) => (
-              <motion.div
+      ) : filteredClients.length === 0 ? (
+        <div className="cpc-card text-center py-12">
+          <Users size={28} className="mx-auto mb-3 cpc-copper" />
+          <p className="text-[15px] font-medium mb-1" style={{ color: 'var(--cpc-text)' }}>
+            {search ? 'Нічого не знайдено' : 'Клієнтів ще немає'}
+          </p>
+          <p className="cpc-muted text-sm mb-4">
+            Простий контакт для об’єктів — не CRM
+          </p>
+          {!search && (
+            <button
+              type="button"
+              onClick={() => navigate('/clients/new')}
+              className="cpc-btn-primary min-h-[44px] px-5"
+            >
+              Додати клієнта
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredClients.map((client) => {
+            const stats = statsByClient.get(client.id) || emptyClientStats();
+            const call = telHref(client.phone);
+            const wa = whatsappHref(client.phone);
+            const mail = mailtoHref(client.email);
+            return (
+              <article
                 key={client.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="grid grid-cols-1 md:grid-cols-[2fr_1.5fr_1fr_auto] gap-3 md:gap-4 px-4 py-3 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
-                onClick={() => handleCardClick(client.id)}
+                className="cpc-card cursor-pointer active:scale-[0.99] transition-transform"
+                onClick={() => navigate(`/clients/${client.id}`)}
               >
-                {/* Блок імені та email */}
-                <div>
-                  <span className="font-medium text-white">
-                    {client.name || '—'}
-                  </span>
-
-                  {client.email && (
-                    <div className="text-sm text-white/50 mt-0.5">
-                      {client.email}
-                    </div>
-                  )}
-                </div>
-
-                {/* Адреса */}
-                <div className="text-white/60 text-sm truncate">
-                  {client.address || '—'}
-                </div>
-
-                {/* Номер клієнта */}
-                <div className="text-white/60 text-sm">
-                  {client.client_number || '—'}
-                </div>
-
-                {/* Кнопки дій */}
-                <div className="flex items-center gap-2 justify-end">
-                  {/* Перегляд */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleViewClient(e, client.id)}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-blue-400 transition-all active:scale-95"
-                    title={t('view') || 'Переглянути'}
-                  >
-                    <Eye size={16} />
-                  </button>
-
-                  {/* Редагування */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleEditClient(e, client.id)}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-orange-400 transition-all active:scale-95"
-                    title={t('edit') || 'Редагувати'}
-                  >
-                    <Edit2 size={16} />
-                  </button>
-
-                  {/* Видалення */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <h2
+                      className="text-[16px] font-medium truncate"
+                      style={{ color: 'var(--cpc-text)' }}
+                    >
+                      {client.name || '—'}
+                    </h2>
+                    {client.phone && (
+                      <p className="cpc-muted text-[12px] mt-0.5 tabular-nums">{client.phone}</p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={(e) =>
                       handleDeleteClick(e, client.id, client.name || 'Без назви')
                     }
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-red-400 transition-all active:scale-95"
-                    title={t('delete') || 'Видалити'}
+                    className="w-9 h-9 flex items-center justify-center bg-transparent border-0 shrink-0"
+                    style={{ color: 'var(--cpc-muted)' }}
+                    aria-label="Видалити"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={15} />
                   </button>
                 </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Підтвердження видалення */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] mb-2.5">
+                  <div className="flex justify-between gap-2">
+                    <span className="cpc-muted">Проекти</span>
+                    <b className="tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+                      {stats.projectCount}
+                    </b>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="cpc-muted">Рахунки</span>
+                    <b className="tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+                      {stats.invoiceCount}
+                    </b>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="cpc-muted">Отримано</span>
+                    <b className="tabular-nums cpc-copper">
+                      {formatCompact(stats.received)}
+                    </b>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="cpc-muted">Борг</span>
+                    <b
+                      className="tabular-nums"
+                      style={{ color: stats.debt > 0 ? '#f0a8a8' : 'var(--cpc-text)' }}
+                    >
+                      {formatCompact(stats.debt)}
+                    </b>
+                  </div>
+                </div>
+
+                {(call || wa || mail) && (
+                  <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {call && (
+                      <a
+                        href={call}
+                        className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-1 text-[11px] font-medium no-underline"
+                        style={{
+                          background: 'var(--cpc-bg)',
+                          border: '1px solid var(--cpc-line)',
+                          borderRadius: 9,
+                          color: 'var(--cpc-copper-light)',
+                        }}
+                      >
+                        <Phone size={13} /> Call
+                      </a>
+                    )}
+                    {wa && (
+                      <a
+                        href={wa}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-1 text-[11px] font-medium no-underline"
+                        style={{
+                          background: 'var(--cpc-bg)',
+                          border: '1px solid var(--cpc-line)',
+                          borderRadius: 9,
+                          color: 'var(--cpc-copper-light)',
+                        }}
+                      >
+                        <MessageCircle size={13} /> WhatsApp
+                      </a>
+                    )}
+                    {mail && (
+                      <a
+                        href={mail}
+                        className="flex-1 min-h-[40px] inline-flex items-center justify-center gap-1 text-[11px] font-medium no-underline"
+                        style={{
+                          background: 'var(--cpc-bg)',
+                          border: '1px solid var(--cpc-line)',
+                          borderRadius: 9,
+                          color: 'var(--cpc-copper-light)',
+                        }}
+                      >
+                        <Mail size={13} /> Email
+                      </a>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+
       <ConfirmDialog
         open={deleteDialogOpen}
         onClose={() => {
           setDeleteDialogOpen(false);
           setClientToDelete(null);
         }}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => {
+          if (clientToDelete) deleteMutation.mutate(clientToDelete.id);
+        }}
         title={t('deleteClient') || 'Видалити контакт'}
-        description={`${t('confirmDeleteClient') || 'Ви справді хочете видалити'} "${clientToDelete?.name}"? ${t('actionCannotBeUndone') || 'Цю дію не можна скасувати.'}`}
+        description={`Видалити «${clientToDelete?.name}»? Об’єкти залишаться.`}
       />
     </div>
   );
