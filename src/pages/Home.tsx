@@ -216,8 +216,8 @@ export const Home: React.FC = () => {
         </div>
       </div>
 
-      {/* 2×2 stats */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Stats — 2×2 mobile, 4-up on desktop */}
+      <div className="grid grid-cols-2 gap-2 cpc-desk-stats">
         <button
           type="button"
           className="cpc-card text-left"
@@ -282,7 +282,8 @@ export const Home: React.FC = () => {
           </button>
         </div>
       ) : (
-        recentInvoices.map((inv) => {
+        <div className="flex flex-col gap-2 cpc-desk-list">
+        {recentInvoices.map((inv) => {
           const docNo = inv.document_number || inv.document_no || '—';
           const client =
             (inv.clients as { name?: string } | null)?.name ||
@@ -319,7 +320,8 @@ export const Home: React.FC = () => {
               </div>
             </button>
           );
-        })
+        })}
+        </div>
       )}
 
       <AnimatePresence>
@@ -336,7 +338,7 @@ export const Home: React.FC = () => {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[430px] p-4"
+              className="w-full max-w-[var(--cpc-shell-max)] md:max-w-[480px] p-4"
               style={{
                 background: 'var(--cpc-card)',
                 border: '1px solid var(--cpc-line)',

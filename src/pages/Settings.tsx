@@ -359,7 +359,7 @@ export default function Settings() {
   );
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-8">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-8">
       <h1 className="text-xl font-medium mb-1" style={{ color: 'var(--cpc-text)' }}>
         Налаштування
       </h1>
@@ -367,6 +367,7 @@ export default function Settings() {
         Бізнес, рахунки, додаток — коротко і по суті
       </p>
 
+      <div className="lg:grid lg:grid-cols-2 lg:gap-x-4 lg:items-start">
       {/* BUSINESS */}
       <Section title="Business · Бізнес">
         {profileLoading ? (
@@ -789,6 +790,7 @@ export default function Settings() {
           )}
         </div>
       </Section>
+      </div>
     </div>
   );
 }

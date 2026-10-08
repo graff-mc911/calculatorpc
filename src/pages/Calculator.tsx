@@ -312,7 +312,7 @@ export default function Calculator() {
   const accountsLabel = 'Рахунків';
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 flex flex-col gap-2 pb-4">
+    <div className="cpc-page w-full mx-auto min-w-0 flex flex-col gap-2 pb-4">
       {/* 1. Balance */}
       <div className="cpc-card flex items-center justify-between gap-2">
         <div className="min-w-0">
@@ -327,6 +327,7 @@ export default function Calculator() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
       {/* 2. Input data */}
       <div className="cpc-card">
         <small className="cpc-card-label">{inputLabel}</small>
@@ -453,7 +454,8 @@ export default function Calculator() {
         </div>
       </div>
 
-      {/* 3. Cost breakdown */}
+      {/* 3. Cost breakdown + profit */}
+      <div className="flex flex-col gap-2 min-w-0">
       <div className="cpc-card">
         <div className="flex items-center justify-between gap-2">
           <span className="cpc-muted text-[12px]">{materialsLabel}</span>
@@ -497,6 +499,8 @@ export default function Calculator() {
           <b className="text-[12px] font-medium tabular-nums">{profitPct}%</b>
         </div>
       </div>
+      </div>
+      </div>
 
       <AnimatePresence>
         {projectSheet && (
@@ -512,7 +516,7 @@ export default function Calculator() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[430px] max-h-[70vh] overflow-y-auto p-4"
+              className="w-full max-w-[var(--cpc-shell-max)] md:max-w-[480px] max-h-[70vh] overflow-y-auto p-4"
               style={{
                 background: 'var(--cpc-card)',
                 border: '1px solid var(--cpc-line)',

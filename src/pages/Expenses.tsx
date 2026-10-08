@@ -188,7 +188,7 @@ export default function Expenses() {
   };
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-6">
       <h1 className="text-xl font-medium mb-3" style={{ color: 'var(--cpc-text)' }}>
         Витрати
       </h1>
@@ -252,8 +252,9 @@ export default function Expenses() {
         </div>
       )}
 
+      <div className="cpc-desk-split">
       {/* Quick add form */}
-      <div className="cpc-card mb-3 space-y-3">
+      <div className="cpc-card cpc-desk-split-main space-y-3">
         <div>
           <label className="cpc-card-label mb-1">Що купили?</label>
           <input
@@ -364,9 +365,10 @@ export default function Expenses() {
         </button>
       </div>
 
+      <div className="cpc-desk-split-side flex flex-col gap-3 min-w-0">
       {/* Impact strip when project selected */}
       {metrics && projectId && (
-        <div className="grid grid-cols-2 gap-2 mb-3 text-[12px]">
+        <div className="grid grid-cols-2 gap-2 text-[12px] cpc-desk-stats">
           <div className="cpc-card py-2 px-3">
             <span className="cpc-muted">Витрачено</span>
             <b className="block tabular-nums text-[15px]" style={{ color: 'var(--cpc-text)' }}>
@@ -395,7 +397,7 @@ export default function Expenses() {
       )}
 
       {/* List */}
-      <section className="mb-3">
+      <section>
         <h2 className="text-[13px] font-medium mb-2 px-0.5" style={{ color: 'var(--cpc-text)' }}>
           Список
         </h2>
@@ -494,9 +496,11 @@ export default function Expenses() {
         )}
       </div>
 
-      <p className="cpc-muted text-[11px] text-center mt-3 px-2">
+      <p className="cpc-muted text-[11px] text-center px-2">
         Витрата на об’єкті одразу змінює Витрачено, Прибуток, Margin і Бюджет.
       </p>
+      </div>
+      </div>
     </div>
   );
 }

@@ -1458,7 +1458,8 @@ export const Invoices: React.FC = () => {
             )}
           </div>
         ) : (
-          groupedInvoices.flatMap((group) =>
+          <div className="contents lg:grid lg:grid-cols-2 lg:gap-2.5">
+          {groupedInvoices.flatMap((group) =>
             group.items.map((invoice) => {
               const isUploaded = invoice.source === 'uploaded';
               const isSelected = selectedIds.has(invoice.id);
@@ -1555,11 +1556,12 @@ export const Invoices: React.FC = () => {
                 </div>
               );
             })
-          )
+          )}
+          </div>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mt-3">
+      <div className="grid grid-cols-2 gap-2 mt-3 lg:max-w-md">
         <button
           type="button"
           onClick={() => {
@@ -1606,7 +1608,7 @@ export const Invoices: React.FC = () => {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[430px] max-h-[70vh] overflow-y-auto p-4"
+              className="w-full max-w-[var(--cpc-shell-max)] md:max-w-[520px] max-h-[70vh] overflow-y-auto p-4"
               style={{
                 background: 'var(--cpc-card)',
                 border: '1px solid var(--cpc-line)',

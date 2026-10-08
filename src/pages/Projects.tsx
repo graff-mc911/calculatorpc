@@ -294,7 +294,7 @@ export default function Projects() {
           <p className="cpc-muted text-sm">Нічого не знайдено</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 cpc-desk-list">
           {filtered.map(({ project, metrics, progressPct }, i) => {
             const client =
               project.client_name ||
@@ -395,7 +395,7 @@ export default function Projects() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[430px] p-4 max-h-[90vh] overflow-y-auto"
+              className="w-full max-w-[var(--cpc-shell-max)] md:max-w-[520px] p-4 max-h-[90vh] overflow-y-auto"
               style={{
                 background: 'var(--cpc-card)',
                 border: '1px solid var(--cpc-line)',

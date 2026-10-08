@@ -264,7 +264,7 @@ export const Clients: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 cpc-desk-list">
           {filteredClients.map((client) => {
             const stats = statsByClient.get(client.id) || emptyClientStats();
             const call = telHref(client.phone);

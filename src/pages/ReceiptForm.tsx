@@ -6,7 +6,6 @@ import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { Select } from '../components/ui/Select';
 import { ArrowLeft, Save, Upload, X, ZoomIn, FileImage, Download } from 'lucide-react';
-import { TopNav } from '../components/TopNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { downloadReceiptPDF } from '../lib/receiptPdfGenerator';
@@ -770,10 +769,8 @@ export default function ReceiptForm() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1f24] text-white pb-8 pt-20">
-      <TopNav />
-
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 max-w-xl mx-auto">
+    <div className="cpc-page pb-8">
+      <form onSubmit={handleSubmit} className="space-y-4 max-w-xl mx-auto lg:max-w-none">
         {/* Верхня панель */}
         <div className="flex items-center gap-3 mb-2">
           <button

@@ -17,7 +17,30 @@
   --cpc-radius-btn: 10px;
   --cpc-radius-chip: 999px;
   --cpc-radius-step: 8px;
+  /* Mobile-first phone column; expands on desktop monitors */
   --cpc-shell-max: 430px;
+  --cpc-top-offset: 56px;
+  --cpc-bottom-offset: 140px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --cpc-shell-max: 720px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --cpc-shell-max: 980px;
+    --cpc-top-offset: 112px; /* desktop top nav + quick actions */
+    --cpc-bottom-offset: 24px;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --cpc-shell-max: 1120px;
+  }
 }
 
 @layer components {
@@ -28,6 +51,70 @@
     color: var(--cpc-text);
     padding-left: 12px;
     padding-right: 12px;
+  }
+
+  @media (min-width: 768px) {
+    .cpc-page {
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+
+    .cpc-card {
+      padding: 14px 16px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .cpc-page {
+      padding-left: 24px;
+      padding-right: 24px;
+      /* Soft panel on wide monitors so content doesn’t float in empty page */
+      border-left: 1px solid var(--cpc-line);
+      border-right: 1px solid var(--cpc-line);
+      min-height: calc(100vh - var(--cpc-top-offset));
+    }
+
+    .cpc-desk-stats {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+
+    .cpc-desk-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .cpc-desk-list > * {
+      margin: 0 !important;
+    }
+  }
+
+  /* Mobile stack → two columns on monitors */
+  .cpc-desk-split {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cpc-desk-split > .cpc-desk-split-main,
+  .cpc-desk-split > .cpc-desk-split-side {
+    min-width: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .cpc-desk-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+  }
+
+  .cpc-shell {
+    width: 100%;
+    max-width: var(--cpc-shell-max);
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .cpc-card {

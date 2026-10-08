@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { OwnerRoute } from './components/OwnerRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MobileTopNav } from './components/MobileTopNav';
+import { TopNav } from './components/TopNav';
 import { BottomNav } from './components/BottomNav';
 import { QuickActionsProvider } from './components/QuickActionsContext';
 import { Loading } from './components/Loading';
@@ -120,9 +121,10 @@ function RootPage() {
 
   return (
     <>
-      <MobileTopNav />
       <QuickActionsProvider>
-        <div className="pt-14 pb-36">
+        <TopNav />
+        <MobileTopNav />
+        <div className="pt-14 pb-36 lg:pt-[7.5rem] lg:pb-8">
           <Home />
         </div>
         <BottomNav />
@@ -159,13 +161,20 @@ function AppContent() {
       {showAppChrome && (
         <ProtectedRoute>
           <>
+            <TopNav />
             <MobileTopNav />
             <BottomNav />
           </>
         </ProtectedRoute>
       )}
 
-      <div className={showAppChrome ? 'pt-14 pb-36 print:pt-0 print:pb-0' : ''}>
+      <div
+        className={
+          showAppChrome
+            ? 'pt-14 pb-36 lg:pt-[7.5rem] lg:pb-8 print:pt-0 print:pb-0'
+            : ''
+        }
+      >
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />

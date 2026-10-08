@@ -191,7 +191,7 @@ export const QuickActionsBar: React.FC<{
           role="presentation"
         >
           <div
-            className="w-full max-w-[430px] px-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))]"
+            className="w-full max-w-[var(--cpc-shell-max)] md:max-w-[480px] px-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))]"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"

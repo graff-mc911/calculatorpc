@@ -466,7 +466,7 @@ export default function ProjectDetail() {
 
   if (isLoading) {
     return (
-      <div className="cpc-page px-4 cpc-muted text-sm max-w-[430px] mx-auto">
+      <div className="cpc-page px-4 cpc-muted text-sm mx-auto">
         {t('loading') || 'Loading…'}
       </div>
     );
@@ -474,7 +474,7 @@ export default function ProjectDetail() {
 
   if (schemaMissing) {
     return (
-      <div className="cpc-page px-3 w-full max-w-[430px] mx-auto">
+      <div className="cpc-page px-3 w-full mx-auto">
         <button
           type="button"
           onClick={() => navigate('/projects')}
@@ -492,7 +492,7 @@ export default function ProjectDetail() {
 
   if (isError || !bundle?.project) {
     return (
-      <div className="cpc-page px-3 w-full max-w-[430px] mx-auto">
+      <div className="cpc-page px-3 w-full mx-auto">
         <button
           type="button"
           onClick={() => navigate('/projects')}
@@ -537,7 +537,7 @@ export default function ProjectDetail() {
   );
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-8">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-8">
       {/* HEADER */}
       <div className="flex items-start gap-2 mb-3">
         <button
@@ -724,8 +724,9 @@ export default function ProjectDetail() {
         ))}
       </div>
 
+      <div className="cpc-desk-split mb-4">
       {/* РОБОТИ */}
-      <section className="mb-4">
+      <section className="cpc-desk-split-main min-w-0">
         <div className="flex items-center justify-between mb-2 px-0.5">
           <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
             Роботи
@@ -824,8 +825,9 @@ export default function ProjectDetail() {
         )}
       </section>
 
+      <div className="cpc-desk-split-side flex flex-col gap-4 min-w-0">
       {/* ВИТРАТИ */}
-      <section className="mb-4">
+      <section>
         <div className="flex items-center justify-between mb-2 px-0.5">
           <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
             Витрати
@@ -890,7 +892,7 @@ export default function ProjectDetail() {
       </section>
 
       {/* ОПЛАТИ */}
-      <section className="mb-4">
+      <section>
         <div className="flex items-center justify-between mb-2 px-0.5">
           <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
             Оплати
@@ -971,9 +973,11 @@ export default function ProjectDetail() {
           </div>
         )}
       </section>
+      </div>
+      </div>
 
       {/* РАХУНОК */}
-      <section className="mb-2">
+      <section className="mb-2 lg:max-w-md">
         <h2 className="text-[13px] font-medium mb-2 px-0.5" style={{ color: 'var(--cpc-text)' }}>
           Рахунок
         </h2>
@@ -1009,7 +1013,7 @@ export default function ProjectDetail() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 50, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[430px] max-h-[88vh] overflow-y-auto p-4 pb-6"
+              className="w-full max-w-[var(--cpc-shell-max)] md:max-w-[520px] max-h-[88vh] overflow-y-auto p-4 pb-6"
               style={{
                 background: 'var(--cpc-card)',
                 border: '1px solid var(--cpc-line)',

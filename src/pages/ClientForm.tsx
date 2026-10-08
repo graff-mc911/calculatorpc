@@ -188,7 +188,7 @@ export const ClientForm: React.FC = () => {
   };
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-6 max-w-xl lg:max-w-none">
       <div className="flex items-center gap-2 mb-3">
         <button
           type="button"

@@ -149,7 +149,7 @@ export default function ClientDetail() {
 
   if (isLoading) {
     return (
-      <div className="cpc-page px-3 max-w-[430px] mx-auto">
+      <div className="cpc-page mx-auto">
         <div className="cpc-card h-40 animate-pulse" />
       </div>
     );
@@ -157,7 +157,7 @@ export default function ClientDetail() {
 
   if (!client) {
     return (
-      <div className="cpc-page px-3 max-w-[430px] mx-auto">
+      <div className="cpc-page mx-auto">
         <p className="cpc-muted">Клієнта не знайдено</p>
         <button type="button" className="cpc-btn-primary mt-3" onClick={() => navigate('/clients')}>
           До списку
@@ -172,7 +172,7 @@ export default function ClientDetail() {
   const note = resolveClientNote(client.id, (client as { note?: string | null }).note);
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-6">
       <div className="flex items-center gap-2 mb-3">
         <button
           type="button"

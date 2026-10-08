@@ -55,14 +55,14 @@ export const MobileTopNav: React.FC = () => {
 
   return (
     <nav
-      className="no-print fixed top-0 left-0 right-0 z-50"
+      className="no-print fixed top-0 left-0 right-0 z-50 lg:hidden"
       style={{
         background: 'var(--cpc-bg)',
         borderBottom: '1px solid var(--cpc-line)',
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
-      <div className="max-w-[430px] mx-auto flex items-center gap-2 px-3 py-2.5">
+      <div className="cpc-shell flex items-center gap-2 px-3 py-2.5">
         <button
           type="button"
           onClick={() => navigate('/')}

@@ -50,16 +50,16 @@ export const Login: React.FC = () => {
       className="min-h-screen flex flex-col items-center justify-center px-5 py-8"
       style={{ background: 'var(--cpc-page)' }}
     >
-      <div className="w-full max-w-[360px] flex flex-col items-center">
+      <div className="w-full max-w-[360px] md:max-w-[420px] flex flex-col items-center">
         {/* Splash mark — visual spec */}
         <img
           src="/logo-cpc-full.jpg"
           alt="CPC Construction Project Calculator"
-          className="w-[88%] max-w-[280px] rounded-[18px] object-contain mb-4"
+          className="w-[88%] max-w-[280px] md:max-w-[320px] rounded-[18px] object-contain mb-4"
           draggable={false}
         />
         <p
-          className="text-[15px] font-medium text-center mb-1"
+          className="text-[15px] md:text-[18px] font-medium text-center mb-1"
           style={{ color: 'var(--cpc-text)' }}
         >
           Construction Project Calculator

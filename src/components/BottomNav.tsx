@@ -73,14 +73,14 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav
-      className="no-print fixed bottom-0 inset-x-0 z-40"
+      className="no-print fixed bottom-0 inset-x-0 z-40 lg:hidden"
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
       aria-label="Main"
     >
       <div
-        className="max-w-[430px] mx-auto"
+        className="cpc-shell"
         style={{
           background: 'var(--cpc-bg)',
           borderTop: '1px solid var(--cpc-line)',

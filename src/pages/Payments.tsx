@@ -165,7 +165,7 @@ export default function Payments() {
   });
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-6">
       <h1 className="text-xl font-medium mb-3" style={{ color: 'var(--cpc-text)' }}>
         Аванси та оплати
       </h1>
@@ -252,8 +252,9 @@ export default function Payments() {
         </div>
       )}
 
+      <div className="cpc-desk-split">
       {/* Quick add */}
-      <div className="cpc-card mb-3 space-y-3">
+      <div className="cpc-card cpc-desk-split-main space-y-3">
         <div>
           <label className="cpc-card-label mb-1">Сума</label>
           <div className="relative">
@@ -348,7 +349,7 @@ export default function Payments() {
       </div>
 
       {/* History */}
-      <section className="mb-3">
+      <section className="cpc-desk-split-side min-w-0">
         <h2 className="text-[13px] font-medium mb-2 px-0.5" style={{ color: 'var(--cpc-text)' }}>
           Історія оплат
         </h2>
@@ -416,13 +417,12 @@ export default function Payments() {
             })}
           </div>
         )}
-      </section>
 
       {selectedProject && (
         <button
           type="button"
           onClick={() => navigate(`/projects/${selectedProject.id}`)}
-          className="w-full text-center text-[12px] cpc-copper bg-transparent border-0 min-h-[40px]"
+          className="w-full text-center text-[12px] cpc-copper bg-transparent border-0 min-h-[40px] mt-2"
         >
           До об’єкта →
         </button>
@@ -431,6 +431,8 @@ export default function Payments() {
       <p className="cpc-muted text-[11px] text-center mt-2 px-2">
         Оплата одразу оновлює Отримано, Залишок, Переплату та Прибуток.
       </p>
+      </section>
+      </div>
     </div>
   );
 }
