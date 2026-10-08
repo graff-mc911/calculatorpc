@@ -20,15 +20,7 @@ import {
 } from '../lib/projectsApi';
 import { supabase } from '../lib/supabase';
 
-type FilterKey = 'all' | 'active' | 'done';
-
-function isActiveStatus(status: ProjectStatus | string) {
-  return status === 'draft' || status === 'in_progress';
-}
-
-function isDoneStatus(status: ProjectStatus | string) {
-  return status === 'completed' || status === 'paid';
-}
+type FilterKey = 'all' | 'draft' | 'in_progress' | 'completed' | 'paid';
 
 function formatCompact(value: number, currency: string) {
   const n = Number.isFinite(value) ? value : 0;
@@ -220,8 +212,7 @@ export default function Projects() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return cards.filter(({ project }) => {
-      if (filter === 'active' && !isActiveStatus(project.status)) return false;
-      if (filter === 'done' && !isDoneStatus(project.status)) return false;
+      if (filter !== 'all' && project.status !== filter) return false;
       if (!q) return true;
       const hay = [project.name, project.client_name || '', project.address || '']
         .join(' ')
@@ -229,6 +220,21 @@ export default function Projects() {
       return hay.includes(q);
     });
   }, [cards, filter, query]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<FilterKey, number> = {
+      all: projects.length,
+      draft: 0,
+      in_progress: 0,
+      completed: 0,
+      paid: 0,
+    };
+    for (const p of projects) {
+      const s = p.status as FilterKey;
+      if (s in counts && s !== 'all') counts[s] += 1;
+    }
+    return counts;
+  }, [projects]);
 
   const title = t('projectsNav') === 'projectsNav' ? 'Об’єкти' : t('projectsNav');
   const newLabel = t('projectNew') === 'projectNew' ? 'Новий об’єкт' : t('projectNew');
@@ -242,9 +248,11 @@ export default function Projects() {
   const progressLabel = 'Прогрес';
   const searchPlaceholder = 'Пошук об’єкта або клієнта…';
   const filters: { key: FilterKey; label: string }[] = [
-    { key: 'all', label: 'Всі' },
-    { key: 'active', label: 'Активні' },
-    { key: 'done', label: 'Завершені' },
+    { key: 'all', label: t('allStatuses') || 'Усі' },
+    { key: 'draft', label: t('projectStatus_draft') || 'Чернетки' },
+    { key: 'in_progress', label: t('projectStatus_in_progress') || 'В роботі' },
+    { key: 'completed', label: t('projectStatus_completed') || 'Завершені' },
+    { key: 'paid', label: t('projectStatus_paid') || 'Оплачені' },
   ];
 
   return (
@@ -302,16 +310,17 @@ export default function Projects() {
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-1.5 mb-3">
+      {/* Filters — Усі / Чернетки / В роботі / Завершені / Оплачені */}
+      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-hide">
         {filters.map((f) => {
           const active = filter === f.key;
+          const count = statusCounts[f.key] || 0;
           return (
             <button
               key={f.key}
               type="button"
               onClick={() => setFilter(f.key)}
-              className="min-h-[36px] px-3 text-[12px] font-medium"
+              className="shrink-0 min-h-[44px] px-3 text-[12px] font-medium"
               style={{
                 background: active ? 'rgba(200,121,74,0.22)' : 'var(--cpc-card)',
                 border: `1px solid ${active ? 'rgba(224,151,95,0.45)' : 'var(--cpc-line)'}`,
@@ -320,6 +329,7 @@ export default function Projects() {
               }}
             >
               {f.label}
+              {count > 0 ? ` · ${count}` : ''}
             </button>
           );
         })}
