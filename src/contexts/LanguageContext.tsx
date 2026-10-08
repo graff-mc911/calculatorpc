@@ -23,8 +23,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const t = (key: string): string => {
-    const langTranslations = translations[language] || translations.uk;
-    return langTranslations[key] || translations.en[key] || key;
+    const langTranslations = translations[language] || translations.uk || {};
+    return langTranslations[key] || translations.en?.[key] || translations.uk?.[key] || key;
   };
 
   const value = React.useMemo(() => ({

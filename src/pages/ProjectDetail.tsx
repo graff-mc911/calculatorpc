@@ -165,11 +165,11 @@ export default function ProjectDetail() {
   }, [id]);
 
   const metrics = useMemo(() => {
-    if (!bundle) return computeProjectMetrics([], [], [], 0);
+    if (!bundle?.project) return computeProjectMetrics([], [], [], 0);
     return computeProjectMetrics(
-      bundle.workItems,
-      bundle.expenses,
-      bundle.prepayments,
+      Array.isArray(bundle.workItems) ? bundle.workItems : [],
+      Array.isArray(bundle.expenses) ? bundle.expenses : [],
+      Array.isArray(bundle.prepayments) ? bundle.prepayments : [],
       Number(bundle.project.expense_budget) || 0
     );
   }, [bundle]);
@@ -472,7 +472,7 @@ export default function ProjectDetail() {
     );
   }
 
-  if (schemaMissing || !bundle) {
+  if (schemaMissing) {
     return (
       <div className="cpc-page px-3 w-full max-w-[430px] mx-auto">
         <button
@@ -490,7 +490,39 @@ export default function ProjectDetail() {
     );
   }
 
-  const { project, workItems, expenses, prepayments } = bundle;
+  if (isError || !bundle?.project) {
+    return (
+      <div className="cpc-page px-3 w-full max-w-[430px] mx-auto">
+        <button
+          type="button"
+          onClick={() => navigate('/projects')}
+          className="cpc-muted text-sm mb-4 inline-flex items-center gap-2 min-h-[44px] bg-transparent border-0"
+        >
+          <ArrowLeft size={16} /> {t('back')}
+        </button>
+        <div className="cpc-card text-center py-6">
+          <p className="text-sm mb-2" style={{ color: 'var(--cpc-text)' }}>
+            Не вдалося відкрити об&apos;єкт
+          </p>
+          <p className="cpc-muted text-xs mb-4 break-all">
+            {error instanceof Error ? error.message : 'Спробуйте ще раз'}
+          </p>
+          <button
+            type="button"
+            className="cpc-btn-primary min-h-[44px]"
+            onClick={() => qc.invalidateQueries({ queryKey: ['project-bundle', id] })}
+          >
+            Оновити
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const project = bundle.project;
+  const workItems = Array.isArray(bundle.workItems) ? bundle.workItems : [];
+  const expenses = Array.isArray(bundle.expenses) ? bundle.expenses : [];
+  const prepayments = Array.isArray(bundle.prepayments) ? bundle.prepayments : [];
   const currency = project.currency || 'EUR';
   const objectPrice =
     metrics.estimateTotal > 0

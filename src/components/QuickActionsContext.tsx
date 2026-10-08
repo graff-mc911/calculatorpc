@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -16,8 +17,12 @@ type Ctx = {
 const QuickActionsContext = createContext<Ctx | null>(null);
 
 export function QuickActionsProvider({ children }: { children: React.ReactNode }) {
-  const [handlers, setHandlers] = useState<QuickActionHandlers | undefined>(undefined);
-  const value = useMemo(() => ({ handlers, setHandlers }), [handlers]);
+  const [handlers, setHandlersState] = useState<QuickActionHandlers | undefined>(undefined);
+  // Stable setter so consumers can depend on it without re-firing effects.
+  const setHandlers = useCallback((h: QuickActionHandlers | undefined) => {
+    setHandlersState(h);
+  }, []);
+  const value = useMemo(() => ({ handlers, setHandlers }), [handlers, setHandlers]);
   return (
     <QuickActionsContext.Provider value={value}>{children}</QuickActionsContext.Provider>
   );
@@ -26,20 +31,23 @@ export function QuickActionsProvider({ children }: { children: React.ReactNode }
 /** Register page-specific quick-action handlers while mounted. */
 export function useQuickActionHandlers(handlers: QuickActionHandlers) {
   const ctx = useContext(QuickActionsContext);
+  const setHandlers = ctx?.setHandlers;
   const ref = useRef(handlers);
   ref.current = handlers;
 
   useEffect(() => {
-    if (!ctx) return;
+    if (!setHandlers) return;
     const proxy: QuickActionHandlers = {
       onWork: () => ref.current.onWork?.(),
       onExpense: () => ref.current.onExpense?.(),
       onAdvance: () => ref.current.onAdvance?.(),
       onPdf: () => ref.current.onPdf?.(),
     };
-    ctx.setHandlers(proxy);
-    return () => ctx.setHandlers(undefined);
-  }, [ctx]);
+    setHandlers(proxy);
+    return () => setHandlers(undefined);
+    // Intentionally only depend on stable setHandlers — NOT the whole ctx object
+    // (ctx identity changes when handlers update and would cause an infinite loop).
+  }, [setHandlers]);
 }
 
 export function useQuickActionsContext() {

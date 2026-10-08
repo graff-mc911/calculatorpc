@@ -231,13 +231,13 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
-        <ErrorBoundary>
-          <ToastProvider>
-            <BrowserRouter>
+        <ToastProvider>
+          <BrowserRouter>
+            <ErrorBoundary>
               <AppContent />
-            </BrowserRouter>
-          </ToastProvider>
-        </ErrorBoundary>
+            </ErrorBoundary>
+          </BrowserRouter>
+        </ToastProvider>
       </LanguageProvider>
     </QueryClientProvider>
   );
