@@ -1,4 +1,6 @@
-/* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
+/* CPC service worker — network-first, clears stale caches on activate.
+ * CACHE_BUST: 2026-10-08-cpc-chrome-v2
+ */
 const CACHE_BUST = 'cpc-chrome-v2-20261008';
 
 self.addEventListener('install', (event) => {
@@ -12,6 +14,10 @@ self.addEventListener('activate', (event) => {
       const keys = await caches.keys();
       await Promise.all(keys.map((key) => caches.delete(key)));
       await self.clients.claim();
+      const clients = await self.clients.matchAll({ type: 'window' });
+      for (const client of clients) {
+        client.postMessage({ type: 'SW_ACTIVATED', cacheBust: CACHE_BUST });
+      }
     })()
   );
 });
@@ -26,6 +32,7 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
+  // Always network for navigations and the app shell so deploys are visible.
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(
       fetch(request)
@@ -38,6 +45,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-first for hashed assets / scripts / styles — never prefer stale.
   event.respondWith(
     fetch(request)
       .then((response) => response)
