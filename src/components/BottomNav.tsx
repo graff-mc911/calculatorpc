@@ -1,6 +1,9 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
+import { listProjects, type Project } from '../lib/projectsApi';
+import { supabase } from '../lib/supabase';
 
 type Tab = {
   id: string;
@@ -30,6 +33,7 @@ const TABS: Tab[] = [
   },
   {
     id: 'calculator',
+    // Project-detail estimator; list / first project is the entry point
     path: '/projects',
     match: (p) => p.startsWith('/projects/'),
     icon: '▦',
@@ -56,15 +60,40 @@ const TABS: Tab[] = [
 
 /**
  * Mobile bottom tab bar matching CPC copper hybrid mockup (1a92).
+ * Огляд = Home calculator; Калькулятор → first project detail or /projects.
  */
 export const BottomNav: React.FC = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t } = useLanguage();
 
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    },
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: listProjects,
+    retry: false,
+  });
+
   const activeId =
     TABS.find((tab) => tab.match(pathname))?.id ||
     (pathname === '/' ? 'overview' : '');
+
+  const onTab = (tab: Tab) => {
+    if (tab.id === 'calculator') {
+      const first = (projects as Project[])[0];
+      navigate(first ? `/projects/${first.id}` : '/projects');
+      return;
+    }
+    navigate(tab.path);
+  };
 
   return (
     <nav
@@ -84,7 +113,7 @@ export const BottomNav: React.FC = () => {
             <button
               key={tab.id}
               type="button"
-              onClick={() => navigate(tab.path)}
+              onClick={() => onTab(tab)}
               className="flex-1 flex flex-col items-center gap-0.5 min-h-[44px] bg-transparent border-0 cursor-pointer"
               style={{
                 color: active ? 'var(--cpc-copper-light)' : 'var(--cpc-muted)',
