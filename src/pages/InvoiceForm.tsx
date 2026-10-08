@@ -12,22 +12,13 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { evalFieldExpression } from '../lib/calculator';
 import { calculateLineTotal } from '../lib/invoiceTotals';
+import { prefillInvoiceFromProject } from '../lib/invoiceFromProject';
 import {
   fetchProjectBundle,
   listProjects,
   ProjectsSchemaMissingError,
   type Project,
 } from '../lib/projectsApi';
-
-function mapProjectUnitToInvoice(unit: string): string {
-  const u = (unit || 'm2').toLowerCase().replace(/\s/g, '');
-  if (u === 'm2' || u === 'м2' || u === 'м²') return 'm²';
-  if (u === 'm3' || u === 'м3' || u === 'м³') return 'm³';
-  if (u === 'lm' || u === 'мп' || u === 'пм') return 'm';
-  if (u === 'hrs' || u === 'h' || u === 'год') return 'h';
-  if (u === 'pcs' || u === 'шт') return 'pcs';
-  return unit || 'm²';
-}
 
 interface InvoiceItem {
   quantity: number;
@@ -150,37 +141,7 @@ export const InvoiceForm: React.FC = () => {
           setFormData((prev) => ({ ...prev, project_id: preselectedProjectId }));
           if (fromProject) {
             try {
-              const bundle = await fetchProjectBundle(preselectedProjectId);
-              const project = bundle.project;
-              setFormData((prev) => ({
-                ...prev,
-                project_id: preselectedProjectId,
-                client_id: project.client_id || prev.client_id,
-                client_name: project.client_name || prev.client_name,
-                object_address: project.address || prev.object_address,
-                currency: project.currency || prev.currency,
-                notes: prev.notes || `Об'єкт: ${project.name}`,
-              }));
-              if (bundle.workItems.length > 0) {
-                setItems(
-                  bundle.workItems.map((w) => {
-                    const quantity = Number(w.quantity) || 0;
-                    const price = Number(w.unit_price) || 0;
-                    const unit = mapProjectUnitToInvoice(w.unit);
-                    return {
-                      quantity,
-                      quantityDisplay: String(quantity),
-                      unit,
-                      price,
-                      priceDisplay: String(price),
-                      material: '',
-                      materialDisplay: '',
-                      description: w.title,
-                      total: calculateLineTotal(quantity, price, 0),
-                    };
-                  })
-                );
-              }
+              await applyProjectPrefill(preselectedProjectId);
             } catch (err) {
               console.warn('Project prefill failed', err);
             }
@@ -227,6 +188,25 @@ export const InvoiceForm: React.FC = () => {
       console.warn('Projects load failed', error);
       setProjects([]);
       setProjectsAvailable(false);
+    }
+  };
+
+  /** Load client + works + qty + prices from a project (no retyping). */
+  const applyProjectPrefill = async (projectId: string) => {
+    if (!projectId) return;
+    const bundle = await fetchProjectBundle(projectId);
+    const filled = prefillInvoiceFromProject(bundle);
+    setFormData((prev) => ({
+      ...prev,
+      project_id: filled.project_id,
+      client_id: filled.client_id || prev.client_id,
+      client_name: filled.client_name || prev.client_name,
+      object_address: filled.object_address || prev.object_address,
+      currency: filled.currency || prev.currency,
+      notes: filled.notes || prev.notes,
+    }));
+    if (filled.items.length > 0) {
+      setItems(filled.items);
     }
   };
 
@@ -852,25 +832,20 @@ export const InvoiceForm: React.FC = () => {
 
             {projectsAvailable ? (
               <Select
-                label={t('selectProject') || t('projects') || 'Project'}
+                label={t('selectProject') || t('projects') || 'Об’єкт'}
                 value={formData.project_id}
                 onChange={(e) => {
-                  const project = projects.find((p) => p.id === e.target.value);
-                  setFormData((prev) => ({
-                    ...prev,
-                    project_id: e.target.value,
-                    object_address:
-                      prev.object_address || project?.address || prev.object_address,
-                    client_id:
-                      prev.client_id || project?.client_id || prev.client_id,
-                    client_name:
-                      prev.client_name ||
-                      project?.client_name ||
-                      prev.client_name,
-                  }));
+                  const projectId = e.target.value;
+                  setFormData((prev) => ({ ...prev, project_id: projectId }));
+                  if (projectId) {
+                    void applyProjectPrefill(projectId).catch((err) => {
+                      console.warn('Project prefill failed', err);
+                      showError(t('error') || 'Не вдалося завантажити об’єкт');
+                    });
+                  }
                 }}
                 options={[
-                  { value: '', label: t('noProject') || 'No project' },
+                  { value: '', label: t('noProject') || 'Без об’єкта' },
                   ...projects.map((p) => ({ value: p.id, label: p.name })),
                 ]}
               />

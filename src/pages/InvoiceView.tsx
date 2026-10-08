@@ -19,6 +19,7 @@ import {
   Printer,
   Link2,
   Copy,
+  CheckCircle,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { InvoicePreview } from '../components/InvoicePreview';
@@ -107,6 +108,7 @@ export const InvoiceView: React.FC = () => {
   const [emailTo, setEmailTo] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -583,6 +585,16 @@ export const InvoiceView: React.FC = () => {
     return { blob, fileName, shareLabel };
   };
 
+  const markInvoiceStatus = async (status: 'sent' | 'paid') => {
+    if (!invoice?.id) return;
+    const { error } = await supabase
+      .from('invoices')
+      .update({ status })
+      .eq('id', invoice.id);
+    if (error) throw error;
+    setInvoice((prev: any) => (prev ? { ...prev, status } : prev));
+  };
+
   const handleShareInvoice = async () => {
     if (!invoice) return;
 
@@ -596,6 +608,15 @@ export const InvoiceView: React.FC = () => {
         title: shareLabel,
         text: shareLabel,
       });
+
+      // Promote draft → sent after a successful share (simple status model)
+      if (invoice.status === 'draft' || !invoice.status) {
+        try {
+          await markInvoiceStatus('sent');
+        } catch (e) {
+          console.warn('Could not set sent status', e);
+        }
+      }
 
       if (result === 'downloaded') {
         showSuccess(t('pdfDownloaded') || t('downloadPdf') || 'PDF downloaded');
@@ -623,6 +644,22 @@ export const InvoiceView: React.FC = () => {
       showError(error?.message || t('shareFailed') || 'Could not download PDF');
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const [markingPaid, setMarkingPaid] = useState(false);
+
+  const handleMarkAsPaid = async () => {
+    if (!invoice || invoice.status === 'paid') return;
+    setMarkingPaid(true);
+    try {
+      await markInvoiceStatus('paid');
+      showSuccess(t('paid') || 'Paid');
+    } catch (error: any) {
+      console.error('Mark paid error:', error);
+      showError(error?.message || t('error') || 'Could not update status');
+    } finally {
+      setMarkingPaid(false);
     }
   };
 
@@ -709,17 +746,64 @@ export const InvoiceView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          <Button
+        {/* Primary mobile actions — Share stays one tap via Web Share API */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <button
             type="button"
             onClick={() => void handleDownloadPdf()}
             disabled={downloadingPdf}
-            className="bg-white/10 border border-white/10 text-white hover:bg-white/20"
+            className="min-h-[52px] flex flex-col items-center justify-center gap-1 text-[11px] font-medium disabled:opacity-50"
+            style={{
+              background: 'var(--cpc-card)',
+              border: '1px solid var(--cpc-line)',
+              borderRadius: 12,
+              color: 'var(--cpc-text)',
+            }}
           >
-            <Download size={16} className="mr-2" />
-            {t('downloadPdf') || 'Download PDF'}
-          </Button>
+            <Download size={18} style={{ color: 'var(--cpc-copper-light)' }} />
+            Download PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleShareInvoice()}
+            disabled={sharing}
+            className="min-h-[52px] flex flex-col items-center justify-center gap-1 text-[11px] font-medium disabled:opacity-50"
+            style={{
+              background: 'var(--cpc-copper)',
+              border: '1px solid var(--cpc-copper)',
+              borderRadius: 12,
+              color: 'var(--cpc-on-copper)',
+            }}
+          >
+            <Share2 size={18} />
+            Share
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleMarkAsPaid()}
+            disabled={markingPaid || invoice.status === 'paid'}
+            className="min-h-[52px] flex flex-col items-center justify-center gap-1 text-[11px] font-medium disabled:opacity-50"
+            style={{
+              background:
+                invoice.status === 'paid'
+                  ? 'rgba(120,180,130,0.18)'
+                  : 'var(--cpc-card)',
+              border: '1px solid var(--cpc-line)',
+              borderRadius: 12,
+              color: invoice.status === 'paid' ? '#9fd4a8' : 'var(--cpc-text)',
+            }}
+          >
+            <CheckCircle
+              size={18}
+              style={{
+                color: invoice.status === 'paid' ? '#9fd4a8' : 'var(--cpc-copper-light)',
+              }}
+            />
+            {invoice.status === 'paid' ? 'Paid' : 'Mark as Paid'}
+          </button>
+        </div>
 
+        <div className="flex flex-wrap gap-2 mb-6">
           <Button
             type="button"
             onClick={handlePrint}

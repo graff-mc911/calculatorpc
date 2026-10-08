@@ -33,6 +33,11 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { offlineStore } from '../lib/offlineStore';
 import { downloadPdfFiles, shareOrDownloadPdfs } from '../lib/shareInvoice';
 import { resolveInvoicePdfFiles } from '../lib/resolveInvoicePdf';
+import {
+  resolveInvoiceStatus,
+  STATUS_LABELS_UK,
+} from '../lib/invoiceFromProject';
+import { listProjects, type Project } from '../lib/projectsApi';
 
 /**
  * Назва bucket у Supabase Storage для завантажених зовнішніх PDF.
@@ -124,40 +129,34 @@ const InvoiceThumbnail: React.FC<{ invoice: Record<string, unknown> }> = () => {
 };
 
 /**
- * Бейдж статусу для звичайних рахунків.
+ * Simple status badge — Draft / Sent / Paid / Overdue only.
  */
-const StatusBadge: React.FC<{ status: string; t: (key: string) => string }> = ({ status, t }) => {
-  if (status === 'paid') {
-    return (
-      <span className="flex items-center gap-1 text-xs text-white/50">
-        <CheckCircle size={12} className="text-white/40" />
-        {t('paid')}
-      </span>
-    );
-  }
-
-  if (status === 'sent') {
-    return (
-      <span className="flex items-center gap-1 text-xs text-blue-400/80">
-        <Send size={12} />
-        {t('sent')}
-      </span>
-    );
-  }
-
-  if (status === 'overdue') {
-    return (
-      <span className="flex items-center gap-1 text-xs text-red-400/80">
-        <AlertCircle size={12} />
-        {t('overdue')}
-      </span>
-    );
-  }
-
+const StatusBadge: React.FC<{ status: string; dueDate?: string | null }> = ({
+  status,
+  dueDate,
+}) => {
+  const resolved = resolveInvoiceStatus(status, dueDate);
+  const label = STATUS_LABELS_UK[resolved];
+  const style =
+    resolved === 'paid'
+      ? { color: '#9fd4a8' }
+      : resolved === 'sent'
+        ? { color: 'var(--cpc-copper-light)' }
+        : resolved === 'overdue'
+          ? { color: '#f0a8a8' }
+          : { color: 'var(--cpc-muted)' };
+  const Icon =
+    resolved === 'paid'
+      ? CheckCircle
+      : resolved === 'sent'
+        ? Send
+        : resolved === 'overdue'
+          ? AlertCircle
+          : Clock;
   return (
-    <span className="flex items-center gap-1 text-xs text-white/40">
-      <Clock size={12} />
-      {t(status) || t('draft')}
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={style}>
+      <Icon size={12} />
+      {label}
     </span>
   );
 };
@@ -869,7 +868,8 @@ export const Invoices: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionBusy, setSelectionBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [groupMode, setGroupMode] = useState<'none' | 'day' | 'month' | 'year'>('month');
+  const [groupMode, setGroupMode] = useState<'none' | 'day' | 'month' | 'year'>('none');
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
 
   /** Sync filter when arriving via Home cards (?status=paid|unpaid|…). */
   useEffect(() => {
@@ -898,6 +898,19 @@ export const Invoices: React.FC = () => {
       return data.session;
     },
   });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: listProjects,
+    retry: false,
+  });
+
+  const projectNameById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of projects as Project[]) map.set(p.id, p.name);
+    return map;
+  }, [projects]);
 
   /**
    * Отримуємо список рахунків.
@@ -947,6 +960,23 @@ export const Invoices: React.FC = () => {
     enabled: !!session?.user?.id,
   });
 
+  const startNewInvoice = useCallback(
+    (project?: Project) => {
+      setProjectPickerOpen(false);
+      if (!project) {
+        navigate('/invoices/new');
+        return;
+      }
+      const qs = new URLSearchParams({
+        project_id: project.id,
+        from_project: '1',
+      });
+      if (project.client_id) qs.set('client_id', project.client_id);
+      navigate(`/invoices/new?${qs.toString()}`);
+    },
+    [navigate]
+  );
+
   /**
    * Форматування суми з потрібною валютою.
    */
@@ -976,12 +1006,26 @@ export const Invoices: React.FC = () => {
    * Фільтрований список: статус + пошук (номер, ім'я, дата, адреса).
    */
   const filteredInvoices = React.useMemo(() => {
+    const withResolved = invoices.map((inv) => ({
+      ...inv,
+      displayStatus: resolveInvoiceStatus(inv.status, inv.due_date),
+      projectName:
+        (inv.project_id && projectNameById.get(inv.project_id)) ||
+        (typeof inv.notes === 'string' && inv.notes.startsWith("Об'єкт: ")
+          ? inv.notes.replace(/^Об'єкт:\s*/, '')
+          : '') ||
+        inv.object_address ||
+        '',
+    }));
+
     const byStatus =
       activeFilter === 'all'
-        ? invoices
+        ? withResolved
         : activeFilter === 'unpaid'
-          ? invoices.filter((inv) => inv.status === 'sent' || inv.status === 'draft')
-          : invoices.filter((inv) => inv.status === activeFilter);
+          ? withResolved.filter(
+              (inv) => inv.displayStatus === 'sent' || inv.displayStatus === 'draft'
+            )
+          : withResolved.filter((inv) => inv.displayStatus === activeFilter);
 
     const q = searchQuery.trim().toLowerCase();
     const searched = !q
@@ -994,6 +1038,7 @@ export const Invoices: React.FC = () => {
             inv.client_name,
             inv.date,
             inv.object_address,
+            inv.projectName,
             inv.project_area,
           ]
             .filter(Boolean)
@@ -1007,7 +1052,7 @@ export const Invoices: React.FC = () => {
       const db = new Date(b.date || b.created_at || 0).getTime();
       return db - da;
     });
-  }, [invoices, activeFilter, searchQuery]);
+  }, [invoices, activeFilter, searchQuery, projectNameById]);
 
   const groupedInvoices = React.useMemo(() => {
     if (groupMode === 'none') {
@@ -1237,59 +1282,84 @@ export const Invoices: React.FC = () => {
    * Вкладки фільтрації.
    */
   const filterTabs: { key: FilterStatus; label: string }[] = [
-    { key: 'all', label: t('allStatuses') || 'All' },
-    { key: 'unpaid', label: t('unpaid') },
-    { key: 'draft', label: t('draft') },
-    { key: 'sent', label: t('sent') },
-    { key: 'paid', label: t('paid') },
-    { key: 'overdue', label: t('overdue') },
+    { key: 'all', label: t('allStatuses') || 'Усі' },
+    { key: 'draft', label: 'Draft' },
+    { key: 'sent', label: 'Sent' },
+    { key: 'paid', label: 'Paid' },
+    { key: 'overdue', label: 'Overdue' },
   ];
 
-  return (
-    <div className="cpc-page px-3 md:px-6 w-full max-w-[430px] md:max-w-2xl mx-auto">
-      {/* Верхній заголовок сторінки */}
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-xl font-medium" style={{ color: 'var(--cpc-text)' }}>{t('invoices')}</h2>
-          <p className="cpc-muted text-sm mt-1">{t('manageInvoices')}</p>
-        </div>
+  const statusCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {
+      all: invoices.length,
+      draft: 0,
+      sent: 0,
+      paid: 0,
+      overdue: 0,
+    };
+    for (const inv of invoices) {
+      const s = resolveInvoiceStatus(inv.status, inv.due_date);
+      counts[s] = (counts[s] || 0) + 1;
+    }
+    return counts;
+  }, [invoices]);
 
-        {/* Persistent header: only + (Add Invoice). Other actions appear on selection. */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => navigate('/invoices/new')}
-            className="p-2.5 transition-all active:scale-95"
-            style={{
-              background: 'rgba(200,121,74,0.22)',
-              border: '1px solid rgba(224,151,95,0.4)',
-              borderRadius: 12,
-              color: 'var(--cpc-copper-light)',
-            }}
-            title={t('newInvoice')}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
+  return (
+    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 pb-6">
+      <div className="flex justify-between items-center mb-3 gap-2">
+        <h1 className="text-xl font-medium" style={{ color: 'var(--cpc-text)' }}>
+          Рахунки
+        </h1>
+        <button
+          type="button"
+          onClick={() => {
+            if ((projects as Project[]).length === 0) {
+              showError('Спочатку створіть об’єкт');
+              navigate('/projects');
+              return;
+            }
+            if ((projects as Project[]).length === 1) {
+              startNewInvoice(projects[0]);
+              return;
+            }
+            setProjectPickerOpen(true);
+          }}
+          className="cpc-btn-primary min-h-[44px] px-3 text-[13px] font-medium inline-flex items-center gap-1.5"
+        >
+          <Plus size={16} />
+          Новий рахунок
+        </button>
       </div>
 
-      {/* Secondary archive actions (not in header): upload external + CSV */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-3">
         <button
           onClick={() => setUploadModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-300 text-xs font-medium hover:bg-teal-500/25 transition-all active:scale-95"
+          className="inline-flex items-center gap-1.5 px-3 min-h-[36px] text-[11px] font-medium"
+          style={{
+            background: 'var(--cpc-card)',
+            border: '1px solid var(--cpc-line)',
+            borderRadius: 9,
+            color: 'var(--cpc-muted)',
+          }}
           type="button"
         >
-          <Upload size={14} />
-          {t('uploadExternalInvoice') || 'Upload'}
+          <Upload size={13} />
+          PDF
         </button>
         <button
           onClick={handleExportCSV}
           disabled={!invoices.length}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/8 border border-white/10 text-white/70 text-xs font-medium hover:bg-white/12 transition-all disabled:opacity-50 active:scale-95"
+          className="inline-flex items-center gap-1.5 px-3 min-h-[36px] text-[11px] font-medium disabled:opacity-40"
+          style={{
+            background: 'var(--cpc-card)',
+            border: '1px solid var(--cpc-line)',
+            borderRadius: 9,
+            color: 'var(--cpc-muted)',
+          }}
           type="button"
         >
-          <FileSpreadsheet size={14} />
-          {t('export') || 'CSV'}
+          <FileSpreadsheet size={13} />
+          CSV
         </button>
       </div>
 
@@ -1406,38 +1476,26 @@ export const Invoices: React.FC = () => {
         </div>
       </div>
 
-      {/* Фільтри по статусах */}
-      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 scrollbar-hide">
+      {/* Status chips — Draft / Sent / Paid / Overdue */}
+      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-hide">
         {filterTabs.map((tab) => {
-          const count =
-            tab.key === 'all'
-              ? invoices.length
-              : tab.key === 'unpaid'
-                ? invoices.filter((inv) => inv.status === 'sent' || inv.status === 'draft').length
-                : invoices.filter((inv) => inv.status === tab.key).length;
-
+          const count = statusCounts[tab.key] || 0;
           const isActive = activeFilter === tab.key;
-
           return (
             <button
               key={tab.key}
+              type="button"
               onClick={() => applyFilter(tab.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                isActive
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'bg-white/8 text-white/50 hover:text-white/80 hover:bg-white/12 border border-white/10'
-              }`}
+              className="shrink-0 min-h-[36px] px-3 text-[12px] font-medium"
+              style={{
+                background: isActive ? 'var(--cpc-copper)' : 'var(--cpc-card)',
+                color: isActive ? 'var(--cpc-on-copper)' : 'var(--cpc-text)',
+                border: `1px solid ${isActive ? 'var(--cpc-copper)' : 'var(--cpc-line)'}`,
+                borderRadius: 9,
+              }}
             >
               {tab.label}
-              {count > 0 && (
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-white/10 text-white/40'
-                  }`}
-                >
-                  {count}
-                </span>
-              )}
+              {count > 0 ? ` · ${count}` : ''}
             </button>
           );
         })}
@@ -1476,10 +1534,11 @@ export const Invoices: React.FC = () => {
 
             {activeFilter === 'all' && (
               <button
-                onClick={() => navigate('/invoices/new')}
-                className="bg-white/10 backdrop-blur-xl border border-white/10 text-orange-500 hover:bg-white/20 px-6 py-2.5 rounded-xl font-medium transition-all active:scale-95"
+                type="button"
+                onClick={() => setProjectPickerOpen(true)}
+                className="cpc-btn-primary px-5 min-h-[44px]"
               >
-                {t('createInvoice')}
+                + Новий рахунок
               </button>
             )}
           </div>
@@ -1488,8 +1547,11 @@ export const Invoices: React.FC = () => {
             {groupedInvoices.map((group) => (
               <div key={group.key}>
                 {group.label ? (
-                  <div className="px-4 py-2 bg-white/5 border-b border-white/5">
-                    <p className="text-xs font-medium uppercase tracking-wider text-white/45">
+                  <div
+                    className="px-3 py-2"
+                    style={{ borderBottom: '1px solid var(--cpc-line)', background: 'var(--cpc-bg)' }}
+                  >
+                    <p className="cpc-muted text-[11px] font-medium uppercase tracking-wide">
                       {group.label}
                     </p>
                   </div>
@@ -1497,6 +1559,11 @@ export const Invoices: React.FC = () => {
                 {group.items.map((invoice, index) => {
               const isUploaded = invoice.source === 'uploaded';
               const isSelected = selectedIds.has(invoice.id);
+              const clientLabel =
+                invoice.clients?.name || invoice.client_name || t('noClient') || '—';
+              const numberLabel =
+                invoice.document_no || invoice.document_number || '—';
+              const objectLabel = invoice.projectName || '—';
 
               return (
                 <motion.div
@@ -1506,9 +1573,13 @@ export const Invoices: React.FC = () => {
                   transition={{ delay: Math.min(index * 0.03, 0.3) }}
                 >
                   <div
-                    className={`flex items-center group ${
-                      isSelected ? 'bg-cyan-500/10' : isUploaded ? 'bg-teal-500/5' : ''
-                    }`}
+                    className="flex items-stretch"
+                    style={{
+                      background: isSelected
+                        ? 'rgba(200,121,74,0.12)'
+                        : 'transparent',
+                      borderBottom: '1px solid var(--cpc-line)',
+                    }}
                   >
                     <button
                       type="button"
@@ -1516,29 +1587,21 @@ export const Invoices: React.FC = () => {
                         e.stopPropagation();
                         toggleInvoiceSelection(invoice.id);
                       }}
-                      className={`ml-3 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
-                        isSelected
-                          ? 'bg-cyan-500 border-cyan-400 text-white'
-                          : 'border-white/30 bg-white/5 hover:border-white/50'
-                      }`}
+                      className="ml-2.5 w-5 h-5 mt-4 rounded-md border flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                        borderColor: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-line)',
+                        color: isSelected ? 'var(--cpc-on-copper)' : 'transparent',
+                      }}
                       aria-label={t('select') || 'Select'}
                       aria-pressed={isSelected}
                     >
                       {isSelected && <Check size={12} />}
                     </button>
 
-                    <div className="pl-3 flex-shrink-0">
-                      {isUploaded ? (
-                        <div className="w-12 h-14 rounded-lg bg-teal-500/15 border border-teal-500/25 flex-shrink-0 flex items-center justify-center">
-                          <FileText size={20} className="text-teal-400" />
-                        </div>
-                      ) : (
-                        <InvoiceThumbnail invoice={invoice} />
-                      )}
-                    </div>
-
                     <button
-                      className="flex-1 flex items-center gap-4 px-3 py-4 hover:bg-white/5 active:bg-white/8 transition-all text-left"
+                      type="button"
+                      className="flex-1 flex items-start gap-2 px-2.5 py-3 text-left bg-transparent border-0 min-w-0"
                       onClick={() => {
                         if (isUploaded && invoice.uploaded_pdf_url) {
                           window.open(invoice.uploaded_pdf_url as string, '_blank', 'noopener,noreferrer');
@@ -1549,75 +1612,64 @@ export const Invoices: React.FC = () => {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-xs text-white/40">
-                            {invoice.document_no || invoice.document_number || t('noDraftNumber')}
+                          <span className="cpc-muted text-[11px] tabular-nums truncate">
+                            {numberLabel}
                           </span>
-
                           {isUploaded && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-400 border border-teal-500/20 font-medium">
-                              PDF
-                            </span>
+                            <span className="text-[10px] cpc-copper">PDF</span>
                           )}
                         </div>
-
-                        <div
-                          className={`font-semibold text-base leading-tight truncate ${
-                            isUploaded ? 'text-teal-100' : 'text-white'
-                          }`}
+                        <p
+                          className="text-[14px] font-medium truncate leading-tight"
+                          style={{ color: 'var(--cpc-text)' }}
                         >
-                          {invoice.clients?.name || invoice.client_name || t('noClient')}
-                        </div>
-
-                        <div className="mt-1">
+                          {clientLabel}
+                        </p>
+                        <p className="cpc-muted text-[11px] truncate mt-0.5">
+                          {objectLabel}
+                        </p>
+                        <div className="mt-1.5">
                           {isUploaded ? (
-                            <span className="flex items-center gap-1 text-xs text-teal-400/70">
-                              <ExternalLink size={11} />
-                              {t('externalInvoice') || 'Зовнішній рахунок'}
+                            <span className="cpc-muted text-[11px] inline-flex items-center gap-1">
+                              <ExternalLink size={11} /> External
                             </span>
                           ) : (
-                            <StatusBadge status={invoice.status} t={t} />
+                            <StatusBadge status={invoice.status} dueDate={invoice.due_date} />
                           )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <div className="text-right">
-                          <div className="text-xs text-white/40 mb-0.5">
-                            {invoice.date ? format(new Date(invoice.date), 'dd.MM.yyyy') : '—'}
-                          </div>
-
-                          <div
-                            className={`font-semibold text-base ${
-                              isUploaded ? 'text-teal-300' : 'text-white'
-                            }`}
-                          >
-                            {formatCurrency(
-                              Number(invoice.total_gross ?? invoice.gross_total ?? 0),
-                              invoice.currency || 'EUR'
-                            )}
-                          </div>
+                      <div className="text-right shrink-0 pl-1">
+                        <div className="cpc-muted text-[11px] mb-0.5 tabular-nums">
+                          {invoice.date ? format(new Date(invoice.date), 'dd.MM.yyyy') : '—'}
                         </div>
-
-                        <ChevronRight size={16} className="text-white/30" />
+                        <b
+                          className="tabular-nums text-[14px] font-semibold cpc-copper block"
+                        >
+                          {formatCurrency(
+                            Number(invoice.total_gross ?? invoice.gross_total ?? 0),
+                            invoice.currency || 'EUR'
+                          )}
+                        </b>
+                        <ChevronRight size={14} className="inline mt-1" style={{ color: 'var(--cpc-muted)' }} />
                       </div>
                     </button>
 
                     {isUploaded && (
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditUploadedInvoice(invoice);
                         }}
-                        className="pr-4 pl-2 py-4 text-white/30 hover:text-teal-400 transition-colors active:scale-90"
+                        className="pr-3 pl-1 py-3 bg-transparent border-0"
+                        style={{ color: 'var(--cpc-muted)' }}
                         title={t('edit') || 'Редагувати'}
                       >
                         <Pencil size={15} />
                       </button>
                     )}
-                    {!isUploaded && <div className="w-3 flex-shrink-0" />}
                   </div>
-
-                  {index < group.items.length - 1 && <div className="ml-24 border-b border-white/5" />}
                 </motion.div>
               );
                 })}
@@ -1626,6 +1678,76 @@ export const Invoices: React.FC = () => {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {projectPickerOpen && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 px-2 pb-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setProjectPickerOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[430px] max-h-[70vh] overflow-y-auto p-4"
+              style={{
+                background: 'var(--cpc-card)',
+                border: '1px solid var(--cpc-line)',
+                borderRadius: 16,
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold" style={{ color: 'var(--cpc-text)' }}>
+                  Обрати об’єкт
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setProjectPickerOpen(false)}
+                  className="w-10 h-10 bg-transparent border-0"
+                  style={{ color: 'var(--cpc-muted)' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="cpc-muted text-[12px] mb-3">
+                Клієнт, роботи, кількості й ціни підтягнуться автоматично.
+              </p>
+              <div className="space-y-1.5">
+                {(projects as Project[]).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => startNewInvoice(p)}
+                    className="w-full text-left min-h-[52px] px-3 py-2"
+                    style={{
+                      background: 'var(--cpc-bg)',
+                      border: '1px solid var(--cpc-line)',
+                      borderRadius: 10,
+                      color: 'var(--cpc-text)',
+                    }}
+                  >
+                    <b className="block text-[14px] font-medium truncate">{p.name}</b>
+                    {p.client_name && (
+                      <span className="cpc-muted text-[12px]">{p.client_name}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => startNewInvoice()}
+                className="w-full mt-3 min-h-[44px] text-[13px] bg-transparent border-0 cpc-muted"
+              >
+                Без об’єкта — порожня форма
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ConfirmDialog
         open={deleteDialogOpen}
