@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { QuickActionsBar } from '../components/QuickActionsBar';
+import { CpcStickyQuickActions } from '../components/cpc/CpcStickyQuickActions';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { POPULAR_TEMPLATES } from '../lib/calcTemplates';
@@ -394,23 +394,14 @@ export default function Calculator() {
 
       <div className="flex-1 min-h-[8px]" aria-hidden />
 
-      {/* 5. Quick actions — above BottomNav + FAB */}
-      <div
-        className="fixed inset-x-0 z-40 px-3 pointer-events-none no-print"
-        style={{ bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <div className="max-w-[430px] mx-auto pointer-events-auto">
-          <QuickActionsBar
-            handlers={{
-              onWork: onAddWork,
-              onExpense: () => goProjectAction('expense'),
-              onAdvance: () => goProjectAction('prepayment'),
-              onPdf: () => navigate('/pdf-creator'),
-            }}
-          />
-        </div>
-      </div>
-      <div className="h-20" aria-hidden />
+      <CpcStickyQuickActions
+        handlers={{
+          onWork: onAddWork,
+          onExpense: () => goProjectAction('expense'),
+          onAdvance: () => goProjectAction('prepayment'),
+          onPdf: () => navigate('/pdf-creator'),
+        }}
+      />
 
       <AnimatePresence>
         {projectSheet && (

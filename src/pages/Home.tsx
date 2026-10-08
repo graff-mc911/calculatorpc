@@ -3,6 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import {
+  CpcStatusBadge,
+  invoiceStatusLabel,
+  invoiceStatusTone,
+} from '../components/cpc/CpcStatusBadge';
+import { CpcStickyQuickActions } from '../components/cpc/CpcStickyQuickActions';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -10,24 +16,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { computeHomeMoney } from '../lib/homeMoney';
+import { getLastProjectId } from '../lib/lastProject';
+import { resolveInvoiceStatus } from '../lib/invoiceFromProject';
 import {
   createProject,
   listProjects,
   ProjectsSchemaMissingError,
   type Project,
 } from '../lib/projectsApi';
-
-function invoiceStatusBadge(status: string, t: (k: string) => string) {
-  const label = t(status);
-  const text = label === status ? status : label;
-  if (status === 'paid') {
-    return <span className="cpc-badge cpc-badge-paid">{text}</span>;
-  }
-  if (status === 'sent' || status === 'overdue') {
-    return <span className="cpc-badge cpc-badge-wait">{text}</span>;
-  }
-  return <span className="cpc-badge cpc-badge-draft">{text}</span>;
-}
 
 export const Home: React.FC = () => {
   const { t } = useLanguage();
@@ -58,7 +54,6 @@ export const Home: React.FC = () => {
         .select('*, clients(name)')
         .eq('user_id', session?.user?.id || '')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       return data || [];
     },
@@ -72,7 +67,6 @@ export const Home: React.FC = () => {
         .from('expense_documents')
         .select('*')
         .eq('user_id', session?.user?.id || '');
-
       if (error) throw error;
       return data || [];
     },
@@ -87,7 +81,6 @@ export const Home: React.FC = () => {
         .select('id, name, address')
         .eq('user_id', session?.user?.id || '')
         .order('name');
-
       if (error) throw error;
       return data || [];
     },
@@ -101,13 +94,17 @@ export const Home: React.FC = () => {
     retry: false,
   });
 
-  const uploadedInvoices = invoices.filter((inv) => inv.source === 'uploaded' || inv.uploaded_pdf_url);
-  const incomeInvoices = invoices.filter((inv) => !(inv.source === 'uploaded' || inv.uploaded_pdf_url));
-
-  const expenseInvoiceIds = new Set(
-    expenseDocuments.map((exp: { invoice_id?: string | null }) => exp.invoice_id).filter((id) => !!id)
+  const uploadedInvoices = invoices.filter(
+    (inv) => inv.source === 'uploaded' || inv.uploaded_pdf_url
   );
-
+  const incomeInvoices = invoices.filter(
+    (inv) => !(inv.source === 'uploaded' || inv.uploaded_pdf_url)
+  );
+  const expenseInvoiceIds = new Set(
+    expenseDocuments
+      .map((exp: { invoice_id?: string | null }) => exp.invoice_id)
+      .filter((id) => !!id)
+  );
   const uploadedExpenses = uploadedInvoices
     .filter((inv) => !expenseInvoiceIds.has(inv.id))
     .map((inv) => ({
@@ -115,15 +112,15 @@ export const Home: React.FC = () => {
       document_date: inv.date || inv.created_at,
       created_at: inv.created_at,
     }));
-
-  const mergedExpenses = [...expenseDocuments, ...uploadedExpenses];
-  const money = computeHomeMoney(incomeInvoices, mergedExpenses);
+  const money = computeHomeMoney(incomeInvoices, [...expenseDocuments, ...uploadedExpenses]);
 
   const unpaidTotal = incomeInvoices
     .filter((inv) => inv.status === 'sent' || inv.status === 'draft')
     .reduce((sum, inv) => sum + Number(inv.total_gross || 0), 0);
 
   const recentInvoices = incomeInvoices.slice(0, 5);
+  const invoiceCount = incomeInvoices.length;
+
   const formatAmount = (v: number) =>
     new Intl.NumberFormat('de-DE', {
       minimumFractionDigits: 2,
@@ -146,7 +143,7 @@ export const Home: React.FC = () => {
         currency,
       }),
     onSuccess: (project) => {
-      showSuccess(t('projectCreated') || 'Project created');
+      showSuccess(t('projectCreated') || 'Проект створено');
       qc.invalidateQueries({ queryKey: ['projects'] });
       setProjectOpen(false);
       setName('');
@@ -160,7 +157,7 @@ export const Home: React.FC = () => {
         showError(t('projectsSchemaMissing') || 'Apply Supabase migration for projects');
         return;
       }
-      showError(t('projectCreateFailed') || 'Could not create project');
+      showError(t('projectCreateFailed') || 'Не вдалося створити проект');
     },
   });
 
@@ -175,47 +172,62 @@ export const Home: React.FC = () => {
     }
   };
 
-  const balanceLabel = t('totalBalance');
-  const unpaidLabel = t('unpaidInvoices');
-  const receivedLabel = t('totalRevenue');
-  const spentLabel = t('totalExpenses') === 'totalExpenses' ? 'Витрачено' : t('totalExpenses');
-  const profitLabel = t('netProfit');
-  const recentLabel = t('recentInvoices');
-  const allLabel = t('viewAll') === 'viewAll' ? (t('seeAll') === 'seeAll' ? 'Усі' : t('seeAll')) : t('viewAll');
+  const resolveTargetProject = (): Project | null => {
+    const list = projects as Project[];
+    if (!list.length) return null;
+    const last = getLastProjectId();
+    if (last) {
+      const found = list.find((p) => p.id === last);
+      if (found) return found;
+    }
+    return list[0] || null;
+  };
+
+  const goProjectAction = (add: 'work' | 'expense' | 'prepayment') => {
+    const p = resolveTargetProject();
+    if (!p) {
+      showError('Спочатку створіть об’єкт');
+      navigate('/projects');
+      return;
+    }
+    navigate(`/projects/${p.id}?add=${add}`);
+  };
 
   return (
-    <div className="cpc-page px-3 w-full max-w-[430px] mx-auto min-w-0 flex flex-col gap-2">
-      {/* Balance */}
-      <div className="cpc-card">
-        <small className="cpc-card-label">
-          {balanceLabel === 'totalBalance' ? 'Загальний баланс' : balanceLabel}
-        </small>
-        <b className="block text-[20px] font-medium cpc-copper tabular-nums">
-          {formatAmount(money.profit)}
-        </b>
+    <div className="cpc-page flex flex-col gap-2 pb-4">
+      {/* Balance — visual spec */}
+      <div className="cpc-card flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <small className="cpc-card-label">Загальний баланс</small>
+          <b className="block text-[20px] font-semibold cpc-copper tabular-nums truncate">
+            {formatAmount(money.profit)}
+          </b>
+        </div>
+        <div className="text-right cpc-muted text-[12px] shrink-0">
+          Рахунків:{' '}
+          <b style={{ color: 'var(--cpc-text)' }}>{invoiceCount}</b>
+        </div>
       </div>
 
-      {/* 2×2 stats — mockup Overview */}
-      <div className="grid grid-cols-2 gap-1.5">
+      {/* 2×2 stats */}
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           className="cpc-card text-left"
           onClick={() => navigate('/invoices?status=unpaid')}
         >
-          <small className="cpc-card-label">
-            {unpaidLabel === 'unpaidInvoices' ? 'Неоплачено' : unpaidLabel}
-          </small>
-          <b className="block font-medium cpc-copper tabular-nums">{formatAmountShort(unpaidTotal)}</b>
+          <small className="cpc-card-label">Неоплачено</small>
+          <b className="block text-[16px] font-semibold cpc-copper tabular-nums">
+            {formatAmountShort(unpaidTotal)}
+          </b>
         </button>
         <button
           type="button"
           className="cpc-card text-left"
           onClick={() => navigate('/invoices?status=paid')}
         >
-          <small className="cpc-card-label">
-            {receivedLabel === 'totalRevenue' ? 'Отримано' : receivedLabel}
-          </small>
-          <b className="block font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+          <small className="cpc-card-label">Отримано</small>
+          <b className="block text-[16px] font-semibold tabular-nums" style={{ color: 'var(--cpc-text)' }}>
             {formatAmountShort(money.received)}
           </b>
         </button>
@@ -224,40 +236,42 @@ export const Home: React.FC = () => {
           className="cpc-card text-left"
           onClick={() => navigate('/expenses')}
         >
-          <small className="cpc-card-label">{spentLabel}</small>
-          <b className="block font-medium tabular-nums" style={{ color: 'var(--cpc-text)' }}>
+          <small className="cpc-card-label">Витрачено</small>
+          <b className="block text-[16px] font-semibold tabular-nums" style={{ color: 'var(--cpc-text)' }}>
             {formatAmountShort(money.spent)}
           </b>
         </button>
         <div className="cpc-card text-left">
-          <small className="cpc-card-label">
-            {profitLabel === 'netProfit' ? 'Чистий прибуток' : profitLabel}
-          </small>
-          <b className="block font-medium cpc-copper tabular-nums">
+          <small className="cpc-card-label">Чистий прибуток</small>
+          <b className="block text-[16px] font-semibold cpc-copper tabular-nums">
             {formatAmountShort(money.profit)}
           </b>
         </div>
       </div>
 
       {/* Recent invoices */}
-      <div className="flex items-center justify-between px-0.5">
-        <b className="font-medium text-[12px]" style={{ color: 'var(--cpc-text)' }}>
-          {recentLabel === 'recentInvoices' ? 'Останні рахунки' : recentLabel}
+      <div className="flex items-center justify-between px-0.5 mt-0.5">
+        <b className="font-medium text-[13px]" style={{ color: 'var(--cpc-text)' }}>
+          Останні рахунки
         </b>
         <button
           type="button"
           onClick={() => navigate('/invoices')}
-          className="cpc-copper text-[12px] bg-transparent border-0 cursor-pointer"
+          className="cpc-copper text-[12px] font-medium bg-transparent border-0 cursor-pointer"
         >
-          {allLabel}
+          Усі
         </button>
       </div>
 
       {recentInvoices.length === 0 ? (
         <div className="cpc-card text-center py-6">
-          <p className="cpc-muted text-sm mb-3">{t('noInvoicesYet')}</p>
-          <button type="button" className="cpc-btn-primary" onClick={() => navigate('/invoices/new')}>
-            {t('newInvoice')}
+          <p className="cpc-muted text-sm mb-3">{t('noInvoicesYet') || 'Рахунків ще немає'}</p>
+          <button
+            type="button"
+            className="cpc-btn-primary min-h-[44px]"
+            onClick={() => navigate('/invoices/new')}
+          >
+            Новий рахунок
           </button>
         </div>
       ) : (
@@ -266,34 +280,51 @@ export const Home: React.FC = () => {
           const client =
             (inv.clients as { name?: string } | null)?.name ||
             inv.client_name ||
-            t('noClient');
+            t('noClient') ||
+            '—';
+          const resolved = resolveInvoiceStatus(inv.status || 'draft', inv.due_date);
           return (
             <button
               key={inv.id}
               type="button"
-              onClick={() => navigate(`/invoices/${inv.id}/preview`)}
+              onClick={() => navigate(`/invoices/${inv.id}/view`)}
               className="cpc-card w-full text-left"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[12px] truncate" style={{ color: 'var(--cpc-text)' }}>
+                <span
+                  className="text-[13px] font-medium truncate"
+                  style={{ color: 'var(--cpc-text)' }}
+                >
                   № {docNo} · {client}
                 </span>
-                <b className="font-medium tabular-nums shrink-0" style={{ color: 'var(--cpc-text)' }}>
+                <b
+                  className="font-semibold tabular-nums shrink-0 text-[14px]"
+                  style={{ color: 'var(--cpc-text)' }}
+                >
                   {formatAmountShort(Number(inv.total_gross || 0))}
                 </b>
               </div>
-              <div className="mt-1">{invoiceStatusBadge(inv.status || 'draft', t)}</div>
+              <div className="mt-1.5">
+                <CpcStatusBadge
+                  label={invoiceStatusLabel(resolved)}
+                  tone={invoiceStatusTone(resolved)}
+                />
+              </div>
             </button>
           );
         })
       )}
 
-      <div className="flex-1 min-h-2" />
+      <div className="flex-1 min-h-[4px]" />
 
-      <p className="cpc-muted text-[12px] text-center px-2 pb-2">
-        На об’єкті тисніть <span className="cpc-copper font-medium">+</span> внизу —
-        робота, витрата, аванс або рахунок
-      </p>
+      <CpcStickyQuickActions
+        handlers={{
+          onWork: () => goProjectAction('work'),
+          onExpense: () => goProjectAction('expense'),
+          onAdvance: () => goProjectAction('prepayment'),
+          onPdf: () => navigate('/pdf-creator'),
+        }}
+      />
 
       <AnimatePresence>
         {projectOpen && (
@@ -318,34 +349,32 @@ export const Home: React.FC = () => {
             >
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold" style={{ color: 'var(--cpc-text)' }}>
-                  {t('projectNew') || 'New project'}
+                  Новий проект
                 </h2>
                 <button
                   type="button"
                   onClick={() => setProjectOpen(false)}
-                  className="w-10 h-10 flex items-center justify-center bg-transparent border-0"
+                  className="w-11 h-11 flex items-center justify-center bg-transparent border-0"
                   style={{ color: 'var(--cpc-muted)' }}
-                  aria-label={t('cancel')}
+                  aria-label={t('cancel') || 'Скасувати'}
                 >
                   <X size={18} />
                 </button>
               </div>
               <div className="space-y-3">
                 <Input
-                  label={t('projectName') || 'Name'}
+                  label="Назва"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={t('projectNamePlaceholder') || 'e.g. Flat renovation'}
+                  placeholder="Наприклад, Квартира…"
                 />
                 {clients.length > 0 && (
                   <Select
-                    label={t('clients') || 'Client'}
+                    label="Клієнт"
                     value={clientId}
                     onChange={(e) => onPickClient(e.target.value)}
                   >
-                    <option value="">
-                      {t('noClient') || 'No client'} / {t('projectCustomClient') || 'custom'}
-                    </option>
+                    <option value="">Без клієнта / свій</option>
                     {clients.map((c: { id: string; name: string }) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -354,7 +383,7 @@ export const Home: React.FC = () => {
                   </Select>
                 )}
                 <Input
-                  label={t('clientName')}
+                  label="Ім’я клієнта"
                   value={clientName}
                   onChange={(e) => {
                     setClientName(e.target.value);
@@ -362,12 +391,12 @@ export const Home: React.FC = () => {
                   }}
                 />
                 <Input
-                  label={t('address')}
+                  label="Адреса"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                 />
                 <Input
-                  label={t('currency')}
+                  label="Валюта"
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))}
                 />
@@ -377,7 +406,7 @@ export const Home: React.FC = () => {
                   disabled={!name.trim() || createMut.isPending}
                   onClick={() => createMut.mutate()}
                 >
-                  {createMut.isPending ? t('saving') || 'Saving…' : t('save')}
+                  {createMut.isPending ? 'Збереження…' : 'Зберегти'}
                 </Button>
               </div>
             </motion.div>

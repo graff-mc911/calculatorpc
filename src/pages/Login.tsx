@@ -1,160 +1,139 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { Card } from '../components/ui/Card'
-import { supabase } from '../lib/supabase'
+import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // ---------------------------
-  // СТАНИ ФОРМИ
-  // ---------------------------
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  // ---------------------------
-  // ПЕРЕВІРКА СЕСІЇ
-  // якщо користувач вже залогінений → редірект
-  // ---------------------------
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        navigate('/')
-      }
-    }
+      const { data } = await supabase.auth.getSession();
+      if (data.session) navigate('/');
+    };
+    checkSession();
+  }, [navigate]);
 
-    checkSession()
-  }, [navigate])
-
-  // ---------------------------
-  // ВХІД
-  // ---------------------------
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
+    e.preventDefault();
+    setError('');
     if (!email.trim()) {
-      setError('Введіть email')
-      return
+      setError('Введіть email');
+      return;
     }
-
     if (!password) {
-      setError('Введіть пароль')
-      return
+      setError('Введіть пароль');
+      return;
     }
-
-    setLoading(true)
-
+    setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
-      })
-
-      if (error) throw error
-
-      if (data.session) {
-        navigate('/')
-      } else {
-        setError('Не вдалося увійти')
-      }
-    } catch (err: any) {
-      setError(err.message || 'Помилка входу')
+      });
+      if (authError) throw authError;
+      if (data.session) navigate('/');
+      else setError('Не вдалося увійти');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Помилка входу';
+      setError(message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--cpc-bg)' }}>
-      <Card className="w-full max-w-[360px] p-5">
-        {/* Splash pattern from mockup 1a92 */}
-        <div className="mb-6 flex flex-col items-center text-center gap-3">
-          <img
-            src="/logo-cpc-full.jpg"
-            alt="CPC Construction Project Calculator"
-            className="w-full rounded-[14px] object-cover max-h-48"
-            draggable={false}
-          />
-          <p className="text-[12px] cpc-muted">Калькулятор → рахунок на об&apos;єкті</p>
-        </div>
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-5 py-8"
+      style={{ background: 'var(--cpc-page)' }}
+    >
+      <div className="w-full max-w-[360px] flex flex-col items-center">
+        {/* Splash mark — visual spec */}
+        <img
+          src="/logo-cpc-full.jpg"
+          alt="CPC Construction Project Calculator"
+          className="w-[88%] max-w-[280px] rounded-[18px] object-contain mb-4"
+          draggable={false}
+        />
+        <p
+          className="text-[15px] font-medium text-center mb-1"
+          style={{ color: 'var(--cpc-text)' }}
+        >
+          Construction Project Calculator
+        </p>
+        <p className="text-[12px] cpc-muted text-center mb-7">
+          Калькулятор → рахунок на об&apos;єкті
+        </p>
 
-        {/* ---------------------------
-            ФОРМА ВХОДУ
-        --------------------------- */}
-        <form onSubmit={handleLogin} autoComplete="on" className="space-y-5">
-          {/* ---------------------------
-              ПОМИЛКА
-          --------------------------- */}
+        <form onSubmit={handleLogin} autoComplete="on" className="w-full space-y-3">
           {error && (
-            <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-              <p className="text-sm text-red-400">{error}</p>
+            <div
+              className="p-3 rounded-[12px] text-sm"
+              style={{
+                background: 'rgba(180,60,60,0.18)',
+                border: '1px solid rgba(240,168,168,0.35)',
+                color: '#f0a8a8',
+              }}
+            >
+              {error}
             </div>
           )}
 
-          {/* ---------------------------
-              EMAIL
-          --------------------------- */}
-          <div>
-            <label className="block text-sm text-white/70 mb-2">
-              Email
-            </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            className="w-full min-h-[48px] px-4 text-[15px] outline-none"
+            style={{
+              background: 'var(--cpc-card)',
+              border: '1px solid var(--cpc-line)',
+              borderRadius: 12,
+              color: 'var(--cpc-text)',
+            }}
+            required
+          />
 
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/40 outline-none focus:border-orange-500"
-              required
-            />
-          </div>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Пароль"
+            className="w-full min-h-[48px] px-4 text-[15px] outline-none"
+            style={{
+              background: 'var(--cpc-card)',
+              border: '1px solid var(--cpc-line)',
+              borderRadius: 12,
+              color: 'var(--cpc-text)',
+            }}
+            required
+          />
 
-          {/* ---------------------------
-              PASSWORD
-          --------------------------- */}
-          <div>
-            <label className="block text-sm text-white/70 mb-2">
-              Пароль
-            </label>
-
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-orange-500"
-              required
-            />
-          </div>
-
-          {/* ---------------------------
-              КНОПКА
-          --------------------------- */}
-          <button type="submit" disabled={loading} className="cpc-btn-primary w-full min-h-[44px]">
-            {loading ? 'Завантаження...' : 'Увійти'}
+          <button
+            type="submit"
+            disabled={loading}
+            className="cpc-btn-primary w-full min-h-[52px] text-[16px] font-semibold disabled:opacity-50"
+          >
+            {loading ? 'Завантаження…' : 'Увійти'}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm cpc-muted">
-            Немає акаунта?{' '}
-            <Link to="/signup" className="cpc-copper">
-              Зареєструватися
-            </Link>
-          </p>
-        </div>
-      </Card>
+        <p className="mt-6 text-sm cpc-muted text-center">
+          Немає акаунта?{' '}
+          <Link to="/signup" className="cpc-copper no-underline font-medium">
+            Зареєструватися
+          </Link>
+        </p>
+      </div>
     </div>
-  )
-}
+  );
+};
