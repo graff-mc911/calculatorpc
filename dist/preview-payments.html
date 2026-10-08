@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Аванси та оплати — preview</title>
+  <style>
+    :root {
+      --cpc-bg: #14171c;
+      --cpc-card: #1c2128;
+      --cpc-text: #f2ebe3;
+      --cpc-muted: #9a9186;
+      --cpc-line: rgba(255,255,255,0.08);
+      --cpc-copper: #c8794a;
+      --cpc-copper-light: #e0975f;
+      --cpc-on-copper: #1a120c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--cpc-bg); color: var(--cpc-text); }
+    .page { max-width: 430px; margin: 0 auto; padding: 12px 12px 28px; }
+    h1 { font-size: 20px; font-weight: 500; margin: 0 0 12px; }
+    .label { display: block; font-size: 11px; color: var(--cpc-muted); margin-bottom: 6px; }
+    .card { background: var(--cpc-card); border: 1px solid var(--cpc-line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chip { min-height: 40px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--cpc-line); background: var(--cpc-card); color: var(--cpc-text); font-size: 13px; font-weight: 500; }
+    .chip.on { background: var(--cpc-copper); color: var(--cpc-on-copper); border-color: var(--cpc-copper); }
+    .chip.sm { font-size: 12px; background: var(--cpc-bg); }
+    .chip.sm.on { background: var(--cpc-copper); }
+    input { width: 100%; min-height: 48px; padding: 0 12px; margin-bottom: 12px; border-radius: 10px; border: 1px solid var(--cpc-line); background: var(--cpc-bg); color: var(--cpc-text); font-size: 16px; }
+    .amount { min-height: 56px; font-size: 24px; font-weight: 500; border: 2px solid var(--cpc-copper); border-radius: 12px; }
+    .btn { width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: var(--cpc-copper); color: var(--cpc-on-copper); font-size: 16px; font-weight: 600; }
+    .row { display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--cpc-line); font-size: 12px; }
+    .row:first-child { border-top: 0; }
+    .muted { color: var(--cpc-muted); }
+    .copper { color: var(--cpc-copper); }
+    .over { color: #f0a8a8; }
+    .hist { display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--cpc-line); }
+    .hist:first-child { border-top: 0; padding-top: 0; }
+    .sum { font-weight: 600; color: var(--cpc-copper); font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Аванси та оплати</h1>
+    <span class="label">Об’єкт</span>
+    <div class="chips">
+      <button class="chip on">Будинок на Горі</button>
+      <button class="chip">Квартира 12</button>
+    </div>
+    <div class="card">
+      <span class="label">Ціна об’єкта</span>
+      <div style="font-size:22px;font-weight:500;margin-bottom:10px">€8 500</div>
+      <div class="row"><span class="muted">Отримано</span><b>€4 000</b></div>
+      <div class="row"><span class="muted">Залишок</span><b class="copper">€4 500</b></div>
+      <div class="row"><span class="muted">Прибуток</span><b>€6 050</b></div>
+    </div>
+    <div class="card">
+      <span class="label">Сума</span>
+      <input class="amount" value="4 000" readonly />
+      <span class="label">Дата</span>
+      <input type="date" value="2026-10-08" readonly />
+      <span class="label">Спосіб оплати — необов’язково</span>
+      <div class="chips">
+        <button class="chip sm on">Готівка</button>
+        <button class="chip sm">Картка</button>
+        <button class="chip sm">Переказ</button>
+        <button class="chip sm">Інше</button>
+      </div>
+      <span class="label">Коментар — необов’язково</span>
+      <input value="Аванс 50%" readonly />
+      <button class="btn">Зберегти оплату</button>
+    </div>
+    <h2 style="font-size:13px;font-weight:500;margin:0 0 8px">Історія оплат</h2>
+    <div class="card">
+      <div class="hist">
+        <div><div>08.10.2026</div><div class="muted" style="font-size:11px">Готівка · Аванс 50%</div></div>
+        <div class="sum">€4 000</div>
+      </div>
+      <div class="hist">
+        <div><div>01.09.2026</div><div class="muted" style="font-size:11px">Переказ · Стартовий</div></div>
+        <div class="sum">€0</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:8px;border-color:rgba(224,151,95,0.3)">
+      <div style="font-size:12px;color:var(--cpc-muted);margin-bottom:6px">Якщо отримано більше ціни:</div>
+      <div class="row"><span class="muted">Ціна</span><b>€8 500</b></div>
+      <div class="row"><span class="muted">Отримано</span><b>€9 000</b></div>
+      <div class="row"><span class="muted">Переплата</span><b class="over">€500</b></div>
+    </div>
+  </div>
+</body>
+</html>
