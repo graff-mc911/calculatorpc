@@ -52,6 +52,12 @@ export default function Calculator() {
   const [workId, setWorkId] = useState(DEFAULT_WORK_ID);
   const [area, setArea] = useState(DEFAULT_AREA);
   const [pricePerM2, setPricePerM2] = useState(DEFAULT_PRICE);
+  const [areaDraft, setAreaDraft] = useState(String(DEFAULT_AREA));
+  const [priceDraft, setPriceDraft] = useState(
+    DEFAULT_PRICE.toFixed(2).replace('.', ',')
+  );
+  const [areaFocused, setAreaFocused] = useState(false);
+  const [priceFocused, setPriceFocused] = useState(false);
   const [projectSheet, setProjectSheet] = useState(false);
   const priceCountry = getStoredPriceCountry();
 
@@ -134,7 +140,11 @@ export default function Calculator() {
     if (!detail) return;
     const labor = Number(detail.labor?.price);
     if (Number.isFinite(labor) && labor > 0) {
-      setPricePerM2(Math.round(labor * 1.15 * 100) / 100);
+      const next = Math.round(labor * 1.15 * 100) / 100;
+      setPricePerM2(next);
+      if (!priceFocused) {
+        setPriceDraft(next.toFixed(2).replace('.', ','));
+      }
     }
   }, [workId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -151,10 +161,61 @@ export default function Calculator() {
   const profit = clientCost - totalCosts;
   const profitPct = clientCost > 0 ? Math.round((profit / clientCost) * 100) : 0;
 
-  const bumpArea = (delta: number) =>
-    setArea((a) => Math.max(0, Math.round((a + delta) * 10) / 10));
-  const bumpPrice = (delta: number) =>
-    setPricePerM2((p) => Math.max(0, Math.round((p + delta) * 100) / 100));
+  const formatArea = (n: number) =>
+    Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10).replace('.', ',');
+  const formatPrice = (n: number) => n.toFixed(2).replace('.', ',');
+
+  const parseUaNumber = (raw: string): number | null => {
+    const cleaned = raw.trim().replace(/\s/g, '').replace(',', '.');
+    if (!cleaned || cleaned === '.' || cleaned === '-') return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const bumpArea = (delta: number) => {
+    setArea((a) => {
+      const next = Math.max(0, Math.round((a + delta) * 10) / 10);
+      setAreaDraft(formatArea(next));
+      return next;
+    });
+  };
+  const bumpPrice = (delta: number) => {
+    setPricePerM2((p) => {
+      const next = Math.max(0, Math.round((p + delta) * 100) / 100);
+      setPriceDraft(formatPrice(next));
+      return next;
+    });
+  };
+
+  const onAreaChange = (raw: string) => {
+    if (!/^[0-9]*([.,][0-9]*)?$/.test(raw)) return;
+    setAreaDraft(raw);
+    const n = parseUaNumber(raw);
+    if (n !== null) setArea(Math.max(0, n));
+  };
+
+  const onPriceChange = (raw: string) => {
+    if (!/^[0-9]*([.,][0-9]{0,2})?$/.test(raw)) return;
+    setPriceDraft(raw);
+    const n = parseUaNumber(raw);
+    if (n !== null) setPricePerM2(Math.max(0, n));
+  };
+
+  const commitArea = () => {
+    setAreaFocused(false);
+    const n = parseUaNumber(areaDraft);
+    const next = n === null ? area : Math.max(0, Math.round(n * 10) / 10);
+    setArea(next);
+    setAreaDraft(formatArea(next));
+  };
+
+  const commitPrice = () => {
+    setPriceFocused(false);
+    const n = parseUaNumber(priceDraft);
+    const next = n === null ? pricePerM2 : Math.max(0, Math.round(n * 100) / 100);
+    setPricePerM2(next);
+    setPriceDraft(formatPrice(next));
+  };
 
   const resolveTargetProject = (): Project | null => {
     const list = projects as Project[];
@@ -303,12 +364,31 @@ export default function Calculator() {
             >
               −
             </button>
-            <b
-              className="min-w-[44px] text-center font-medium tabular-nums text-[13px]"
-              style={{ color: 'var(--cpc-text)' }}
-            >
-              {area}
-            </b>
+            <input
+              type="text"
+              inputMode="decimal"
+              enterKeyHint="done"
+              aria-label={areaLabel}
+              value={areaFocused ? areaDraft : formatArea(area)}
+              onFocus={(e) => {
+                setAreaFocused(true);
+                setAreaDraft(formatArea(area));
+                e.currentTarget.select();
+              }}
+              onChange={(e) => onAreaChange(e.target.value)}
+              onBlur={commitArea}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+              className="min-w-[56px] max-w-[72px] min-h-[44px] text-center font-medium tabular-nums text-[13px] outline-none"
+              style={{
+                color: 'var(--cpc-text)',
+                background: 'var(--cpc-bg)',
+                border: '1px solid var(--cpc-line)',
+                borderRadius: 8,
+                padding: '0 4px',
+              }}
+            />
             <button
               type="button"
               className="cpc-step min-h-[44px] min-w-[44px]"
@@ -335,12 +415,31 @@ export default function Calculator() {
             >
               −
             </button>
-            <b
-              className="min-w-[44px] text-center font-medium tabular-nums text-[13px]"
-              style={{ color: 'var(--cpc-text)' }}
-            >
-              {pricePerM2.toFixed(2).replace('.', ',')}
-            </b>
+            <input
+              type="text"
+              inputMode="decimal"
+              enterKeyHint="done"
+              aria-label={priceLabel}
+              value={priceFocused ? priceDraft : formatPrice(pricePerM2)}
+              onFocus={(e) => {
+                setPriceFocused(true);
+                setPriceDraft(formatPrice(pricePerM2));
+                e.currentTarget.select();
+              }}
+              onChange={(e) => onPriceChange(e.target.value)}
+              onBlur={commitPrice}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+              className="min-w-[64px] max-w-[80px] min-h-[44px] text-center font-medium tabular-nums text-[13px] outline-none"
+              style={{
+                color: 'var(--cpc-text)',
+                background: 'var(--cpc-bg)',
+                border: '1px solid var(--cpc-line)',
+                borderRadius: 8,
+                padding: '0 4px',
+              }}
+            />
             <button
               type="button"
               className="cpc-step min-h-[44px] min-w-[44px]"
