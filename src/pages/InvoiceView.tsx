@@ -647,8 +647,6 @@ export const InvoiceView: React.FC = () => {
     }
   };
 
-  const [markingPaid, setMarkingPaid] = useState(false);
-
   const handleMarkAsPaid = async () => {
     if (!invoice || invoice.status === 'paid') return;
     setMarkingPaid(true);
