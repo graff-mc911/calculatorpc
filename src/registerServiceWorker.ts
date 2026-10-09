@@ -1,5 +1,5 @@
 /** Bump with each production deploy that must reach sticky iOS PWAs. */
-export const CPC_SW_VERSION = 'cpc-no-sw-icons-20261009i';
+export const CPC_SW_VERSION = 'cpc-no-icons-20261009j';
 
 const BUILD_STORAGE_KEY = 'cpc-build-id';
 

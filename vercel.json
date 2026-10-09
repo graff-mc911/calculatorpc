@@ -45,13 +45,6 @@
         { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" },
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
-    },
-    {
-      "source": "/(apple-touch-icon\\.png|cpc-home-.*\\.png|icon-192\\.png|icon-512\\.png)",
-      "headers": [
-        { "key": "Content-Type", "value": "image/png" },
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
     }
   ],
   "rewrites": [
