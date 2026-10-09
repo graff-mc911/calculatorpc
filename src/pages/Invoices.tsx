@@ -40,6 +40,11 @@ import {
   resolveInvoiceStatus,
   STATUS_LABELS_UK,
 } from '../lib/invoiceFromProject';
+import {
+  importInvoiceFromFile,
+  isInvoiceImportFile,
+  storeInvoiceImportDraft,
+} from '../lib/invoiceImportFromFile';
 import { listProjects, type Project } from '../lib/projectsApi';
 
 /**
@@ -851,9 +856,11 @@ export const Invoices: React.FC = () => {
   const [editUploadedInvoice, setEditUploadedInvoice] = useState<Record<string, any> | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionBusy, setSelectionBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupMode, setGroupMode] = useState<'none' | 'day' | 'month' | 'year'>('none');
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   /** Sync filter when arriving via Home cards (?status=paid|unpaid|…). */
   useEffect(() => {
@@ -943,6 +950,45 @@ export const Invoices: React.FC = () => {
     },
     enabled: !!session?.user?.id,
   });
+
+  const startImportFromFile = useCallback(() => {
+    importFileRef.current?.click();
+  }, []);
+
+  const handleImportFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (!isInvoiceImportFile(file)) {
+        showError(
+          t('unsupportedImportFile') ||
+            'Підтримуються Excel (.xlsx), CSV або PDF',
+        );
+        return;
+      }
+      try {
+        setImportBusy(true);
+        const draft = await importInvoiceFromFile(file);
+        storeInvoiceImportDraft(draft);
+        showSuccess(
+          t('invoiceImportReady') ||
+            `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
+        );
+        navigate('/invoices/new?from_import=1');
+      } catch (err: any) {
+        console.error('Invoice import failed', err);
+        showError(
+          err?.message ||
+            t('invoiceImportFailed') ||
+            'Не вдалося прочитати файл. Перевірте Excel з колонками або текстовий PDF.',
+        );
+      } finally {
+        setImportBusy(false);
+      }
+    },
+    [navigate, showError, showSuccess, t],
+  );
 
   const startNewInvoice = useCallback(
     (project?: Project) => {
@@ -1330,7 +1376,21 @@ export const Invoices: React.FC = () => {
 
   return (
     <div className="cpc-page pb-6">
-      <CpcPageHeader title="Рахунки" onNew={startCreate} newLabel="Новий" />
+      <input
+        ref={importFileRef}
+        type="file"
+        accept=".xlsx,.xls,.csv,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+        className="hidden"
+        onChange={handleImportFileChange}
+      />
+      <CpcPageHeader
+        title="Рахунки"
+        onNew={startCreate}
+        newLabel="Новий"
+        onImport={startImportFromFile}
+        importLabel={importBusy ? '…' : t('importInvoice') || 'Імпорт'}
+        importDisabled={importBusy}
+      />
 
       <div className="grid grid-cols-2 gap-2 mb-2.5">
         <div className="cpc-card text-left min-w-0">

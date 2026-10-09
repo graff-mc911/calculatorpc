@@ -14,12 +14,25 @@ import { evalFieldExpression } from '../lib/calculator';
 import { calculateLineTotal } from '../lib/invoiceTotals';
 import { prefillInvoiceFromProject } from '../lib/invoiceFromProject';
 import {
+  consumeInvoiceImportDraft,
+  type ImportedInvoiceDraft,
+} from '../lib/invoiceImportFromFile';
+import {
   fetchProjectBundle,
   listProjects,
   ProjectsSchemaMissingError,
   type Project,
 } from '../lib/projectsApi';
-import { formatInvoiceNumber, loadCpcSettings } from '../lib/cpcSettings';
+import {
+  formatInvoiceNumber,
+  loadCpcSettings,
+  type CpcCurrency,
+} from '../lib/cpcSettings';
+
+function asCpcCurrency(value: string | undefined, fallback: CpcCurrency): CpcCurrency {
+  if (value === 'EUR' || value === 'UAH' || value === 'USD') return value;
+  return fallback;
+}
 
 interface InvoiceItem {
   quantity: number;
@@ -106,6 +119,7 @@ export const InvoiceForm: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
   const [showQuickClient, setShowQuickClient] = useState(false);
   const [quickClientName, setQuickClientName] = useState('');
   const [quickClientEmail, setQuickClientEmail] = useState('');
@@ -180,6 +194,18 @@ export const InvoiceForm: React.FC = () => {
             }
           }
         }
+
+        if (searchParams.get('from_import') === '1') {
+          const draft = consumeInvoiceImportDraft();
+          if (draft) {
+            applyImportDraft(draft, loadedClients || []);
+          } else {
+            showError(
+              t('invoiceImportFailed') ||
+                'Немає даних імпорту. Оберіть файл знову на сторінці рахунків.',
+            );
+          }
+        }
       }
     } finally {
       setLoading(false);
@@ -235,12 +261,64 @@ export const InvoiceForm: React.FC = () => {
       client_id: filled.client_id || prev.client_id,
       client_name: filled.client_name || prev.client_name,
       object_address: filled.object_address || prev.object_address,
-      currency: filled.currency || prev.currency,
+      currency: asCpcCurrency(filled.currency, prev.currency),
       notes: filled.notes || prev.notes,
     }));
     if (filled.items.length > 0) {
       setItems(filled.items);
     }
+  };
+
+  const applyImportDraft = (
+    draft: ImportedInvoiceDraft,
+    clientList: Array<{ id: string; name?: string }>,
+  ) => {
+    const name = (draft.client_name || '').trim();
+    const matched = name
+      ? clientList.find(
+          (c) => (c.name || '').trim().toLowerCase() === name.toLowerCase(),
+        )
+      : undefined;
+
+    setFormData((prev) => ({
+      ...prev,
+      client_id: matched?.id || prev.client_id,
+      client_name: matched?.name || name || prev.client_name,
+      date: draft.date || prev.date,
+      due_date: draft.date
+        ? defaultDueDate(draft.date)
+        : prev.due_date,
+      document_number: draft.document_number || prev.document_number,
+      currency: asCpcCurrency(draft.currency, prev.currency),
+      object_address: draft.object_address || prev.object_address,
+      notes: draft.notes || prev.notes,
+    }));
+
+    if (draft.items.length > 0) {
+      setItems(
+        draft.items.map((item) => ({
+          quantity: item.quantity,
+          quantityDisplay: item.quantityDisplay,
+          unit: item.unit || 'pcs',
+          price: item.price,
+          priceDisplay: item.priceDisplay,
+          material: item.material || '',
+          materialDisplay: item.materialDisplay || '',
+          description: item.description,
+          total: item.total,
+        })),
+      );
+    }
+
+    setImportBanner(
+      draft.sourceFileName
+        ? `${t('importInvoice') || 'Import'}: ${draft.sourceFileName} (${draft.items.length})`
+        : `${t('importInvoice') || 'Import'}: ${draft.items.length}`,
+    );
+    showSuccess(
+      t('invoiceImportReady') ||
+        `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
+    );
   };
 
   const fetchCompanyProfile = async () => {
@@ -781,6 +859,18 @@ export const InvoiceForm: React.FC = () => {
             </p>
           </div>
         </div>
+        {importBanner && (
+          <div
+            className="mt-3 px-3 py-2 rounded-xl text-sm"
+            style={{
+              background: 'rgba(196, 140, 90, 0.15)',
+              border: '1px solid var(--cpc-copper)',
+              color: 'var(--cpc-copper)',
+            }}
+          >
+            {importBanner}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
