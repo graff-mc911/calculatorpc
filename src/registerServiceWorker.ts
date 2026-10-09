@@ -1,5 +1,5 @@
 /** Bump with each production deploy that must reach sticky iOS PWAs. */
-export const CPC_SW_VERSION = 'cpc-icons-v2-20261009';
+export const CPC_SW_VERSION = 'cpc-icons-v2-ios-20261009k';
 
 const BUILD_STORAGE_KEY = 'cpc-build-id';
 
@@ -47,13 +47,9 @@ export async function forceRefreshIfBuildChanged(): Promise<boolean> {
     /* continue */
   }
 
-  const url = new URL(window.location.href);
-  url.searchParams.set('cpc_refresh', meta);
-  // Drop stale PWA query junk before reload
-  url.searchParams.delete('utm_source');
-  url.searchParams.delete('utm_medium');
-  url.searchParams.delete('utm_campaign');
-  window.location.replace(url.toString());
+  // Always land on a clean URL — iOS Add to Home Screen copies the address bar
+  // (old PWAs still launch with ?utm_source=… and then show letter-C).
+  window.location.replace(window.location.origin + '/');
   return true;
 }
 

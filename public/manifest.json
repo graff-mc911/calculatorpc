@@ -10,6 +10,8 @@
   "background_color": "#15181D",
   "theme_color": "#15181D",
   "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cpc-v2/apple-touch-icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
     { "src": "/icons/cpc-v2/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/cpc-v2/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/cpc-v2/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
@@ -18,11 +20,17 @@
   "categories": ["business", "productivity", "utilities"],
   "shortcuts": [
     {
-      "name": "New Invoice", "short_name": "Invoice", "description": "Create a new invoice", "url": "/invoices/new",
+      "name": "New Invoice",
+      "short_name": "Invoice",
+      "description": "Create a new invoice",
+      "url": "/invoices/new",
       "icons": [{ "src": "/icons/cpc-v2/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "name": "Scan", "short_name": "Scan", "description": "Scan receipts", "url": "/scan",
+      "name": "Scan",
+      "short_name": "Scan",
+      "description": "Scan receipts",
+      "url": "/scan",
       "icons": [{ "src": "/icons/cpc-v2/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]

@@ -2,24 +2,47 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      /* Strip stale PWA query (?utm_source) before iOS Add to Home Screen reads the URL */
+      (function () {
+        try {
+          var u = new URL(location.href);
+          var keys = ['utm_source', 'utm_medium', 'utm_campaign', 'cpc_refresh'];
+          var dirty = false;
+          for (var i = 0; i < keys.length; i++) {
+            if (u.searchParams.has(keys[i])) {
+              u.searchParams.delete(keys[i]);
+              dirty = true;
+            }
+          }
+          if (dirty) {
+            location.replace(u.pathname + (u.search ? u.search : '') + u.hash);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
     <!-- PWA Configuration -->
     <meta name="theme-color" content="#15181D" />
-    <meta name="cpc-build" content="cpc-icons-v2-20261009" />
+    <meta name="cpc-build" content="cpc-icons-v2-ios-20261009k" />
     <meta name="description" content="Construction Project Calculator (CPC) is a global construction calculator and invoice app with 24 languages, 21 currencies, PDF invoices, receipt tracking and client management." />
     <meta name="keywords" content="construction calculator, CPC, Construction Project Calculator, invoice app, builder app, PDF invoice, contractor tool, строительный калькулятор, Rechnung app, будівельний калькулятор, рахунок фактура" />
     <meta name="robots" content="index, follow" />
     <meta name="author" content="Construction Project Calculator" />
     <link rel="canonical" href="https://calculatorpc.com/" />
 
-    <!-- ICONS (cpc-v2) — replace the whole old favicon / apple-touch / manifest block with this -->
+    <!-- iOS home screen: root apple-touch FIRST (Safari web-app mode), then cpc-v2 pack -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/cpc-v2/apple-touch-icon-180.png" />
+    <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" />
+
+    <!-- ICONS (cpc-v2) -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/cpc-v2/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/cpc-v2/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="48x48" href="/icons/cpc-v2/favicon-48.png" />
     <link rel="shortcut icon" href="/icons/cpc-v2/favicon.ico" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/cpc-v2/apple-touch-icon-180.png" />
 
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
