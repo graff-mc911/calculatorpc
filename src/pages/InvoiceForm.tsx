@@ -56,15 +56,44 @@ function defaultDueDate(issueDate: string, termsDays?: number): string {
   return d.toISOString().split('T')[0];
 }
 
+/** Columns the form may send that older prod DBs might not have yet. */
+const OPTIONAL_INVOICE_COLUMNS = ['project_id', 'due_date'] as const;
+
 function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   const msg = (error.message || '').toLowerCase();
   return (
     error.code === 'PGRST204' ||
+    error.code === '42703' ||
+    msg.includes('schema cache') ||
     msg.includes('project_id') ||
     msg.includes('due_date') ||
     (msg.includes('column') && msg.includes('does not exist'))
   );
+}
+
+function missingColumnFromError(error: { message?: string } | null): string | null {
+  const msg = error?.message || '';
+  const match =
+    msg.match(/Could not find the '([^']+)' column/i) ||
+    msg.match(/column\s+[\w.]+\.([a-z_0-9]+)\s+does not exist/i) ||
+    msg.match(/column\s+"?([a-z_0-9]+)"?\s+does not exist/i);
+  return match?.[1] || null;
+}
+
+function stripOptionalColumns(
+  payload: Record<string, unknown>,
+  column?: string | null,
+): Record<string, unknown> {
+  const next = { ...payload };
+  if (column && column in next) {
+    delete next[column];
+    return next;
+  }
+  for (const col of OPTIONAL_INVOICE_COLUMNS) {
+    delete next[col];
+  }
+  return next;
 }
 
 export const InvoiceForm: React.FC = () => {
@@ -617,12 +646,6 @@ export const InvoiceForm: React.FC = () => {
         : {}),
     };
 
-    const stripOptionalColumns = (payload: Record<string, unknown>) => {
-      const next = { ...payload };
-      delete next.project_id;
-      return next;
-    };
-
     let invoiceId = id;
     let workingPayload = invoicePayload;
 
@@ -634,15 +657,21 @@ export const InvoiceForm: React.FC = () => {
 
     if (id) {
       let { error } = await runUpdate(workingPayload);
-      if (error && isMissingColumnError(error)) {
-        workingPayload = stripOptionalColumns(workingPayload);
+      for (let attempt = 0; error && isMissingColumnError(error) && attempt < 4; attempt++) {
+        workingPayload = stripOptionalColumns(
+          workingPayload,
+          missingColumnFromError(error),
+        );
         ({ error } = await runUpdate(workingPayload));
       }
       if (error) throw error;
     } else {
       let { data, error } = await runInsert(workingPayload);
-      if (error && isMissingColumnError(error)) {
-        workingPayload = stripOptionalColumns(workingPayload);
+      for (let attempt = 0; error && isMissingColumnError(error) && attempt < 4; attempt++) {
+        workingPayload = stripOptionalColumns(
+          workingPayload,
+          missingColumnFromError(error),
+        );
         ({ data, error } = await runInsert(workingPayload));
       }
       if (error) throw error;
