@@ -139,7 +139,7 @@ export const QuickActionsBar: React.FC<{
 
   return (
     <>
-      <div className={`no-print grid grid-cols-5 gap-1.5 items-center ${className}`}>
+      <div className={`no-print grid grid-cols-5 gap-1 items-center min-w-0 ${className}`}>
         {items.map((item) =>
           'kind' in item && item.kind === 'fab' ? (
             <button
@@ -162,12 +162,12 @@ export const QuickActionsBar: React.FC<{
               key={item.key}
               type="button"
               onClick={'onClick' in item ? item.onClick : undefined}
-              className="min-h-[44px] text-center text-[11px] leading-tight active:scale-[0.98] transition-transform"
+              className="min-h-[44px] min-w-0 text-center text-[10px] min-[380px]:text-[11px] leading-tight truncate px-0.5 active:scale-[0.98] transition-transform"
               style={{
                 background: 'var(--cpc-card)',
                 border: '1px solid var(--cpc-line)',
                 borderRadius: 9,
-                padding: '7px 2px',
+                padding: '7px 1px',
                 color:
                   'copper' in item && item.copper
                     ? 'var(--cpc-copper-light)'

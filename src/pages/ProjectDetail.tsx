@@ -699,8 +699,8 @@ export default function ProjectDetail() {
         )}
       </div>
 
-      {/* ШВИДКІ ДІЇ */}
-      <div className="grid grid-cols-4 gap-1.5 mb-4">
+      {/* ШВИДКІ ДІЇ — 2×2 on narrow phones, 4-up from ~380px */}
+      <div className="grid grid-cols-2 min-[380px]:grid-cols-4 gap-1.5 mb-4">
         {[
           { key: 'work', label: 'Робота', onClick: openAddWork },
           { key: 'exp', label: 'Витрата', onClick: () => setSheet('expense') },

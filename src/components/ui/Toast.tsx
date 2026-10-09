@@ -37,7 +37,7 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration =
       initial={{ opacity: 0, y: -50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className={`${colors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 min-w-[320px] max-w-md`}
+      className={`${colors[type]} text-white px-4 sm:px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 w-[min(100%,28rem)] max-w-[calc(100vw-1.5rem)] min-w-0`}
     >
       {icons[type]}
       <p className="flex-1 font-medium">{message}</p>

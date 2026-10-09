@@ -722,7 +722,7 @@ export const InvoiceForm: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-5xl mx-auto">
+      <div className="min-h-screen pt-2 pb-8 px-3 sm:px-4 md:px-6 max-w-5xl mx-auto w-full min-w-0">
         <div className="flex items-center justify-center py-16">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
         </div>
@@ -731,7 +731,7 @@ export const InvoiceForm: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-5xl mx-auto">
+    <div className="min-h-screen pt-2 pb-8 px-3 sm:px-4 md:px-6 max-w-5xl mx-auto w-full min-w-0">
       <div className="mb-6">
         <button
           type="button"

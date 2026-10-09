@@ -155,7 +155,7 @@ export const Paywall: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-2xl mx-auto">
+    <div className="min-h-screen pt-2 pb-8 px-4 md:px-6 max-w-2xl mx-auto">
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-6 text-sm"

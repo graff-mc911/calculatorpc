@@ -219,7 +219,8 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
   ribbonTab: 'esign',
   subAction: 'sign-doc',
   zoom: 100,
-  sidebarOpen: true,
+  /* Closed by default — desktop opens via PDFWorkspace effect; mobile uses overlay */
+  sidebarOpen: false,
   leftRail: 'pages',
   quickToolsOpen: false,
   createFileOpen: false,
@@ -248,10 +249,14 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
       translate: 'lang',
       ai: 'ask',
     };
+    const wantsSidebar = ['esign', 'fill', 'edit', 'ocr', 'forms', 'comment'].includes(tab);
+    const wide =
+      typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
     set({
       ribbonTab: tab,
       subAction: defaults[tab] || 'sign-doc',
-      sidebarOpen: ['esign', 'fill', 'edit', 'ocr', 'forms', 'comment'].includes(tab),
+      // Phones: keep canvas full-width (overlay opens only via edge control)
+      sidebarOpen: wide ? wantsSidebar : false,
     });
   },
 

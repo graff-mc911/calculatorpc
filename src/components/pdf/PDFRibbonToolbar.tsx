@@ -107,15 +107,15 @@ export const PDFRibbonToolbar: React.FC = () => {
   const subs = SUB[ribbonTab] || [];
 
   return (
-    <div className="bg-white border-b border-[#e5e7eb] shrink-0 z-20">
-      <div className="flex items-center gap-0.5 px-2 pt-1 overflow-x-auto">
-        <button type="button" onClick={() => setCreateFileOpen(true)} className="p-2 text-[#64748b] hover:bg-[#f1f5f9] rounded" title="Menu / New">
+    <div className="bg-white border-b border-[#e5e7eb] shrink-0 z-20 w-full max-w-[100vw] min-w-0">
+      <div className="flex items-center gap-0.5 px-2 pt-1 overflow-x-auto overscroll-x-contain touch-pan-x scrollbar-hide max-w-full">
+        <button type="button" onClick={() => setCreateFileOpen(true)} className="p-2 min-h-[40px] min-w-[40px] text-[#64748b] hover:bg-[#f1f5f9] rounded shrink-0" title="Menu / New">
           <Menu size={16} />
         </button>
-        <button type="button" onClick={() => navigate('/')} className="p-2 text-[#64748b] hover:bg-[#f1f5f9] rounded" title="Home">
+        <button type="button" onClick={() => navigate('/')} className="p-2 min-h-[40px] min-w-[40px] text-[#64748b] hover:bg-[#f1f5f9] rounded shrink-0" title="Home">
           <Home size={16} />
         </button>
-        <div className="w-px h-5 bg-[#e2e8f0] mx-1" />
+        <div className="w-px h-5 bg-[#e2e8f0] mx-1 shrink-0" />
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -126,7 +126,7 @@ export const PDFRibbonToolbar: React.FC = () => {
                 /* stay on create sub-toolbar — do not auto-open modal */
               }
             }}
-            className={`relative px-2.5 py-2 text-[12px] whitespace-nowrap rounded-t-md transition-colors ${
+            className={`relative px-2.5 py-2 text-[12px] whitespace-nowrap rounded-t-md transition-colors shrink-0 ${
               ribbonTab === tab.id
                 ? 'text-[#0f172a] font-semibold bg-[#f8fafc]'
                 : 'text-[#64748b] hover:text-[#0f172a] hover:bg-[#f8fafc]'
@@ -140,8 +140,8 @@ export const PDFRibbonToolbar: React.FC = () => {
         ))}
       </div>
 
-      <div className="flex items-center gap-1 px-3 py-1.5 bg-[#f8fafc] border-t border-[#eef2f7] min-h-[40px]">
-        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
+      <div className="flex items-center gap-1 px-2 sm:px-3 py-1.5 bg-[#f8fafc] border-t border-[#eef2f7] min-h-[40px] max-w-full min-w-0">
+        <div className="flex items-center gap-0.5 flex-1 overflow-x-auto overscroll-x-contain touch-pan-x scrollbar-hide min-w-0">
           {subs.map((s) => (
             <button
               key={s.id}

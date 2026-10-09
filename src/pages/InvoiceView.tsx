@@ -692,7 +692,7 @@ export const InvoiceView: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen pt-20 px-4 max-w-6xl mx-auto">
+      <div className="min-h-screen pt-2 px-4 max-w-6xl mx-auto">
         <div className="flex items-center justify-center py-16">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
         </div>
@@ -722,7 +722,7 @@ export const InvoiceView: React.FC = () => {
   };
 
   return (
-    <div className="invoice-print-root min-h-screen pt-20 pb-10 px-3 md:px-6 max-w-6xl mx-auto overflow-x-hidden">
+    <div className="invoice-print-root min-h-screen pt-2 pb-10 px-3 md:px-6 max-w-6xl mx-auto w-full min-w-0 overflow-x-clip">
       <div className="invoice-action-bar no-print mb-6">
         <button
           type="button"
@@ -745,7 +745,7 @@ export const InvoiceView: React.FC = () => {
         </div>
 
         {/* Primary mobile actions — Share stays one tap via Web Share API */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-2 mb-3">
           <button
             type="button"
             onClick={() => void handleDownloadPdf()}

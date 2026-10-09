@@ -78,7 +78,7 @@ export default function Owner() {
   });
 
   return (
-    <div className="min-h-screen pt-20 pb-10 px-4 md:px-6 max-w-5xl mx-auto">
+    <div className="min-h-screen pt-2 pb-10 px-4 md:px-6 max-w-5xl mx-auto">
       <button
         type="button"
         onClick={() => navigate('/settings')}

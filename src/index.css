@@ -47,7 +47,7 @@
   /* Keep shell tokens after Tailwind so desktop widths always win */
   --cpc-shell-max: 430px;
   --cpc-top-offset: 56px;
-  --cpc-bottom-offset: 140px;
+  --cpc-bottom-offset: 152px;
 }
 
 @media (min-width: 768px) {
@@ -76,21 +76,51 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--cpc-bg);
   color: var(--cpc-text);
-  overflow-x: hidden;
+  overflow-x: clip;
   line-height: 1.35;
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
 }
 
 h1, h2, h3, h4, h5, h6 {

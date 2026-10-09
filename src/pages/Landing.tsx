@@ -91,28 +91,31 @@ const fadeUp = {
 export const Landing: React.FC = () => {
   return (
     <div className="min-h-screen text-white">
-      <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-4 bg-black/20 backdrop-blur-xl border-b border-white/5">
-        <Logo variant="glass" size="sm" />
-        <div className="flex items-center gap-3">
+      <header
+        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 px-4 sm:px-5 py-3 sm:py-4 bg-black/20 backdrop-blur-xl border-b border-white/5"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+      >
+        <Logo variant="icon" size="sm" />
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Link
             to="/login"
-            className="text-white/70 hover:text-white text-sm font-medium transition-colors px-3 py-1.5"
+            className="text-white/70 hover:text-white text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 min-h-[44px] inline-flex items-center"
           >
             Увійти
           </Link>
           <Link
             to="/signup"
-            className="bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all active:scale-95"
+            className="bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold px-3 sm:px-4 py-2 rounded-xl transition-all active:scale-95 min-h-[44px] inline-flex items-center"
           >
             Спробувати
           </Link>
         </div>
       </header>
 
-      <section className="relative pt-32 pb-20 px-5 text-center overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-orange-500/10 rounded-full blur-[100px]" />
-          <div className="absolute top-[20%] left-[10%] w-[300px] h-[300px] bg-cyan-500/5 rounded-full blur-[80px]" />
+      <section className="relative pt-32 pb-20 px-5 text-center overflow-hidden max-w-[100vw]">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[min(600px,140vw)] h-[400px] bg-orange-500/10 rounded-full blur-[100px]" />
+          <div className="absolute top-[20%] left-[10%] w-[min(300px,80vw)] h-[300px] bg-cyan-500/5 rounded-full blur-[80px]" />
         </div>
         <div className="relative max-w-3xl mx-auto">
           <motion.div

@@ -45,7 +45,7 @@ export const PDFRightSidebar: React.FC = () => {
       <button
         type="button"
         onClick={() => setSidebarOpen(true)}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-white border border-[#e5e7eb] border-r-0 rounded-l-lg px-1.5 py-3 shadow text-[#64748b] hover:text-[#3b82f6]"
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-white border border-[#e5e7eb] border-r-0 rounded-l-lg px-1.5 py-3 shadow text-[#64748b] hover:text-[#3b82f6] min-h-[44px] min-w-[36px]"
         title="Open panel"
       >
         <ChevronRight size={16} className="rotate-180" />
@@ -82,10 +82,20 @@ export const PDFRightSidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-[260px] shrink-0 bg-white border-l border-[#e5e7eb] flex flex-col z-10">
+    <>
+      {/* Mobile: dim backdrop so sidebar is an overlay, not a permanent desktop column */}
+      <button
+        type="button"
+        className="lg:hidden fixed inset-0 z-30 bg-black/35 border-0 p-0"
+        aria-label="Close panel"
+        onClick={() => setSidebarOpen(false)}
+      />
+      <aside
+        className="fixed lg:static inset-y-0 right-0 z-40 w-[min(260px,88vw)] lg:w-[260px] shrink-0 bg-white border-l border-[#e5e7eb] flex flex-col shadow-xl lg:shadow-none"
+      >
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#eef2f7]">
         <h3 className="text-[14px] font-semibold text-[#0f172a]">{title}</h3>
-        <button type="button" onClick={toggleSidebar} className="p-1 rounded hover:bg-[#f1f5f9] text-[#94a3b8]" aria-label="Collapse">
+        <button type="button" onClick={toggleSidebar} className="p-2 min-h-[44px] min-w-[44px] rounded hover:bg-[#f1f5f9] text-[#94a3b8]" aria-label="Collapse">
           <X size={16} />
         </button>
       </div>
@@ -139,5 +149,6 @@ export const PDFRightSidebar: React.FC = () => {
         )}
       </div>
     </aside>
+    </>
   );
 };

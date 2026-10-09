@@ -359,7 +359,7 @@ export default function Settings() {
   );
 
   return (
-    <div className="cpc-page w-full mx-auto min-w-0 pb-8">
+    <div className="cpc-page w-full mx-auto min-w-0 pb-10">
       <h1 className="text-xl font-medium mb-1" style={{ color: 'var(--cpc-text)' }}>
         Налаштування
       </h1>

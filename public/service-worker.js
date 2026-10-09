@@ -1,7 +1,7 @@
 /* CPC service worker — network-first, clears stale caches on activate.
- * CACHE_BUST: 2026-10-09-cpc-iphone-icon
+ * CACHE_BUST: 2026-10-09-cpc-mobile-layout
  */
-const CACHE_BUST = 'cpc-iphone-icon-20261009';
+const CACHE_BUST = 'cpc-mobile-layout-20261009';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

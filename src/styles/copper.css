@@ -19,8 +19,10 @@
   --cpc-radius-step: 8px;
   /* Mobile-first phone column; expands on desktop monitors */
   --cpc-shell-max: 430px;
+  /* MobileTopNav content row (~52) — safe-area added in .cpc-app-main */
   --cpc-top-offset: 56px;
-  --cpc-bottom-offset: 140px;
+  /* QuickActions (~56) + tab bar (~60) — safe-area added in .cpc-app-main */
+  --cpc-bottom-offset: 152px;
 }
 
 @media (min-width: 768px) {
@@ -115,6 +117,24 @@
     max-width: var(--cpc-shell-max);
     margin-left: auto;
     margin-right: auto;
+    min-width: 0;
+  }
+
+  /* Authenticated app chrome spacer — phone vs desktop */
+  .cpc-app-main {
+    padding-top: calc(var(--cpc-top-offset) + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--cpc-bottom-offset) + env(safe-area-inset-bottom, 0px));
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  @media (min-width: 1024px) {
+    .cpc-app-main {
+      padding-top: var(--cpc-top-offset);
+      padding-bottom: var(--cpc-bottom-offset);
+    }
   }
 
   .cpc-card {

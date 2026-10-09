@@ -8,7 +8,7 @@ export const Language: React.FC = () => {
   const { language, setLanguage, t } = useLanguage();
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-20 pb-8">
+    <div className="min-h-screen bg-slate-50 pt-2 pb-8">
       <div className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-2xl font-bold text-slate-900">{t('language')}</h1>

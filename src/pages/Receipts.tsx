@@ -264,7 +264,7 @@ export default function Receipts() {
   );
 
   return (
-    <div className="min-h-screen pt-20 pb-8 px-4 md:px-6 max-w-2xl mx-auto">
+    <div className="min-h-screen pt-2 pb-8 px-4 md:px-6 max-w-2xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-semibold text-white">

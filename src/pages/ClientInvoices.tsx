@@ -303,7 +303,7 @@ export const ClientInvoices: React.FC = () => {
   const isPageLoading = invoicesLoading || expensesLoading;
 
   return (
-    <div className="min-h-screen pt-16 pb-28 px-4 md:px-6 max-w-2xl mx-auto">
+    <div className="min-h-screen pt-2 pb-4 px-4 md:px-6 max-w-2xl mx-auto">
       {/* Верхня частина сторінки */}
       <div className="pt-6 pb-4">
         <button

@@ -218,7 +218,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="min-h-screen pt-20 pb-10 px-4 md:px-6 max-w-2xl mx-auto flex flex-col">
+    <div className="min-h-screen pt-2 pb-10 px-4 md:px-6 max-w-2xl mx-auto flex flex-col">
       <button
         type="button"
         onClick={() => navigate('/')}

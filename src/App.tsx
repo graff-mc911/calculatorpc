@@ -124,7 +124,7 @@ function RootPage() {
       <QuickActionsProvider>
         <TopNav />
         <MobileTopNav />
-        <div className="pt-14 pb-36 lg:pt-[7.5rem] lg:pb-8">
+        <div className="cpc-app-main print:pt-0 print:pb-0">
           <Home />
         </div>
         <BottomNav />
@@ -153,7 +153,7 @@ function AppContent() {
   const showAppChrome = !hideChrome;
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--cpc-page)' }} key={language}>
+    <div className="min-h-screen min-h-[100dvh] w-full max-w-[100vw] overflow-x-clip" style={{ background: 'var(--cpc-page)' }} key={language}>
       <SyncInit />
       <OfflineIndicator />
 
@@ -171,8 +171,8 @@ function AppContent() {
       <div
         className={
           showAppChrome
-            ? 'pt-14 pb-36 lg:pt-[7.5rem] lg:pb-8 print:pt-0 print:pb-0'
-            : ''
+            ? 'cpc-app-main print:pt-0 print:pb-0'
+            : 'w-full min-w-0 max-w-[100vw] overflow-x-clip'
         }
       >
         <Suspense fallback={<Loading />}>

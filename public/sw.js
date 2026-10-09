@@ -1,5 +1,5 @@
 /* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-iphone-icon-20261009';
+const CACHE_BUST = 'cpc-mobile-layout-20261009';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

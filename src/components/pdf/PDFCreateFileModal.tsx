@@ -31,13 +31,13 @@ export const PDFCreateFileModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 overflow-y-auto"
       onClick={() => setCreateFileOpen(false)}
       onKeyDown={(e) => e.key === 'Escape' && setCreateFileOpen(false)}
       role="presentation"
     >
       <div
-        className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-[#e5e7eb] overflow-hidden"
+        className="w-full max-w-xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[#e5e7eb] overflow-y-auto max-h-[min(92dvh,100%)] my-0 sm:my-auto"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

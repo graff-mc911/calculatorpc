@@ -70,6 +70,18 @@ export const PDFWorkspace: React.FC = () => {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Desktop: open tools sidebar; phone: keep closed (overlay when opened)
+  useEffect(() => {
+    const syncSidebar = () => {
+      const wide = window.matchMedia('(min-width: 1024px)').matches;
+      usePdfStore.getState().setSidebarOpen(wide);
+    };
+    syncSidebar();
+    const mq = window.matchMedia('(min-width: 1024px)');
+    mq.addEventListener('change', syncSidebar);
+    return () => mq.removeEventListener('change', syncSidebar);
+  }, []);
+
   /** Global file input for Upload / Image tool */
   const onGlobalFiles = async (list: FileList | null) => {
     if (!list?.length) return;
@@ -106,12 +118,12 @@ export const PDFWorkspace: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] max-h-[100dvh] flex flex-col bg-[#e8eaed] text-[#0f172a] overflow-hidden">
+    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] flex flex-col bg-[#e8eaed] text-[#0f172a] overflow-hidden">
       <PDFHeader />
       <PDFRibbonToolbar />
       <PDFDocumentTabs />
 
-      <div className="flex-1 min-h-0 flex relative">
+      <div className="flex-1 min-h-0 flex relative min-w-0 overflow-hidden">
         <PDFLeftRail />
         <PDFCanvasViewer />
 
