@@ -60,7 +60,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|service-worker\\.js|sw\\.js|manifest\\.json|site\\.webmanifest|offline\\.html|favicon\\.ico|favicon\\.svg|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2?|ttf|txt|xml|webmanifest)).*)",
+      "source": "/((?!assets/|service-worker\\.js|sw\\.js|manifest\\.json|site\\.webmanifest|offline\\.html|robots\\.txt|sitemap\\.xml|favicon\\.ico|favicon\\.svg|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2?|ttf|txt|xml|webmanifest)).*)",
       "destination": "/index.html"
     }
   ]

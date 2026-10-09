@@ -23,6 +23,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { TermsOfService } from './pages/TermsOfService';
+import { DocumentMeta } from './components/DocumentMeta';
 import Settings from './pages/Settings';
 import Receipts from './pages/Receipts';
 import { initSyncManager, onSyncFlush } from './lib/syncManager';
@@ -154,6 +155,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen min-h-[100dvh] w-full max-w-[100vw] overflow-x-clip" style={{ background: 'var(--cpc-page)' }} key={language}>
+      <DocumentMeta />
       <SyncInit />
       <OfflineIndicator />
 

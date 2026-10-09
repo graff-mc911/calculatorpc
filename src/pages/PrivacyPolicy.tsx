@@ -11,11 +11,12 @@ export const PrivacyPolicy: React.FC = () => {
     <div className="min-h-screen bg-[#1a1f24] pt-16 pb-8">
       <div className="max-w-4xl mx-auto px-6">
         <button
-          onClick={() => navigate(-1)}
+          type="button"
+          onClick={() => navigate('/')}
           className="flex items-center gap-2 px-3 py-2 bg-white/10 backdrop-blur-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/20 rounded-xl mb-6 transition-all active:scale-95"
         >
           <ArrowLeft className="h-5 w-5" />
-          {t('back')}
+          {t('back')} — CPC
         </button>
 
         <div className="bg-white rounded-2xl shadow-sm p-8">

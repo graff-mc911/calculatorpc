@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /signup
+Disallow: /onboarding
+Disallow: /invoices
+Disallow: /clients
+Disallow: /projects
+Disallow: /settings
+Disallow: /account
+Disallow: /owner
+
+# Prefer the marketing homepage over legal pages in search
+Sitemap: https://calculatorpc.com/sitemap.xml
