@@ -1,5 +1,5 @@
 /* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-favicon-20261009c';
+const CACHE_BUST = 'cpc-logo-frame-20261009d';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
