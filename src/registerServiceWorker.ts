@@ -1,5 +1,5 @@
 /** Bump with each production deploy that must reach sticky iOS PWAs. */
-export const CPC_SW_VERSION = 'cpc-force-refresh-20261009b';
+export const CPC_SW_VERSION = 'cpc-favicon-20261009c';
 
 const SW_URL = `/service-worker.js?v=${CPC_SW_VERSION}`;
 const BUILD_STORAGE_KEY = 'cpc-build-id';
