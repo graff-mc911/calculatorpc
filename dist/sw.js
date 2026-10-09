@@ -1,5 +1,5 @@
 /* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-mobile-layout-20261009';
+const CACHE_BUST = 'cpc-force-refresh-20261009b';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
