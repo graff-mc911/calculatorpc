@@ -84,8 +84,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 }) => {
   const { language } = useLanguage();
   const logoUrl = data.company_logo_url;
-  // Prefer document language (German DIN 5008 for imports); fallback to app UI language
-  const labelLang = data.invoice_language || language || 'de';
+  // Labels follow the language selected in the app language list
+  const labelLang = language || data.invoice_language || 'en';
 
   const tInvoice = (key: string) => {
     const langTranslations = translations[labelLang as keyof typeof translations];
@@ -161,92 +161,91 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
         boxSizing: 'border-box',
       }}
     >
-      {/* A. Header: logo/name left Â· company block right-aligned under logo row */}
+      {/* A. Company header (sample RE0009: left block only) */}
       <div ref={headerRef} style={{ marginBottom: '6mm' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8mm' }}>
-          <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt=""
-                style={{ height: '22mm', width: 'auto', maxWidth: '70mm', objectFit: 'contain' }}
-                crossOrigin="anonymous"
-              />
-            ) : (
-              <div style={{ fontSize: '14pt', fontWeight: 700, letterSpacing: '0.3pt' }}>
-                {data.company_name || 'â€”'}
-              </div>
-            )}
-            <div style={{ marginTop: logoUrl ? '2mm' : '1mm', fontSize: '9pt', lineHeight: 1.45 }}>
-              {data.company_name && logoUrl && (
-                <div style={{ fontWeight: 700 }}>{data.company_name}</div>
-              )}
-              {data.company_address && (
-                <div style={{ whiteSpace: 'pre-line' }}>{data.company_address}</div>
-              )}
-              {data.company_phone && (
-                <div>
-                  {tInvoice('phoneLabel')}: {data.company_phone}
-                </div>
-              )}
-              {data.company_email && <div>{data.company_email}</div>}
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt=""
+            style={{ height: '22mm', width: 'auto', maxWidth: '70mm', objectFit: 'contain' }}
+            crossOrigin="anonymous"
+          />
+        ) : (
+          <div style={{ fontSize: '14pt', fontWeight: 700, letterSpacing: '0.3pt' }}>
+            {data.company_name || '—'}
+          </div>
+        )}
+        <div style={{ marginTop: logoUrl ? '2mm' : '1mm', fontSize: '9pt', lineHeight: 1.45 }}>
+          {data.company_name && logoUrl && (
+            <div style={{ fontWeight: 700 }}>{data.company_name}</div>
+          )}
+          {data.company_address && (
+            <div style={{ whiteSpace: 'pre-line' }}>{data.company_address}</div>
+          )}
+          {data.company_phone && (
+            <div>
+              {tInvoice('phoneLabel')}: {data.company_phone}
             </div>
-          </div>
-
-          {/* B. Invoice meta box top-right */}
-          <div style={{ flex: '0 0 auto', minWidth: '62mm' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '9pt' }}>
-              <tbody>
-                <tr>
-                  <td style={metaLabelStyle}>{tInvoice('invoiceNumber')}:</td>
-                  <td style={metaValueStyle}>{data.document_number}</td>
-                </tr>
-                <tr>
-                  <td style={metaLabelStyle}>{tInvoice('customerNumber')}:</td>
-                  <td style={metaValueStyle}>{data.client_number || 'â€”'}</td>
-                </tr>
-                <tr>
-                  <td style={metaLabelStyle}>{tInvoice('date')}:</td>
-                  <td style={metaValueStyle}>{formatDeDate(data.date)}</td>
-                </tr>
-                {data.due_date ? (
-                  <tr>
-                    <td style={metaLabelStyle}>{tInvoice('dueDate')}:</td>
-                    <td style={metaValueStyle}>{formatDeDate(data.due_date)}</td>
-                  </tr>
-                ) : null}
-                <tr>
-                  <td style={{ ...metaLabelStyle, verticalAlign: 'top' }}>
-                    {tInvoice('performancePeriod')}:
-                  </td>
-                  <td style={metaValueStyle}>{periodText}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          )}
+          {data.company_email && <div>{data.company_email}</div>}
         </div>
       </div>
 
-      {/* Sender return line + recipient */}
-      <div ref={clientRef} style={{ marginBottom: '7mm' }}>
-        {returnLine && (
-          <div
-            style={{
-              fontSize: '6.5pt',
-              textDecoration: 'underline',
-              marginBottom: '2.5mm',
-              maxWidth: '85mm',
-              lineHeight: 1.3,
-            }}
-          >
-            {returnLine}
-          </div>
-        )}
-        <div style={{ fontSize: '10pt', lineHeight: 1.45, maxWidth: '85mm' }}>
-          {data.client_name && <div style={{ fontWeight: 700 }}>{data.client_name}</div>}
-          {data.client_address && (
-            <div style={{ whiteSpace: 'pre-line' }}>{data.client_address}</div>
+      {/* B. Return line + recipient (left) · invoice meta (right) — matches RE0009 */}
+      <div
+        ref={clientRef}
+        style={{
+          marginBottom: '7mm',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: '8mm',
+        }}
+      >
+        <div style={{ flex: '1 1 auto', minWidth: 0, maxWidth: '95mm' }}>
+          {returnLine && (
+            <div
+              style={{
+                fontSize: '6.5pt',
+                textDecoration: 'underline',
+                marginBottom: '2.5mm',
+                lineHeight: 1.3,
+              }}
+            >
+              {returnLine}
+            </div>
           )}
+          <div style={{ fontSize: '10pt', lineHeight: 1.45 }}>
+            {data.client_name && <div style={{ fontWeight: 700 }}>{data.client_name}</div>}
+            {data.client_address && (
+              <div style={{ whiteSpace: 'pre-line' }}>{data.client_address}</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex: '0 0 auto', minWidth: '62mm' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '9pt' }}>
+            <tbody>
+              <tr>
+                <td style={metaLabelStyle}>{tInvoice('invoiceNumber')}:</td>
+                <td style={metaValueStyle}>{data.document_number}</td>
+              </tr>
+              <tr>
+                <td style={metaLabelStyle}>{tInvoice('customerNumber')}:</td>
+                <td style={metaValueStyle}>{data.client_number || '—'}</td>
+              </tr>
+              <tr>
+                <td style={metaLabelStyle}>{tInvoice('date')}:</td>
+                <td style={metaValueStyle}>{formatDeDate(data.date)}</td>
+              </tr>
+              <tr>
+                <td style={{ ...metaLabelStyle, verticalAlign: 'top' }}>
+                  {tInvoice('performancePeriod')}:
+                </td>
+                <td style={metaValueStyle}>{periodText}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -375,36 +374,32 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
         </table>
       </div>
 
-      {/* E. Notes from the form (Примітки) — no canned legal/payment text */}
-      {data.notes?.trim() ? (
-        <div
-          style={{
-            fontSize: '10pt',
-            marginBottom: '6mm',
-            whiteSpace: 'pre-line',
-            lineHeight: 1.5,
-            fontWeight: 500,
-          }}
-        >
-          {data.notes.trim()}
-        </div>
-      ) : null}
-
-      {(data.signature_data_url || data.signed_by) && (
-        <div style={{ fontSize: '10pt', lineHeight: 1.5, marginBottom: '8mm' }}>
-          {data.signed_by && (
-            <div style={{ marginTop: '2mm', fontWeight: 600 }}>{data.signed_by}</div>
-          )}
-          {data.signature_data_url && (
-            <img
-              src={data.signature_data_url}
-              alt=""
-              style={{ marginTop: '3mm', maxHeight: '18mm', maxWidth: '50mm' }}
-              crossOrigin="anonymous"
-            />
-          )}
-        </div>
-      )}
+      {/* E. Closing block — same order as sample Rechnung RE0009 */}
+      <div style={{ fontSize: '10pt', lineHeight: 1.5, marginBottom: '6mm' }}>
+        {showReverseCharge && (
+          <p style={{ margin: '0 0 3mm 0' }}>{tInvoice('reverseChargeNote')}</p>
+        )}
+        {data.notes?.trim() ? (
+          <p style={{ margin: '0 0 3mm 0', whiteSpace: 'pre-line' }}>{data.notes.trim()}</p>
+        ) : null}
+        <p style={{ margin: '0 0 3mm 0' }}>{tInvoice('paymentDue')}</p>
+        <p style={{ margin: '0 0 3mm 0' }}>{tInvoice('closingText')}</p>
+        <p style={{ margin: '0 0 2mm 0' }}>{tInvoice('withRegards')}</p>
+        {data.signed_by && (
+          <div style={{ marginTop: '2mm', fontWeight: 600 }}>{data.signed_by}</div>
+        )}
+        {data.signature_data_url && (
+          <img
+            src={data.signature_data_url}
+            alt=""
+            style={{ marginTop: '3mm', maxHeight: '18mm', maxWidth: '50mm' }}
+            crossOrigin="anonymous"
+          />
+        )}
+        <p style={{ margin: '5mm 0 0 0', fontSize: '8.5pt', lineHeight: 1.4 }}>
+          {tInvoice('legalNotice')}
+        </p>
+      </div>
 
       {/* F. 3-column footer */}
       <div

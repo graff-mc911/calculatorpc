@@ -504,9 +504,8 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
     ...meta,
     items,
     currency: meta.currency || 'EUR',
-    invoice_language: 'de',
     sourceFileName: file.name,
-    notes: meta.notes || `Importiert aus ${file.name}`,
+    notes: meta.notes || `Imported from ${file.name}`,
   };
 }
 
@@ -645,10 +644,9 @@ async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
     document_number: header.invoiceNumber || undefined,
     date: header.invoiceDate || undefined,
     currency: header.currency || 'EUR',
-    invoice_language: 'de',
     items,
     sourceFileName: file.name,
-    notes: `Importiert aus ${file.name}`,
+    notes: `Imported from ${file.name}`,
   };
 }
 

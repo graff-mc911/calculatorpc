@@ -114,7 +114,7 @@ export const InvoiceForm: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { showSuccess, showError } = useToastContext();
 
   const [loading, setLoading] = useState(true);
@@ -146,7 +146,7 @@ export const InvoiceForm: React.FC = () => {
     vat_enabled: appDefaults.defaultVatPercent > 0,
     vat_rate: appDefaults.defaultVatPercent > 0 ? appDefaults.defaultVatPercent : 20,
     document_type: 'invoice',
-    invoice_language: 'de',
+    invoice_language: language || 'en',
     project_id: '',
     project_area: '',
     object_address: '',
@@ -294,7 +294,7 @@ export const InvoiceForm: React.FC = () => {
       document_number: draft.document_number || prev.document_number,
       currency: asCpcCurrency(draft.currency || 'EUR', 'EUR'),
       document_type: 'invoice',
-      invoice_language: draft.invoice_language || 'de',
+      invoice_language: language || draft.invoice_language || 'en',
       object_address: draft.object_address || prev.object_address,
       notes: draft.notes || prev.notes,
     }));
@@ -411,7 +411,7 @@ export const InvoiceForm: React.FC = () => {
       vat_enabled: (invoiceData.tax_percent || 0) > 0,
       vat_rate: invoiceData.tax_percent || 20,
       document_type: invoiceData.document_type || 'invoice',
-      invoice_language: invoiceData.invoice_language || 'de',
+      invoice_language: invoiceData.invoice_language || language || 'en',
       project_id: invoiceData.project_id || '',
       project_area: invoiceData.total_project_area?.toString() || '',
       object_address: invoiceData.object_address || '',
@@ -700,7 +700,7 @@ export const InvoiceForm: React.FC = () => {
       currency: formData.currency,
       status,
       document_type: formData.document_type,
-      invoice_language: formData.invoice_language || 'de',
+      invoice_language: language || formData.invoice_language || 'en',
       project_id: formData.project_id || null,
       object_address:
         formData.object_address ||

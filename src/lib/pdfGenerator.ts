@@ -77,8 +77,9 @@ export const generateInvoicePDF = async (
   const topMargin = 15;
   let y = topMargin;
 
-  const lang = (invoice.invoice_language || 'uk') as keyof typeof translations;
-  const dict = translations[lang] || translations.de;
+  // Callers pass the app UI language (language list) via invoice_language
+  const lang = (invoice.invoice_language || 'en') as keyof typeof translations;
+  const dict = translations[lang] || translations.en;
   const t = (key: string): string =>
     ((dict as Record<string, string>)[key] as string) ||
     ((translations.en as Record<string, string>)[key] as string) ||
@@ -92,8 +93,7 @@ export const generateInvoicePDF = async (
       ? `${formatDeDate(periodStart)} ${t('servicePeriodTo')} ${formatDeDate(periodEnd)}`
       : formatDeDate(periodStart || invoice.date);
 
-  // —— Header left: logo + company ——
-  const headerTop = y;
+  // —— Header: logo + company (left only, sample RE0009) ——
   if (logoUrl) {
     try {
       const img = await loadImage(logoUrl);
@@ -126,11 +126,13 @@ export const generateInvoicePDF = async (
     doc.text(company.company_email, leftMargin, y);
     y += 4;
   }
+  y += 6;
 
-  // —— Meta box top-right ——
+  // —— Recipient left + meta right (sample RE0009) ——
+  const blockTop = y;
   const metaXLabel = pageWidth - rightMargin - 62;
   const metaXValue = pageWidth - rightMargin;
-  let metaY = headerTop + 2;
+  let metaY = blockTop;
   doc.setFontSize(9);
   const metaRows: Array<[string, string]> = [
     [t('invoiceNumber'), invoice.document_number],
@@ -145,36 +147,34 @@ export const generateInvoicePDF = async (
     metaY += 5;
   });
 
-  y = Math.max(y, metaY) + 6;
-
-  // —— Return address line ——
+  let leftY = blockTop;
   doc.setFontSize(6.5);
   doc.setFont(font, 'normal');
   if (company.company_name && company.company_address) {
     const ret = `${company.company_name}, ${company.company_address.split('\n').join(', ')}`;
-    doc.text(ret, leftMargin, y);
+    doc.text(ret, leftMargin, leftY);
     const tw = doc.getTextWidth(ret);
     doc.setDrawColor(0);
     doc.setLineWidth(0.2);
-    doc.line(leftMargin, y + 0.8, leftMargin + tw, y + 0.8);
+    doc.line(leftMargin, leftY + 0.8, leftMargin + tw, leftY + 0.8);
+    leftY += 6;
   }
-  y += 6;
 
-  // —— Recipient ——
   doc.setFontSize(10);
   doc.setFont(font, 'bold');
   if (invoice.client_name) {
-    doc.text(invoice.client_name, leftMargin, y);
-    y += 5;
+    doc.text(invoice.client_name, leftMargin, leftY);
+    leftY += 5;
   }
   doc.setFont(font, 'normal');
   if (invoice.client_address) {
     invoice.client_address.split('\n').forEach((line) => {
-      doc.text(line, leftMargin, y);
-      y += 4.2;
+      doc.text(line, leftMargin, leftY);
+      leftY += 4.2;
     });
   }
-  y += 6;
+
+  y = Math.max(leftY, metaY) + 6;
 
   // —— Title + BVH ——
   doc.setFontSize(14);
@@ -304,12 +304,24 @@ export const generateInvoicePDF = async (
   doc.setFontSize(10);
   const contentWidthNotes = pageWidth - leftMargin - rightMargin;
 
-  // Notes from the form only — no canned reverse-charge / payment / closing / legal text
+  // Closing block — same order as sample Rechnung RE0009
+  if (showReverseCharge) {
+    const rc = doc.splitTextToSize(t('reverseChargeNote'), contentWidthNotes);
+    doc.text(rc, leftMargin, y);
+    y += rc.length * 4.5 + 3;
+  }
   if (invoice.notes?.trim()) {
     const notes = doc.splitTextToSize(invoice.notes.trim(), contentWidthNotes);
     doc.text(notes, leftMargin, y);
-    y += notes.length * 4.5 + 6;
+    y += notes.length * 4.5 + 3;
   }
+  doc.text(t('paymentDue'), leftMargin, y);
+  y += 5;
+  const closing = doc.splitTextToSize(t('closingText'), contentWidthNotes);
+  doc.text(closing, leftMargin, y);
+  y += closing.length * 4.5 + 3;
+  doc.text(t('withRegards'), leftMargin, y);
+  y += 6;
 
   if (invoice.signed_by) {
     doc.setFont(font, 'bold');
@@ -326,6 +338,12 @@ export const generateInvoicePDF = async (
       /* ignore */
     }
   }
+
+  doc.setFontSize(8.5);
+  const legal = doc.splitTextToSize(t('legalNotice'), contentWidthNotes);
+  doc.text(legal, leftMargin, y);
+  y += legal.length * 3.8 + 4;
+  doc.setFontSize(10);
 
   // Company footer near bottom
   const footerBlockH = 32;
