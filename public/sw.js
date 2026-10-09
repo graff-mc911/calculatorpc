@@ -1,5 +1,5 @@
 /* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-f-20261009f';
+const CACHE_BUST = 'cpc-ios-checklist-20261009g';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
