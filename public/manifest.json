@@ -1,10 +1,29 @@
 {
-  "name": "CPC Calculator",
+  "name": "CPC — Construction Project Calculator",
   "short_name": "CPC",
+  "description": "Construction Project Calculator — field calculator and invoicing for professionals",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#141210",
-  "theme_color": "#2c3134",
-  "icons": []
+  "orientation": "portrait-primary",
+  "background_color": "#15181D",
+  "theme_color": "#15181D",
+  "icons": [
+    { "src": "/icons/cpc-v2/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cpc-v2/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cpc-v2/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/cpc-v2/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "New Invoice", "short_name": "Invoice", "description": "Create a new invoice", "url": "/invoices/new",
+      "icons": [{ "src": "/icons/cpc-v2/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Scan", "short_name": "Scan", "description": "Scan receipts", "url": "/scan",
+      "icons": [{ "src": "/icons/cpc-v2/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
 }

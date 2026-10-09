@@ -1,5 +1,5 @@
-/* Alias of inert service-worker.js — CACHE_BUST cpc-no-icons-20261009j */
-const CACHE_BUST = 'cpc-no-icons-20261009j';
+/* Alias of inert service-worker.js — CACHE_BUST cpc-icons-v2-20261009 */
+const CACHE_BUST = 'cpc-icons-v2-20261009';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

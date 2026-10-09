@@ -1,8 +1,8 @@
 /* Intentionally inert — iOS PWA icons break when a SW intercepts icon fetches.
- * CACHE_BUST: 2026-10-09-cpc-no-icons
+ * CACHE_BUST: cpc-icons-v2-20261009
  * Clients unregister this worker from registerServiceWorker.ts.
  */
-const CACHE_BUST = 'cpc-no-icons-20261009j';
+const CACHE_BUST = 'cpc-icons-v2-20261009';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
