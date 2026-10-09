@@ -2,24 +2,37 @@
   "name": "Construction Project Calculator",
   "short_name": "CPC",
   "description": "Construction Project Calculator — field calculator and invoicing for professionals",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0d0d0d",
-  "theme_color": "#FF7A00",
+  "background_color": "#2c3134",
+  "theme_color": "#2c3134",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192x192.png?v=cpc-calc-mockup-20261009",
+      "src": "/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icon-512x512.png?v=cpc-calc-mockup-20261009",
+      "src": "/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192x192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512x512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["business", "productivity", "utilities"],
@@ -31,7 +44,7 @@
       "url": "/invoices/new",
       "icons": [
         {
-          "src": "/icon-192x192.png?v=cpc-calc-mockup-20261009",
+          "src": "/icon-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -44,7 +57,7 @@
       "url": "/scan",
       "icons": [
         {
-          "src": "/icon-192x192.png?v=cpc-calc-mockup-20261009",
+          "src": "/icon-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
