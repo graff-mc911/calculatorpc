@@ -1,41 +1,41 @@
 {
-  "name": "Construction Project Calculator",
+  "name": "CPC — Construction Project Calculator",
   "short_name": "CPC",
   "description": "Construction Project Calculator — field calculator and invoicing for professionals",
-  "id": "/",
-  "start_url": "/",
+  "id": "/cpc-homescreen-e",
+  "start_url": "/?utm_source=homescreen",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#2c3134",
+  "background_color": "#141210",
   "theme_color": "#2c3134",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192x192.png",
+      "src": "/icons/hs-e/cpc-homescreen-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "/icons/hs-e/cpc-homescreen-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-192x192-maskable.png",
+      "src": "/icons/hs-e/cpc-homescreen-192-maskable.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icon-512x512-maskable.png",
+      "src": "/icons/hs-e/cpc-homescreen-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/cpc-apple-touch-180.png",
+      "src": "/icons/hs-e/cpc-homescreen-180.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
@@ -50,7 +50,7 @@
       "url": "/invoices/new",
       "icons": [
         {
-          "src": "/icon-192x192.png",
+          "src": "/icons/hs-e/cpc-homescreen-192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -63,7 +63,7 @@
       "url": "/scan",
       "icons": [
         {
-          "src": "/icon-192x192.png",
+          "src": "/icons/hs-e/cpc-homescreen-192.png",
           "sizes": "192x192",
           "type": "image/png"
         }

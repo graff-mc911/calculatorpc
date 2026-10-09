@@ -1,5 +1,5 @@
 /** Bump with each production deploy that must reach sticky iOS PWAs. */
-export const CPC_SW_VERSION = 'cpc-logo-frame-20261009d';
+export const CPC_SW_VERSION = 'cpc-homescreen-20261009e';
 
 const SW_URL = `/service-worker.js?v=${CPC_SW_VERSION}`;
 const BUILD_STORAGE_KEY = 'cpc-build-id';
