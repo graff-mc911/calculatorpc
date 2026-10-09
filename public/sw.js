@@ -1,5 +1,8 @@
-/* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-ios-checklist-20261009g';
+/* Alias — keep in sync with service-worker.js (CACHE_BUST). */
+const CACHE_BUST = 'cpc-home-fix-20261009h';
+
+const BYPASS =
+  /\/(manifest\.json|site\.webmanifest|service-worker\.js|sw\.js|apple-touch-icon.*|cpc-home-\d+\.png|icon-\d+\.png|favicon\.(ico|svg)|favicon-\d+x\d+\.png)(\?|$)/i;
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -25,6 +28,12 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (BYPASS.test(url.pathname)) return;
+  if (request.destination === 'image' && /icon|apple-touch|favicon|cpc-home/i.test(url.pathname)) {
+    return;
+  }
 
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(

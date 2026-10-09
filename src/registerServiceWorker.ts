@@ -1,5 +1,5 @@
 /** Bump with each production deploy that must reach sticky iOS PWAs. */
-export const CPC_SW_VERSION = 'cpc-ios-checklist-20261009g';
+export const CPC_SW_VERSION = 'cpc-home-fix-20261009h';
 
 const SW_URL = `/service-worker.js?v=${CPC_SW_VERSION}`;
 const BUILD_STORAGE_KEY = 'cpc-build-id';
@@ -62,11 +62,17 @@ export function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
   window.addEventListener('load', () => {
-    // Drop one-time refresh query so URLs stay clean after forced reload.
+    // Keep URL clean for iOS Add to Home Screen (no stale utm / refresh junk).
     try {
       const url = new URL(window.location.href);
-      if (url.searchParams.has('cpc_refresh')) {
-        url.searchParams.delete('cpc_refresh');
+      let dirty = false;
+      for (const key of ['cpc_refresh', 'utm_source', 'utm_medium', 'utm_campaign']) {
+        if (url.searchParams.has(key)) {
+          url.searchParams.delete(key);
+          dirty = true;
+        }
+      }
+      if (dirty) {
         window.history.replaceState({}, '', url.pathname + url.search + url.hash);
       }
     } catch {

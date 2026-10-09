@@ -31,11 +31,32 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/site.webmanifest",
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/(apple-touch-icon\\.png|cpc-home-.*\\.png|icon-192\\.png|icon-512\\.png)",
+      "headers": [
+        { "key": "Content-Type", "value": "image/png" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
     }
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|service-worker\\.js|sw\\.js|manifest\\.json|offline\\.html|favicon\\.ico|favicon\\.svg|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2?|ttf|txt|xml)).*)",
+      "source": "/((?!assets/|service-worker\\.js|sw\\.js|manifest\\.json|site\\.webmanifest|offline\\.html|favicon\\.ico|favicon\\.svg|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2?|ttf|txt|xml|webmanifest)).*)",
       "destination": "/index.html"
     }
   ]

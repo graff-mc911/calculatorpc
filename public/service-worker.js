@@ -1,7 +1,10 @@
-/* CPC service worker — network-first, clears stale caches on activate.
- * CACHE_BUST: 2026-10-09-cpc-ios-checklist
+/* CPC service worker — bypass icons/manifest so iOS PWA install can load them.
+ * CACHE_BUST: 2026-10-09-cpc-home-fix
  */
-const CACHE_BUST = 'cpc-ios-checklist-20261009g';
+const CACHE_BUST = 'cpc-home-fix-20261009h';
+
+const BYPASS =
+  /\/(manifest\.json|site\.webmanifest|service-worker\.js|sw\.js|apple-touch-icon.*|cpc-home-\d+\.png|icon-\d+\.png|favicon\.(ico|svg)|favicon-\d+x\d+\.png)(\?|$)/i;
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -32,7 +35,16 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  // Always network for navigations and the app shell so deploys are visible.
+  const url = new URL(request.url);
+  // Critical: never intercept PWA/home-screen icon + manifest fetches (iOS letter fallback).
+  if (BYPASS.test(url.pathname)) {
+    return;
+  }
+
+  if (request.destination === 'image' && /icon|apple-touch|favicon|cpc-home/i.test(url.pathname)) {
+    return;
+  }
+
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(
       fetch(request)
@@ -45,7 +57,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for hashed assets / scripts / styles — never prefer stale.
   event.respondWith(
     fetch(request)
       .then((response) => response)
