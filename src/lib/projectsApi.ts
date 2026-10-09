@@ -349,6 +349,29 @@ export async function addExpense(input: {
   return data as ProjectExpense;
 }
 
+export async function updateExpense(
+  id: string,
+  patch: Partial<
+    Pick<ProjectExpense, 'title' | 'category' | 'amount' | 'expense_date' | 'receipt_url' | 'notes'>
+  >
+): Promise<ProjectExpense> {
+  const uid = await requireUserId();
+  const { data, error } = await supabase
+    .from('project_expenses')
+    .update(patch)
+    .eq('id', id)
+    .eq('user_id', uid)
+    .select('*')
+    .single();
+
+  if (error) {
+    if (isMissingRelation(error)) throw new ProjectsSchemaMissingError();
+    throw error;
+  }
+  if (data?.project_id) await touchProject(data.project_id);
+  return data as ProjectExpense;
+}
+
 export async function deleteExpense(id: string, projectId: string): Promise<void> {
   const uid = await requireUserId();
   const { error } = await supabase

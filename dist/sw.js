@@ -1,5 +1,5 @@
 /* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-desktop-20261008c';
+const CACHE_BUST = 'cpc-calc-mockup-20261009';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
