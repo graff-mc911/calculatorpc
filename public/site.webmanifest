@@ -8,19 +8,19 @@
   "theme_color": "#2c3134",
   "icons": [
     {
-      "src": "/cpc-home-180.png",
+      "src": "https://calculatorpc.com/cpc-home-180.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/cpc-home-192.png",
+      "src": "https://calculatorpc.com/cpc-home-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/cpc-home-512.png",
+      "src": "https://calculatorpc.com/cpc-home-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
