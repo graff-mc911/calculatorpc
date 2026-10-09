@@ -84,8 +84,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 }) => {
   const { language } = useLanguage();
   const logoUrl = data.company_logo_url;
-  // Always use the app language from Settings — not a separate invoice_language
-  const labelLang = language || 'uk';
+  // Prefer document language (German DIN 5008 for imports); fallback to app UI language
+  const labelLang = data.invoice_language || language || 'de';
 
   const tInvoice = (key: string) => {
     const langTranslations = translations[labelLang as keyof typeof translations];

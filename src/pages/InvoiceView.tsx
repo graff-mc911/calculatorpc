@@ -548,7 +548,7 @@ export const InvoiceView: React.FC = () => {
       service_period_start: invoice.work_period_start,
       service_period_end: invoice.work_period_end,
       object_address: invoice.object_address || '',
-      invoice_language: language,
+      invoice_language: invoice.invoice_language || language || 'de',
     };
   };
 
@@ -558,7 +558,7 @@ export const InvoiceView: React.FC = () => {
     }
 
     const docNo = invoice.document_no || invoice.document_number || 'invoice';
-    const invoiceLang = language || 'uk';
+    const invoiceLang = invoice.invoice_language || language || 'de';
     const shareLabel = invoiceDocumentLabel(invoiceLang, docNo);
     const fileName = invoicePdfFileName(invoiceLang, docNo);
     let blob: Blob | null = null;

@@ -161,7 +161,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
       notes: invoice?.notes || '',
       service_period_start: invoice?.work_period_start || '',
       service_period_end: invoice?.work_period_end || '',
-      invoice_language: language,
+      invoice_language: invoice?.invoice_language || language || 'de',
       signature_data_url: resolveCompanySignatureUrl(invoice, companyProfile),
       signed_by: invoice?.signed_by || '',
       signed_at: invoice?.signed_at || '',

@@ -76,7 +76,7 @@ async function generatePdfFromInvoice(
     service_period_start: invoice.work_period_start,
     service_period_end: invoice.work_period_end,
     object_address: invoice.object_address || '',
-    invoice_language: labelLanguage || 'uk',
+    invoice_language: invoice.invoice_language || labelLanguage || 'de',
   };
 
   const companyData = buildCompanyFromInvoice(invoice, companyProfile);
@@ -96,7 +96,7 @@ export async function resolveInvoicePdfFile(
   labelLanguage?: string
 ): Promise<{ blob: Blob; fileName: string }> {
   const docNo = invoice.document_no || invoice.document_number || invoice.id || 'invoice';
-  const lang = labelLanguage || 'uk';
+  const lang = invoice.invoice_language || labelLanguage || 'de';
   const fileName = invoicePdfFileName(lang, String(docNo));
 
   // Uploaded external PDFs keep their original file

@@ -1,4 +1,5 @@
 import { calculateLineTotal } from './invoiceTotals';
+import { normalizeInvoiceUnit } from './invoiceUnits';
 import type { ProjectBundle, ProjectWorkItem } from './projectsApi';
 
 export type PrefillInvoiceItem = {
@@ -14,13 +15,7 @@ export type PrefillInvoiceItem = {
 };
 
 export function mapProjectUnitToInvoice(unit: string): string {
-  const u = (unit || 'm2').toLowerCase().replace(/\s/g, '');
-  if (u === 'm2' || u === 'м2' || u === 'м²') return 'm²';
-  if (u === 'm3' || u === 'м3' || u === 'м³') return 'm³';
-  if (u === 'lm' || u === 'мп' || u === 'пм') return 'm';
-  if (u === 'hrs' || u === 'h' || u === 'год') return 'h';
-  if (u === 'pcs' || u === 'шт') return 'pcs';
-  return unit || 'm²';
+  return normalizeInvoiceUnit(unit, 'm²');
 }
 
 export function workItemToInvoiceLine(w: ProjectWorkItem): PrefillInvoiceItem {
