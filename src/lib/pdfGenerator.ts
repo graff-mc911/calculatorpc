@@ -236,7 +236,8 @@ export const generateInvoicePDF = async (
   const netTotal = tableRows.reduce((s, i) => (i.is_section ? s : s + i.total), 0);
   const vatAmount = invoice.vat_enabled ? (netTotal * invoice.vat_rate) / 100 : 0;
   const grossTotal = netTotal + vatAmount;
-  const showReverseCharge = !invoice.vat_enabled;
+  const footerReserve = 32;
+  const bottomMargin = footerReserve + 8;
 
   if (invoice.vat_enabled) {
     body.push([
@@ -250,12 +251,66 @@ export const generateInvoicePDF = async (
   }
   body.push([
     {
-      content: showReverseCharge ? t('totalAmountStar') : t('grossAmount'),
+      content: invoice.vat_enabled
+        ? t('grossAmount')
+        : String(t('totalAmountStar')).replace(/\*+\s*$/, ''),
       colSpan: 5,
       styles: { fontStyle: 'bold' },
     },
     { content: money(grossTotal), styles: { fontStyle: 'bold', halign: 'right' } },
   ] as any);
+
+  const drawPageFooter = (pageNumber: number, pageCount: number) => {
+    const footerY = pageHeight - 28;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.3);
+    doc.line(leftMargin, footerY - 3, pageWidth - rightMargin, footerY - 3);
+
+    doc.setFontSize(7);
+    let fl = footerY;
+    doc.setFont(font, 'bold');
+    if (company.company_name) {
+      doc.text(company.company_name, leftMargin, fl);
+      fl += 3.2;
+    }
+    doc.setFont(font, 'normal');
+    if (company.company_address) {
+      doc.text(company.company_address.split('\n').join(', '), leftMargin, fl);
+      fl += 3.2;
+    }
+    if (company.company_phone) {
+      doc.text(`${t('phoneLabel')}: ${company.company_phone}`, leftMargin, fl);
+      fl += 3.2;
+    }
+    if (company.company_email) {
+      doc.text(company.company_email, leftMargin, fl);
+    }
+
+    const centerX = pageWidth / 2;
+    let fc = footerY;
+    if (company.company_tax_number) {
+      const taxLine = `${t('taxNumber')}: ${company.company_tax_number}${
+        invoice.signed_by ? ` ${invoice.signed_by}` : ''
+      }`;
+      doc.text(taxLine, centerX, fc, { align: 'center' });
+      fc += 3.5;
+    }
+    doc.text(`${t('pageLabel')} ${pageNumber}/${pageCount}`, centerX, fc, { align: 'center' });
+
+    let fr = footerY;
+    const rightX = pageWidth - rightMargin;
+    if (company.company_bank) {
+      doc.text(company.company_bank, rightX, fr, { align: 'right' });
+      fr += 3.2;
+    }
+    if (company.company_iban) {
+      doc.text(`${t('ibanLabel')}: ${company.company_iban}`, rightX, fr, { align: 'right' });
+      fr += 3.2;
+    }
+    if (company.company_bic) {
+      doc.text(`${t('bicLabel')}: ${company.company_bic}`, rightX, fr, { align: 'right' });
+    }
+  };
 
   autoTable(doc, {
     startY: y,
@@ -278,6 +333,7 @@ export const generateInvoicePDF = async (
       lineColor: [0, 0, 0],
       lineWidth: 0.2,
       textColor: [0, 0, 0],
+      overflow: 'linebreak',
     },
     headStyles: {
       font,
@@ -295,33 +351,42 @@ export const generateInvoicePDF = async (
       4: { cellWidth: 24, halign: 'right' },
       5: { cellWidth: 24, halign: 'right' },
     },
-    margin: { left: leftMargin, right: rightMargin },
+    // Keep table inside A4; continue on next pages when rows overflow
+    margin: {
+      left: leftMargin,
+      right: rightMargin,
+      top: topMargin,
+      bottom: bottomMargin,
+    },
+    rowPageBreak: 'auto',
+    showHead: 'everyPage',
   });
 
-  y = (doc as any).lastAutoTable.finalY + 5;
+  y = (doc as any).lastAutoTable.finalY + 6;
 
   doc.setFont(font, 'normal');
   doc.setFontSize(10);
   const contentWidthNotes = pageWidth - leftMargin - rightMargin;
 
-  // Closing block — same order as sample Rechnung RE0009
-  if (showReverseCharge) {
-    const rc = doc.splitTextToSize(t('reverseChargeNote'), contentWidthNotes);
-    doc.text(rc, leftMargin, y);
-    y += rc.length * 4.5 + 3;
+  // Notes block only (under table). New page if it does not fit.
+  const notesTitle = t('notes');
+  const notesBody = invoice.notes?.trim() || '—';
+  const notesLines = doc.splitTextToSize(notesBody, contentWidthNotes);
+  let notesBlockH = 6 + notesLines.length * 4.5;
+  if (invoice.signed_by) notesBlockH += 8;
+  if (invoice.signature_data_url) notesBlockH += 18;
+
+  if (y + notesBlockH > pageHeight - bottomMargin) {
+    doc.addPage();
+    y = topMargin;
   }
-  if (invoice.notes?.trim()) {
-    const notes = doc.splitTextToSize(invoice.notes.trim(), contentWidthNotes);
-    doc.text(notes, leftMargin, y);
-    y += notes.length * 4.5 + 3;
-  }
-  doc.text(t('paymentDue'), leftMargin, y);
+
+  doc.setFont(font, 'bold');
+  doc.text(notesTitle, leftMargin, y);
   y += 5;
-  const closing = doc.splitTextToSize(t('closingText'), contentWidthNotes);
-  doc.text(closing, leftMargin, y);
-  y += closing.length * 4.5 + 3;
-  doc.text(t('withRegards'), leftMargin, y);
-  y += 6;
+  doc.setFont(font, 'normal');
+  doc.text(notesLines, leftMargin, y);
+  y += notesLines.length * 4.5 + 4;
 
   if (invoice.signed_by) {
     doc.setFont(font, 'bold');
@@ -331,6 +396,10 @@ export const generateInvoicePDF = async (
   }
 
   if (invoice.signature_data_url) {
+    if (y + 18 > pageHeight - bottomMargin) {
+      doc.addPage();
+      y = topMargin;
+    }
     try {
       doc.addImage(invoice.signature_data_url, 'PNG', leftMargin, y, 40, 15);
       y += 18;
@@ -339,67 +408,11 @@ export const generateInvoicePDF = async (
     }
   }
 
-  doc.setFontSize(8.5);
-  const legal = doc.splitTextToSize(t('legalNotice'), contentWidthNotes);
-  doc.text(legal, leftMargin, y);
-  y += legal.length * 3.8 + 4;
-  doc.setFontSize(10);
-
-  // Company footer near bottom
-  const footerBlockH = 32;
-  if (y > pageHeight - footerBlockH - 10) {
-    doc.addPage();
-    y = topMargin;
-  }
-
-  const footerY = pageHeight - 28;
-  doc.setDrawColor(0);
-  doc.setLineWidth(0.3);
-  doc.line(leftMargin, footerY - 3, pageWidth - rightMargin, footerY - 3);
-
-  doc.setFontSize(7);
-  let fl = footerY;
-  doc.setFont(font, 'bold');
-  if (company.company_name) {
-    doc.text(company.company_name, leftMargin, fl);
-    fl += 3.2;
-  }
-  doc.setFont(font, 'normal');
-  if (company.company_address) {
-    doc.text(company.company_address.split('\n').join(', '), leftMargin, fl);
-    fl += 3.2;
-  }
-  if (company.company_phone) {
-    doc.text(`${t('phoneLabel')}: ${company.company_phone}`, leftMargin, fl);
-    fl += 3.2;
-  }
-  if (company.company_email) {
-    doc.text(company.company_email, leftMargin, fl);
-  }
-
-  const centerX = pageWidth / 2;
-  let fc = footerY;
-  if (company.company_tax_number) {
-    const taxLine = `${t('taxNumber')}: ${company.company_tax_number}${
-      invoice.signed_by ? ` ${invoice.signed_by}` : ''
-    }`;
-    doc.text(taxLine, centerX, fc, { align: 'center' });
-    fc += 3.5;
-  }
-  doc.text(`${t('pageLabel')} 1/1`, centerX, fc, { align: 'center' });
-
-  let fr = footerY;
-  const rightX = pageWidth - rightMargin;
-  if (company.company_bank) {
-    doc.text(company.company_bank, rightX, fr, { align: 'right' });
-    fr += 3.2;
-  }
-  if (company.company_iban) {
-    doc.text(`${t('ibanLabel')}: ${company.company_iban}`, rightX, fr, { align: 'right' });
-    fr += 3.2;
-  }
-  if (company.company_bic) {
-    doc.text(`${t('bicLabel')}: ${company.company_bic}`, rightX, fr, { align: 'right' });
+  // Footer + correct page numbers on every A4 page
+  const pageCount = doc.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    drawPageFooter(p, pageCount);
   }
 
   return doc;

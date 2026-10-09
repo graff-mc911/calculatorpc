@@ -115,7 +115,6 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
   const netTotal = tableRows.reduce((sum, item) => (item.is_section ? sum : sum + item.total), 0);
   const vatAmount = data.vat_enabled ? (netTotal * data.vat_rate) / 100 : 0;
   const grossTotal = netTotal + vatAmount;
-  const showReverseCharge = !data.vat_enabled;
 
   const periodStart = data.work_period_start || data.date;
   const periodEnd = data.work_period_end || data.work_period_start || data.date;
@@ -153,7 +152,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
         fontSize: '10pt',
         lineHeight: '1.35',
         color: '#000',
-        padding: '15mm 18mm 12mm 20mm',
+        padding: '15mm 18mm 28mm 20mm',
         position: 'relative',
         WebkitFontSmoothing: 'antialiased',
         display: 'flex',
@@ -361,7 +360,9 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 
             <tr>
               <td colSpan={5} style={{ padding: '2mm', border: cellBorder, fontWeight: 700 }}>
-                {showReverseCharge ? tInvoice('totalAmountStar') : tInvoice('grossAmount')}
+                {data.vat_enabled
+                  ? tInvoice('grossAmount')
+                  : String(tInvoice('totalAmountStar')).replace(/\*+\s*$/, '')}
               </td>
               <td
                 ref={totalRef as unknown as React.RefObject<HTMLTableCellElement>}
@@ -374,35 +375,42 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
         </table>
       </div>
 
-      {/* E. Closing block — same order as sample Rechnung RE0009 */}
-      <div style={{ fontSize: '10pt', lineHeight: 1.5, marginBottom: '6mm' }}>
-        {showReverseCharge && (
-          <p style={{ margin: '0 0 3mm 0' }}>{tInvoice('reverseChargeNote')}</p>
-        )}
+      {/* E. Notes only under the table (no canned legal / payment texts) */}
+      <div
+        className="invoice-notes-block"
+        style={{
+          fontSize: '10pt',
+          lineHeight: 1.5,
+          marginBottom: '8mm',
+          pageBreakInside: 'avoid',
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: '2mm' }}>{tInvoice('notes')}</div>
         {data.notes?.trim() ? (
-          <p style={{ margin: '0 0 3mm 0', whiteSpace: 'pre-line' }}>{data.notes.trim()}</p>
-        ) : null}
-        <p style={{ margin: '0 0 3mm 0' }}>{tInvoice('paymentDue')}</p>
-        <p style={{ margin: '0 0 3mm 0' }}>{tInvoice('closingText')}</p>
-        <p style={{ margin: '0 0 2mm 0' }}>{tInvoice('withRegards')}</p>
-        {data.signed_by && (
-          <div style={{ marginTop: '2mm', fontWeight: 600 }}>{data.signed_by}</div>
+          <div style={{ whiteSpace: 'pre-line' }}>{data.notes.trim()}</div>
+        ) : (
+          <div style={{ color: '#666' }}>—</div>
         )}
-        {data.signature_data_url && (
-          <img
-            src={data.signature_data_url}
-            alt=""
-            style={{ marginTop: '3mm', maxHeight: '18mm', maxWidth: '50mm' }}
-            crossOrigin="anonymous"
-          />
+        {(data.signature_data_url || data.signed_by) && (
+          <div style={{ marginTop: '5mm' }}>
+            {data.signed_by && (
+              <div style={{ fontWeight: 600 }}>{data.signed_by}</div>
+            )}
+            {data.signature_data_url && (
+              <img
+                src={data.signature_data_url}
+                alt=""
+                style={{ marginTop: '3mm', maxHeight: '18mm', maxWidth: '50mm' }}
+                crossOrigin="anonymous"
+              />
+            )}
+          </div>
         )}
-        <p style={{ margin: '5mm 0 0 0', fontSize: '8.5pt', lineHeight: 1.4 }}>
-          {tInvoice('legalNotice')}
-        </p>
       </div>
 
-      {/* F. 3-column footer */}
+      {/* F. 3-column footer — repeats on each printed page */}
       <div
+        className="invoice-doc-footer"
         style={{
           borderTop: '0.5pt solid #000',
           paddingTop: '2.5mm',
@@ -431,8 +439,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
               {data.signed_by ? ` ${data.signed_by}` : ''}
             </div>
           )}
-          <div style={{ marginTop: '1.5mm' }}>
-            {tInvoice('pageLabel')} 1/1
+          <div style={{ marginTop: '1.5mm' }} className="invoice-page-num">
+            {tInvoice('pageLabel')}
           </div>
         </div>
         <div style={{ flex: 1, textAlign: 'right' }}>

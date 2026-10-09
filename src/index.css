@@ -340,7 +340,12 @@ button {
   to { transform: rotate(360deg); }
 }
 
-/* Invoice print: hide app chrome / action bars; keep A4 blank only */
+/* Invoice print: standard A4; overflow continues on next pages */
+@page {
+  size: A4;
+  margin: 12mm 15mm 18mm 18mm;
+}
+
 @media print {
   body {
     background: #ffffff !important;
@@ -382,6 +387,36 @@ button {
     margin: 0 auto !important;
     transform: none !important;
     width: 210mm !important;
-    min-height: 297mm !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  #invoice-document table {
+    page-break-inside: auto;
+  }
+
+  #invoice-document thead {
+    display: table-header-group;
+  }
+
+  #invoice-document tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  #invoice-document .invoice-notes-block {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  #invoice-document .invoice-doc-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin-top: 0 !important;
+    background: #ffffff;
+    padding: 2mm 0 0;
   }
 }
