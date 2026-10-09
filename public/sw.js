@@ -1,5 +1,5 @@
 /* Alias entry — keep in sync with service-worker.js (CACHE_BUST). */
-const CACHE_BUST = 'cpc-homescreen-20261009e';
+const CACHE_BUST = 'cpc-f-20261009f';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

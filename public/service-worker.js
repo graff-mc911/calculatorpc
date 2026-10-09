@@ -1,7 +1,7 @@
 /* CPC service worker — network-first, clears stale caches on activate.
- * CACHE_BUST: 2026-10-09-cpc-homescreen
+ * CACHE_BUST: 2026-10-09-cpc-f
  */
-const CACHE_BUST = 'cpc-homescreen-20261009e';
+const CACHE_BUST = 'cpc-f-20261009f';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
