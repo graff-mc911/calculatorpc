@@ -38,7 +38,17 @@ import {
   parsePaymentNote,
 } from '../lib/paymentNote';
 import { setLastProjectId } from '../lib/lastProject';
-import { computeProjectMetrics, lineTotal } from '../lib/projectMetrics';
+import {
+  computeProjectMetrics,
+  lineTotal,
+  type ProjectInvoiceMoney,
+} from '../lib/projectMetrics';
+import { resolveInvoiceStatus } from '../lib/invoiceFromProject';
+import {
+  CpcStatusBadge,
+  invoiceStatusLabel,
+  invoiceStatusTone,
+} from '../components/cpc/CpcStatusBadge';
 import { shareProjectEstimatePdf, type ProjectPdfMode } from '../lib/projectPdf';
 import {
   addExpense,
@@ -152,6 +162,80 @@ export default function ProjectDetail() {
     },
   });
 
+  const { data: projectInvoices = [] } = useQuery({
+    queryKey: ['project-invoices', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const uid = session.session?.user?.id;
+      if (!uid) return [];
+      const { data, error: err } = await supabase
+        .from('invoices')
+        .select('id, document_no, total_gross, status, due_date, date, created_at')
+        .eq('user_id', uid)
+        .eq('project_id', id)
+        .order('created_at', { ascending: false });
+      if (err) {
+        console.warn('project invoices load failed', err);
+        return [];
+      }
+      return data || [];
+    },
+  });
+
+  const invoiceIds = projectInvoices.map((inv) => inv.id).filter(Boolean);
+  const { data: invoicePaymentRows = [] } = useQuery({
+    queryKey: ['project-invoice-payments', id, invoiceIds.join(',')],
+    enabled: !!id && invoiceIds.length > 0,
+    queryFn: async () => {
+      const { data, error: err } = await supabase
+        .from('invoice_payments')
+        .select('invoice_id, amount')
+        .in('invoice_id', invoiceIds);
+      if (err) {
+        console.warn('project invoice payments load failed', err);
+        return [];
+      }
+      return data || [];
+    },
+  });
+
+  const { data: linkableInvoices = [] } = useQuery({
+    queryKey: ['project-linkable-invoices', id, bundle?.project?.client_id],
+    enabled: !!id && !!bundle?.project && projectInvoices.length === 0,
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const uid = session.session?.user?.id;
+      if (!uid || !bundle?.project) return [];
+      let q = supabase
+        .from('invoices')
+        .select('id, document_no, total_gross, status, client_id, object_address')
+        .eq('user_id', uid)
+        .is('project_id', null)
+        .order('created_at', { ascending: false })
+        .limit(8);
+      if (bundle.project.client_id) {
+        q = q.eq('client_id', bundle.project.client_id);
+      }
+      const { data, error: err } = await q;
+      if (err) {
+        console.warn('linkable invoices load failed', err);
+        return [];
+      }
+      const rows = data || [];
+      if (bundle.project.client_id) return rows;
+      const addr = String(bundle.project.address || '')
+        .trim()
+        .toLowerCase();
+      if (!addr) return [];
+      return rows.filter((inv) =>
+        String(inv.object_address || '')
+          .toLowerCase()
+          .includes(addr.slice(0, 12))
+      );
+    },
+  });
+
   const schemaMissing = isError && error instanceof ProjectsSchemaMissingError;
 
   useEffect(() => {
@@ -165,15 +249,30 @@ export default function ProjectDetail() {
     if (id) setLastProjectId(id);
   }, [id]);
 
+  const invoiceMoney: ProjectInvoiceMoney[] = useMemo(() => {
+    const paidByInvoice: Record<string, number> = {};
+    for (const row of invoicePaymentRows) {
+      const invId = String(row.invoice_id || '');
+      if (!invId) continue;
+      paidByInvoice[invId] = (paidByInvoice[invId] || 0) + (Number(row.amount) || 0);
+    }
+    return projectInvoices.map((inv) => ({
+      total_gross: inv.total_gross,
+      status: inv.status,
+      paid_amount: paidByInvoice[inv.id] ?? 0,
+    }));
+  }, [projectInvoices, invoicePaymentRows]);
+
   const metrics = useMemo(() => {
-    if (!bundle?.project) return computeProjectMetrics([], [], [], 0);
+    if (!bundle?.project) return computeProjectMetrics([], [], [], 0, invoiceMoney);
     return computeProjectMetrics(
       Array.isArray(bundle.workItems) ? bundle.workItems : [],
       Array.isArray(bundle.expenses) ? bundle.expenses : [],
       Array.isArray(bundle.prepayments) ? bundle.prepayments : [],
-      Number(bundle.project.expense_budget) || 0
+      Number(bundle.project.expense_budget) || 0,
+      invoiceMoney
     );
-  }, [bundle]);
+  }, [bundle, invoiceMoney]);
 
   const templatesByCat = useMemo(() => {
     const map: Record<string, typeof CATALOG_WORKS> = {};
@@ -192,7 +291,28 @@ export default function ProjectDetail() {
     qc.invalidateQueries({ queryKey: ['projects'] });
     qc.invalidateQueries({ queryKey: ['projects-work-summary'] });
     qc.invalidateQueries({ queryKey: ['projects-money-summary'] });
+    qc.invalidateQueries({ queryKey: ['projects-invoice-summary'] });
+    qc.invalidateQueries({ queryKey: ['project-invoices', id] });
+    qc.invalidateQueries({ queryKey: ['project-invoice-payments'] });
+    qc.invalidateQueries({ queryKey: ['project-linkable-invoices', id] });
   };
+
+  const linkInvoiceMut = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const { error: err } = await supabase
+        .from('invoices')
+        .update({ project_id: id })
+        .eq('id', invoiceId);
+      if (err) throw err;
+    },
+    onSuccess: () => {
+      showSuccess('Рахунок прив’язано до об’єкта');
+      invalidate();
+    },
+    onError: (err: any) => {
+      showError(err?.message || 'Не вдалося прив’язати рахунок');
+    },
+  });
 
   const onSchemaErr = (err: unknown) => {
     if (err instanceof ProjectsSchemaMissingError) {
@@ -577,10 +697,7 @@ export default function ProjectDetail() {
   const expenses = Array.isArray(bundle.expenses) ? bundle.expenses : [];
   const prepayments = Array.isArray(bundle.prepayments) ? bundle.prepayments : [];
   const currency = project.currency || 'EUR';
-  const objectPrice =
-    metrics.estimateTotal > 0
-      ? metrics.estimateTotal
-      : Number(project.expense_budget) || 0;
+  const objectPrice = metrics.estimateTotal;
   const clientLabel = project.client_name || t('noClient') || 'Без клієнта';
   const recentExpenses = [...expenses].sort((a, b) =>
     String(b.expense_date || b.created_at).localeCompare(String(a.expense_date || a.created_at))
@@ -1031,9 +1148,44 @@ export default function ProjectDetail() {
 
       {/* РАХУНОК */}
       <section className="mb-2 lg:max-w-md">
-        <h2 className="text-[13px] font-medium mb-2 px-0.5" style={{ color: 'var(--cpc-text)' }}>
-          Рахунок
-        </h2>
+        <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
+          <h2 className="text-[13px] font-medium" style={{ color: 'var(--cpc-text)' }}>
+            Рахунок
+            {projectInvoices.length > 0 ? ` (${projectInvoices.length})` : ''}
+          </h2>
+        </div>
+
+        {projectInvoices.length > 0 && (
+          <div className="cpc-card mb-2 space-y-2">
+            {projectInvoices.map((inv, idx) => {
+              const status = resolveInvoiceStatus(inv.status, inv.due_date);
+              const paidAmt = Number(invoiceMoney[idx]?.paid_amount) || 0;
+              const gross = Number(inv.total_gross) || 0;
+              return (
+                <button
+                  key={inv.id}
+                  type="button"
+                  onClick={() => navigate(`/invoices/${inv.id}`)}
+                  className="w-full text-left flex items-center justify-between gap-3 min-h-[48px] bg-transparent border-0 px-0"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
+                      {inv.document_no || 'Invoice'}
+                    </p>
+                    <p className="cpc-muted text-[11px] tabular-nums">
+                      {formatCompact(gross, currency)}
+                      {paidAmt > 0 ? ` · оплачено ${formatCompact(paidAmt, currency)}` : ''}
+                    </p>
+                  </div>
+                  <CpcStatusBadge tone={invoiceStatusTone(status)}>
+                    {invoiceStatusLabel(status)}
+                  </CpcStatusBadge>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={createInvoice}
@@ -1041,10 +1193,56 @@ export default function ProjectDetail() {
           disabled={workItems.length === 0}
         >
           <FileText size={18} />
-          Створити рахунок
+          {projectInvoices.length > 0 ? 'Ще рахунок' : 'Створити рахунок'}
         </button>
-        {workItems.length === 0 && (
-          <p className="cpc-muted text-[11px] text-center mt-2">Додайте роботи, щоб виставити рахунок</p>
+        {projectInvoices.length === 0 && linkableInvoices.length > 0 && (
+          <div className="cpc-card mb-2 space-y-2">
+            <p className="cpc-muted text-[11px]">Знайдені рахунки клієнта — прив’яжіть до об’єкта:</p>
+            {linkableInvoices.map((inv) => (
+              <div
+                key={inv.id}
+                className="flex items-center justify-between gap-2 min-h-[44px]"
+              >
+                <button
+                  type="button"
+                  onClick={() => navigate(`/invoices/${inv.id}`)}
+                  className="min-w-0 text-left bg-transparent border-0 p-0"
+                >
+                  <p className="text-[13px] font-medium truncate" style={{ color: 'var(--cpc-text)' }}>
+                    {inv.document_no || 'Invoice'}
+                  </p>
+                  <p className="cpc-muted text-[11px] tabular-nums">
+                    {formatCompact(Number(inv.total_gross) || 0, currency)}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  disabled={linkInvoiceMut.isPending}
+                  onClick={() => linkInvoiceMut.mutate(inv.id)}
+                  className="min-h-[36px] px-2.5 text-[12px] font-medium shrink-0"
+                  style={{
+                    background: 'var(--cpc-copper)',
+                    color: 'var(--cpc-on-copper)',
+                    border: 'none',
+                    borderRadius: 9,
+                  }}
+                >
+                  Прив’язати
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {workItems.length === 0 && projectInvoices.length === 0 && linkableInvoices.length === 0 && (
+          <p className="cpc-muted text-[11px] text-center mt-2">
+            Додайте роботи або відкрийте інвойс і прив’яжіть цей об’єкт
+          </p>
+        )}
+        {workItems.length === 0 && projectInvoices.length > 0 && (
+          <p className="cpc-muted text-[11px] text-center mt-2">
+            Суми взято з рахунку. Додайте роботи, щоб створити новий.
+          </p>
         )}
       </section>
 

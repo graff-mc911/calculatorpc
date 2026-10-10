@@ -147,6 +147,59 @@ export default function Projects() {
     },
   });
 
+  const { data: invoicesByProject = {} } = useQuery({
+    queryKey: ['projects-invoice-summary', session?.user?.id, projects.map((p) => p.id).join(',')],
+    enabled: !!session?.user?.id && projects.length > 0,
+    queryFn: async () => {
+      const ids = projects.map((p) => p.id);
+      const { data: invoices, error: invErr } = await supabase
+        .from('invoices')
+        .select('id, project_id, total_gross, status')
+        .eq('user_id', session!.user!.id)
+        .in('project_id', ids);
+      if (invErr) {
+        console.warn('projects invoice summary failed', invErr);
+        return {} as Record<
+          string,
+          Array<{ total_gross: number; status: string | null; paid_amount: number }>
+        >;
+      }
+      const list = invoices || [];
+      const invoiceIds = list.map((i) => i.id);
+      const paidByInvoice: Record<string, number> = {};
+      if (invoiceIds.length > 0) {
+        const { data: pays, error: payErr } = await supabase
+          .from('invoice_payments')
+          .select('invoice_id, amount')
+          .in('invoice_id', invoiceIds);
+        if (payErr) {
+          console.warn('projects invoice payments summary failed', payErr);
+        } else {
+          for (const row of pays || []) {
+            const invId = String(row.invoice_id || '');
+            if (!invId) continue;
+            paidByInvoice[invId] = (paidByInvoice[invId] || 0) + (Number(row.amount) || 0);
+          }
+        }
+      }
+      const map: Record<
+        string,
+        Array<{ total_gross: number; status: string | null; paid_amount: number }>
+      > = {};
+      for (const inv of list) {
+        const pid = inv.project_id as string;
+        if (!pid) continue;
+        if (!map[pid]) map[pid] = [];
+        map[pid].push({
+          total_gross: Number(inv.total_gross) || 0,
+          status: inv.status ?? null,
+          paid_amount: paidByInvoice[inv.id] || 0,
+        });
+      }
+      return map;
+    },
+  });
+
   const resetForm = () => {
     setName('');
     setClientId('');
@@ -213,7 +266,8 @@ export default function Projects() {
         workByProject[p.id] || [],
         moneyByProject[p.id]?.expenses || [],
         moneyByProject[p.id]?.prepayments || [],
-        Number(p.expense_budget) || 0
+        Number(p.expense_budget) || 0,
+        invoicesByProject[p.id] || []
       );
       const progressPct =
         metrics.estimateTotal > 0
@@ -221,7 +275,7 @@ export default function Projects() {
           : 0;
       return { project: p, metrics, progressPct };
     });
-  }, [projects, workByProject, moneyByProject]);
+  }, [projects, workByProject, moneyByProject, invoicesByProject]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
