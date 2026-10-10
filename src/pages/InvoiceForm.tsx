@@ -316,11 +316,23 @@ export const InvoiceForm: React.FC = () => {
       );
     }
 
-    setImportBanner(
+    const reviewCount = draft.items.filter((i) => i.needsReview).length;
+    const warnParts = [
       draft.sourceFileName
         ? `${t('importInvoice') || 'Import'}: ${draft.sourceFileName} (${draft.items.length})`
         : `${t('importInvoice') || 'Import'}: ${draft.items.length}`,
-    );
+    ];
+    if (draft.importedSheet) warnParts.push(`аркуш «${draft.importedSheet}»`);
+    if (draft.skippedSheets?.length) {
+      warnParts.push(`пропущено: ${draft.skippedSheets.join(', ')}`);
+    }
+    if (reviewCount > 0) {
+      warnParts.push(`${reviewCount} позицій потребують перевірки`);
+    }
+    if (draft.warnings?.length) {
+      warnParts.push(draft.warnings.slice(0, 3).join(' · '));
+    }
+    setImportBanner(warnParts.join(' · '));
     showSuccess(
       t('invoiceImportReady') ||
         `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,

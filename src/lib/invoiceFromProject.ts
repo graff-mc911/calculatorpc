@@ -12,6 +12,15 @@ export type PrefillInvoiceItem = {
   materialDisplay: string;
   description: string;
   total: number;
+  /** Original description text from the source document (unchanged). */
+  originalDescription?: string;
+  /** Raw quantity / price cells before locale normalization. */
+  originalQuantityRaw?: string;
+  originalPriceRaw?: string;
+  originalUnitRaw?: string;
+  /** Line needs user review (ambiguous number, unknown unit, missing qty…). */
+  needsReview?: boolean;
+  reviewWarnings?: string[];
 };
 
 export function mapProjectUnitToInvoice(unit: string): string {

@@ -64,7 +64,12 @@ export function normalizeInvoiceUnit(
     s === 'caja' ||
     s === 'rollo' ||
     s === 'bote' ||
-    s === 'cartucho'
+    s === 'cartucho' ||
+    s === 'kg' ||
+    s === 'kilo' ||
+    s === 'kilos' ||
+    s === 'kilogramo' ||
+    s === 'kilogramos'
   ) {
     return 'pcs';
   }

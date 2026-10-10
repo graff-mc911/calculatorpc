@@ -1,3 +1,7 @@
+import { fromCents, parseLocaleNumber, roundMoney, toCents } from './localeNumber';
+
+export { roundMoney, toCents, fromCents };
+
 /** Parse material cost from a line-item material field (numeric text or number). */
 export function parseMaterialAmount(material: string | number | null | undefined): number {
   if (typeof material === 'number') {
@@ -6,20 +10,10 @@ export function parseMaterialAmount(material: string | number | null | undefined
 
   if (material == null) return 0;
 
-  const normalized = String(material)
-    .trim()
-    .replace(/\s/g, '')
-    .replace(',', '.');
-
-  if (!normalized || !/^-?\d+(\.\d+)?$/.test(normalized)) {
-    return 0;
-  }
-
-  const value = Number(normalized);
-  return Number.isFinite(value) ? value : 0;
+  return parseLocaleNumber(material).value;
 }
 
-/** Line total = quantity × price + material cost (form / storage). */
+/** Line total = quantity × price + material cost (form / storage), rounded to cents. */
 export function calculateLineTotal(
   quantity: number | string | null | undefined,
   price: number | string | null | undefined,
@@ -27,7 +21,9 @@ export function calculateLineTotal(
 ): number {
   const qty = Number(quantity) || 0;
   const unitPrice = Number(price) || 0;
-  return qty * unitPrice + parseMaterialAmount(material);
+  const mat = parseMaterialAmount(material);
+  // Exact cents: avoids 9.95*27 → 268.649999…
+  return fromCents(toCents(qty * unitPrice) + toCents(mat));
 }
 
 export function calculateItemsNetTotal(
@@ -104,7 +100,7 @@ export function expandItemsForInvoiceTable(
     const qty = Number(item.quantity) || 0;
     const unitPrice = Number(item.price) || 0;
     const materialAmount = parseMaterialAmount(item.material);
-    const laborTotal = qty * unitPrice;
+    const laborTotal = calculateLineTotal(qty, unitPrice, 0);
 
     // Lexware order: Material position first, then Arbeit
     if (materialAmount !== 0) {
