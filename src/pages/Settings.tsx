@@ -5,6 +5,7 @@ import {
   Download,
   LogOut,
   Moon,
+  Shield,
   Sun,
   Trash2,
   Upload,
@@ -24,6 +25,7 @@ import {
   exportToJSON,
 } from '../lib/exportData';
 import { languages } from '../lib/languages';
+import { checkIsAppOwner } from '../lib/ownerAccess';
 import { supabase } from '../lib/supabase';
 
 type ProfileForm = {
@@ -149,6 +151,14 @@ export default function Settings() {
       const { data } = await supabase.auth.getSession();
       return data.session;
     },
+  });
+
+  const { data: isOwner } = useQuery({
+    queryKey: ['is-app-owner', session?.user?.id],
+    enabled: !!session?.user?.id,
+    queryFn: () => checkIsAppOwner(session!.user.id),
+    staleTime: 60_000,
+    retry: false,
   });
 
   const { data: profileRow, isLoading: profileLoading } = useQuery({
@@ -677,6 +687,23 @@ export default function Settings() {
           Зберегти додаток
         </button>
       </Section>
+
+      {isOwner && (
+        <Section title="Owner · Власник">
+          <button
+            type="button"
+            onClick={() => navigate('/owner')}
+            className="w-full min-h-[48px] flex items-center justify-between px-1 text-left bg-transparent border-0"
+            style={{ color: 'var(--cpc-text)' }}
+          >
+            <span className="inline-flex items-center gap-2 text-[14px]">
+              <Shield size={16} className="cpc-copper" />
+              Кабінет власника
+            </span>
+            <span className="cpc-muted text-[12px]">›</span>
+          </button>
+        </Section>
+      )}
 
       {/* DATA */}
       <Section title="Data · Дані">
