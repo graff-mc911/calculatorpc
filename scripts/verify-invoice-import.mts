@@ -194,7 +194,7 @@ const enDraft = await importInvoiceFromFile(
 assert(enDraft.items[0].unit === 'm²' && enDraft.items[0].total === 250, 'EN painting');
 assert(enDraft.items[1].unit === 'h', 'EN hours');
 
-// —— 10–13 Presupuesto (both sheets: labor 21 + materials 27 = 48 / €4900) ——
+// —— 10–13 Presupuesto: invoice = Mano de obra only (€3500), not +Materiales (€4900) ——
 const xlsxCandidates = [
   '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_5bc4.xlsx',
   '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_dafd.xlsx',
@@ -206,26 +206,25 @@ if (xlsxPath) {
     new File([buf], 'Presupuesto_09_10_2026.xlsx'),
   );
   const sum = draft.items.reduce((s, i) => s + i.total, 0);
-  assert(draft.items.length === 48, `10 48 lines (21+27) got ${draft.items.length}`);
-  assert(Math.abs(sum - 4900) < 0.05, `10 sum 4900 got ${sum}`);
+  assert(draft.items.length === 21, `10 21 labor lines got ${draft.items.length}`);
+  assert(Math.abs(sum - 3500) < 0.05, `10 sum 3500 got ${sum}`);
   assert(
-    /Mano de obra/i.test(draft.importedSheet || '') &&
-      /Materiales/i.test(draft.importedSheet || ''),
-    '10 both sheets imported',
+    /Mano de obra/i.test(draft.importedSheet || ''),
+    '10 imported Mano de obra',
   );
-  assert(!draft.skippedSheets?.length, '10 no skipped sheets');
-
-  const laborSum = draft.items
-    .slice(0, 21)
-    .reduce((s, i) => s + i.total, 0);
-  const matSum = draft.items.slice(21).reduce((s, i) => s + i.total, 0);
-  assert(Math.abs(laborSum - 3500) < 0.05, `10 labor 3500 got ${laborSum}`);
-  assert(Math.abs(matSum - 1400) < 0.05, `10 materials 1400 got ${matSum}`);
+  assert(
+    draft.skippedSheets?.some((s) => /Materiales/i.test(s)) === true,
+    '10 Materiales deferred (not in invoice total)',
+  );
+  assert(
+    (draft.warnings || []).some((w) => /Materiales/i.test(w)),
+    '10 warning about skipped materials sheet',
+  );
 
   const draft2 = await importInvoiceFromFile(
     new File([buf], 'Presupuesto_09_10_2026.xlsx'),
   );
-  assert(draft2.items.length === 48, '11 re-import no dup');
+  assert(draft2.items.length === 21, '11 re-import no dup');
 
   assert(
     draft.items.every((i) => !!i.originalDescription),
@@ -236,8 +235,8 @@ if (xlsxPath) {
     '12 Spanish labor names',
   );
   assert(
-    draft.items.some((i) => /Ladrillo hueco para fábrica/i.test(i.description)),
-    '12 Spanish material names',
+    !draft.items.some((i) => /Ladrillo hueco para fábrica/i.test(i.description)),
+    '12 materials not mixed into labor invoice',
   );
 
   const door = draft.items.find((i) =>
@@ -245,9 +244,6 @@ if (xlsxPath) {
   );
   const demo = draft.items.find((i) =>
     /Demolici[oó]n de tabique con hueco/i.test(i.description),
-  );
-  const cementBags = draft.items.find((i) =>
-    /Mortero para fábrica/i.test(i.description),
   );
   assert(
     !!door && door.unit === 'pcs' && Math.abs(door.quantity - 1) < 0.001,
@@ -257,15 +253,7 @@ if (xlsxPath) {
     !!demo && demo.unit === 'm²' && Math.abs(demo.quantity - 9.95) < 0.001,
     'demo 9.95 m²',
   );
-  assert(
-    !!cementBags &&
-      cementBags.unit === 'pcs' &&
-      Math.abs(cementBags.quantity - 4) < 0.001 &&
-      Math.abs(cementBags.total - 66) < 0.02,
-    'material saco→pcs qty 4 total 66',
-  );
 
-  // No Lexware ghost material companions (every line has its own description)
   assert(
     !draft.items.some((i) => i.description === 'Матеріал' || /^Material$/i.test(i.description)),
     'no ghost Material rows',
@@ -280,8 +268,8 @@ if (xlsxPath) {
   const snapshot = draft.items.map((i) => ({ ...i }));
   await importInvoiceFromFile(new File([buf], 'Presupuesto_09_10_2026.xlsx'));
   assert(
-    snapshot.length === 48 &&
-      Math.abs(snapshot.reduce((s, i) => s + i.total, 0) - 4900) < 0.05,
+    snapshot.length === 21 &&
+      Math.abs(snapshot.reduce((s, i) => s + i.total, 0) - 3500) < 0.05,
     '13 prior import snapshot unchanged',
   );
 } else {

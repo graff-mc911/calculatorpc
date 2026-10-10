@@ -860,6 +860,7 @@ type ParsedSheetResult = {
   warnings: string[];
   titleCell?: string;
   spanishHeaders: boolean;
+  sheetKind: 'labor' | 'materials' | 'unknown';
 };
 
 /**
@@ -941,7 +942,34 @@ function parseSheetTable(
     warnings,
     titleCell,
     spanishHeaders,
+    sheetKind,
   };
+}
+
+/**
+ * Presupuesto often has labor + materials sheets.
+ * Invoice import uses labor (Mano de obra / Total 3500 €) — not labor+materials (4900 €).
+ */
+function selectSheetsForInvoice(parsedSheets: ParsedSheetResult[]): {
+  selected: ParsedSheetResult[];
+  deferred: ParsedSheetResult[];
+} {
+  const labor = parsedSheets.filter((s) => s.sheetKind === 'labor');
+  if (labor.length > 0) {
+    return {
+      selected: labor,
+      deferred: parsedSheets.filter((s) => s.sheetKind !== 'labor'),
+    };
+  }
+  const nonMaterials = parsedSheets.filter((s) => s.sheetKind !== 'materials');
+  if (nonMaterials.length > 0) {
+    return {
+      selected: [nonMaterials[0]],
+      deferred: parsedSheets.filter((s) => s !== nonMaterials[0]),
+    };
+  }
+  // Workbook is materials-only
+  return { selected: parsedSheets, deferred: [] };
 }
 
 async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
@@ -950,7 +978,7 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
   const isCsv = nameLower.endsWith('.csv') || file.type === 'text/csv';
 
   const parsedSheets: ParsedSheetResult[] = [];
-  const skippedSheets: string[] = [];
+  const unreadableSheets: string[] = [];
   let metaRows: unknown[][] = [];
 
   if (isCsv) {
@@ -982,7 +1010,7 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
       if (one) {
         parsedSheets.push(one);
       } else {
-        skippedSheets.push(name);
+        unreadableSheets.push(name);
       }
     }
   }
@@ -993,13 +1021,19 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
     );
   }
 
+  const { selected, deferred } = selectSheetsForInvoice(parsedSheets);
+  const skippedSheets = [
+    ...deferred.map((s) => s.sheetName),
+    ...unreadableSheets,
+  ];
+
   const meta = guessMetaFromSheet(metaRows);
   const warnings: string[] = [];
   const items: PrefillInvoiceItem[] = [];
   let combinedFileTotal = 0;
   let hasFileTotal = false;
 
-  for (const sheet of parsedSheets) {
+  for (const sheet of selected) {
     warnings.push(...sheet.warnings);
     items.push(...sheet.items);
     if (sheet.fileTotal != null) {
@@ -1008,17 +1042,24 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
     }
   }
 
-  const sum = items.reduce((s, it) => s + (Number(it.total) || 0), 0);
-  if (hasFileTotal && Math.abs(sum - combinedFileTotal) > 0.05) {
+  for (const sheet of deferred) {
+    const sheetSum = sheet.items.reduce((s, it) => s + (Number(it.total) || 0), 0);
     warnings.push(
-      `Загальна сума позицій ${sum.toFixed(2)} ≠ сума підсумків аркушів ${combinedFileTotal.toFixed(2)}`,
+      `Аркуш «${sheet.sheetName}» (${sheet.items.length} поз., ~${sheetSum.toFixed(0)} €) не додано до інвойсу — лише роботи / mano de obra`,
     );
   }
 
-  const titles = parsedSheets.map((s) => s.titleCell || s.sheetName);
+  const sum = items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+  if (hasFileTotal && Math.abs(sum - combinedFileTotal) > 0.05) {
+    warnings.push(
+      `Сума позицій ${sum.toFixed(2)} ≠ підсумок аркуша ${combinedFileTotal.toFixed(2)}`,
+    );
+  }
+
+  const titles = selected.map((s) => s.titleCell || s.sheetName);
   const document_type = detectDocumentType(file.name, titles);
   const invoice_language = detectInvoiceLanguage(file.name, titles);
-  const importedSheet = parsedSheets.map((s) => s.sheetName).join(' + ');
+  const importedSheet = selected.map((s) => s.sheetName).join(' + ');
 
   return {
     ...meta,
@@ -1034,9 +1075,6 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
     notes:
       meta.notes ||
       `Imported from ${file.name}` +
-        (parsedSheets.length > 1
-          ? ` (аркуші: ${importedSheet})`
-          : '') +
         (document_type === 'estimate' ? ' (estimate / presupuesto)' : ''),
   };
 }
