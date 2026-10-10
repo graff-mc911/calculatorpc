@@ -843,7 +843,7 @@ export const Invoices: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, language } = useLanguage();
-  const { showSuccess, showError } = useToastContext();
+  const { showSuccess, showError, showWarning } = useToastContext();
   const queryClient = useQueryClient();
 
   // Стани UI
@@ -971,10 +971,16 @@ export const Invoices: React.FC = () => {
         setImportBusy(true);
         const draft = await importInvoiceFromFile(file);
         storeInvoiceImportDraft(draft);
-        showSuccess(
-          t('invoiceImportReady') ||
-            `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
-        );
+        const sum = draft.items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+        const sheetLabel = draft.importedSheet || file.name;
+        let msg = `Імпортовано ${draft.items.length} позицій з аркуша «${sheetLabel}», разом ${sum.toFixed(2)} €.`;
+        if (draft.skippedSheets?.length) {
+          msg += ` Пропущено аркуші: ${draft.skippedSheets.join(', ')}.`;
+        }
+        showSuccess(msg);
+        if (draft.warnings?.length) {
+          showWarning(draft.warnings.join(' '));
+        }
         navigate('/invoices/new?from_import=1');
       } catch (err: any) {
         console.error('Invoice import failed', err);
@@ -987,7 +993,7 @@ export const Invoices: React.FC = () => {
         setImportBusy(false);
       }
     },
-    [navigate, showError, showSuccess, t],
+    [navigate, showError, showSuccess, showWarning, t],
   );
 
   const startNewInvoice = useCallback(
