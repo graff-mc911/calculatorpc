@@ -18,6 +18,11 @@ import {
   type ImportedInvoiceDraft,
 } from '../lib/invoiceImportFromFile';
 import {
+  canPersistImportedItems,
+  unresolvedCriticalIndexes,
+  validateImportedDraft,
+} from '../lib/invoiceImportValidate';
+import {
   fetchProjectBundle,
   listProjects,
   ProjectsSchemaMissingError,
@@ -44,6 +49,15 @@ interface InvoiceItem {
   materialDisplay: string;
   description: string;
   total: number;
+  originalDescription?: string;
+  originalQuantityRaw?: string;
+  originalPriceRaw?: string;
+  originalUnitRaw?: string;
+  needsReview?: boolean;
+  reviewWarnings?: string[];
+  critical?: boolean;
+  reviewConfirmed?: boolean;
+  unitKnown?: boolean;
 }
 
 const emptyItem = (): InvoiceItem => ({
@@ -115,7 +129,7 @@ export const InvoiceForm: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { t, language } = useLanguage();
-  const { showSuccess, showError } = useToastContext();
+  const { showSuccess, showError, showWarning } = useToastContext();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -293,8 +307,9 @@ export const InvoiceForm: React.FC = () => {
       work_period_end: draft.date || prev.work_period_end,
       document_number: draft.document_number || prev.document_number,
       currency: asCpcCurrency(draft.currency || 'EUR', 'EUR'),
-      document_type: 'invoice',
-      invoice_language: language || draft.invoice_language || 'en',
+      document_type: draft.document_type || 'invoice',
+      invoice_language:
+        draft.invoice_language || language || prev.invoice_language || 'en',
       object_address: draft.object_address || prev.object_address,
       notes: draft.notes || prev.notes,
     }));
@@ -311,19 +326,52 @@ export const InvoiceForm: React.FC = () => {
           materialDisplay: item.materialDisplay || '',
           description: item.description,
           total: item.total,
+          originalDescription: item.originalDescription,
+          originalQuantityRaw: item.originalQuantityRaw,
+          originalPriceRaw: item.originalPriceRaw,
+          originalUnitRaw: item.originalUnitRaw,
+          needsReview: item.needsReview,
+          reviewWarnings: item.reviewWarnings,
+          critical: item.critical,
+          reviewConfirmed: item.reviewConfirmed,
+          unitKnown: item.unitKnown,
         })),
       );
     }
 
-    setImportBanner(
+    const validation = validateImportedDraft(draft);
+    const reviewCount = validation.reviewItemIndexes.length;
+    const criticalCount = validation.criticalItemIndexes.length;
+    const warnParts = [
       draft.sourceFileName
         ? `${t('importInvoice') || 'Import'}: ${draft.sourceFileName} (${draft.items.length})`
         : `${t('importInvoice') || 'Import'}: ${draft.items.length}`,
-    );
+    ];
+    if (draft.extractionMethod === 'ocr') warnParts.push('OCR');
+    if (draft.importedSheet) warnParts.push(`аркуш «${draft.importedSheet}»`);
+    if (draft.skippedSheets?.length) {
+      warnParts.push(`пропущено: ${draft.skippedSheets.join(', ')}`);
+    }
+    if (reviewCount > 0) {
+      warnParts.push(`${reviewCount} позицій потребують перевірки`);
+    }
+    if (draft.warnings?.length) {
+      warnParts.push(draft.warnings.slice(0, 3).join(' · '));
+    }
+    setImportBanner(warnParts.join(' · '));
     showSuccess(
       t('invoiceImportReady') ||
         `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
     );
+    if (criticalCount > 0) {
+      showWarning(
+        `${criticalCount} критичних позицій блокують збереження — виправте або підтвердіть перевірку.`,
+      );
+    } else if (reviewCount > 0) {
+      showWarning(
+        `${reviewCount} позицій позначено для перевірки (жовті рядки).`,
+      );
+    }
   };
 
   const fetchCompanyProfile = async () => {
@@ -504,10 +552,47 @@ export const InvoiceForm: React.FC = () => {
     total: calculateLineTotal(item.quantity, item.price, item.material),
   });
 
+  /** User edited a reviewed field — clear import review flag for that row. */
+  const clearReview = (item: InvoiceItem): InvoiceItem => ({
+    ...item,
+    needsReview: false,
+    critical: false,
+    reviewConfirmed: true,
+    reviewWarnings: undefined,
+    unitKnown: true,
+  });
+
+  /** Explicitly confirm remaining review rows after visual check (no silent auto-fix). */
+  const confirmAllReviews = () => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.needsReview || item.critical
+          ? {
+              ...item,
+              reviewConfirmed: true,
+              needsReview: false,
+              critical: false,
+            }
+          : item,
+      ),
+    );
+    showSuccess('Перевірку підтверджено — можна зберігати інвойс');
+    setImportBanner(null);
+  };
+
   const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
     setItems((prev) => {
       const next = [...prev];
-      const updated = { ...next[index], [field]: value };
+      let updated = { ...next[index], [field]: value };
+      if (
+        field === 'description' ||
+        field === 'unit' ||
+        field === 'quantity' ||
+        field === 'price' ||
+        field === 'material'
+      ) {
+        updated = clearReview(updated);
+      }
 
       if (field === 'quantity' || field === 'price' || field === 'material') {
         next[index] = recomputeItem(updated);
@@ -571,7 +656,7 @@ export const InvoiceForm: React.FC = () => {
     setItems((prev) => {
       const next = [...prev];
       const evaluated = evalFieldExpression(value);
-      const base = { ...next[index], quantityDisplay: value };
+      const base = clearReview({ ...next[index], quantityDisplay: value });
       next[index] = recomputeItem({
         ...base,
         quantity: evaluated != null ? evaluated : next[index].quantity,
@@ -588,7 +673,7 @@ export const InvoiceForm: React.FC = () => {
     setItems((prev) => {
       const next = [...prev];
       const evaluated = evalFieldExpression(value);
-      const base = { ...next[index], priceDisplay: value };
+      const base = clearReview({ ...next[index], priceDisplay: value });
       next[index] = recomputeItem({
         ...base,
         price: evaluated != null ? evaluated : next[index].price,
@@ -670,6 +755,19 @@ export const InvoiceForm: React.FC = () => {
   };
 
   const persistInvoice = async (status: string): Promise<string> => {
+    const criticalIdx = unresolvedCriticalIndexes(items);
+    if (criticalIdx.length > 0 || !canPersistImportedItems(items)) {
+      throw new Error(
+        `Неможливо зберегти: ${criticalIdx.length || 'є'} критичних позицій без перевірки (рядки ${criticalIdx.map((i) => i + 1).join(', ')}). Виправте значення або натисніть «Підтвердив перевірку».`,
+      );
+    }
+    const softReview = items.filter((i) => i.needsReview && !i.reviewConfirmed).length;
+    if (softReview > 0) {
+      showWarning(
+        `${softReview} некритичних попереджень — збереження дозволено, перевірте суми.`,
+      );
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -700,7 +798,8 @@ export const InvoiceForm: React.FC = () => {
       currency: formData.currency,
       status,
       document_type: formData.document_type,
-      invoice_language: language || formData.invoice_language || 'en',
+      // Prefer document language from import/form over UI language (ES presupuesto → ES PDF)
+      invoice_language: formData.invoice_language || language || 'en',
       project_id: formData.project_id || null,
       object_address:
         formData.object_address ||
@@ -868,14 +967,23 @@ export const InvoiceForm: React.FC = () => {
         </div>
         {importBanner && (
           <div
-            className="mt-3 px-3 py-2 rounded-xl text-sm"
+            className="mt-3 px-3 py-2 rounded-xl text-sm space-y-2"
             style={{
               background: 'rgba(196, 140, 90, 0.15)',
               border: '1px solid var(--cpc-copper)',
               color: 'var(--cpc-copper)',
             }}
           >
-            {importBanner}
+            <p>{importBanner}</p>
+            {items.some((i) => i.critical && !i.reviewConfirmed) ? (
+              <button
+                type="button"
+                onClick={confirmAllReviews}
+                className="text-xs underline underline-offset-2 hover:opacity-80"
+              >
+                Підтвердив перевірку критичних позицій
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -1028,7 +1136,23 @@ export const InvoiceForm: React.FC = () => {
 
           <div className="space-y-3">
             {items.map((item, index) => (
-              <div key={index} className="bg-white/5 border border-white/10 rounded-xl p-3 md:p-4">
+              <div
+                key={index}
+                className="bg-white/5 rounded-xl p-3 md:p-4"
+                style={
+                  item.needsReview
+                    ? {
+                        border: '1px solid rgba(234, 179, 8, 0.65)',
+                        boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.15)',
+                      }
+                    : { border: '1px solid rgba(255,255,255,0.1)' }
+                }
+              >
+                {item.needsReview && item.reviewWarnings?.length ? (
+                  <p className="text-xs mb-2" style={{ color: '#eab308' }}>
+                    {item.reviewWarnings.join(' · ')}
+                  </p>
+                ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_5rem_6rem_7rem_7rem_2.5rem] gap-2 items-end">
                   <div>
                     <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
@@ -1039,6 +1163,12 @@ export const InvoiceForm: React.FC = () => {
                       onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                       placeholder={t('lineTitle') || t('description')}
                     />
+                    {item.originalDescription &&
+                    item.originalDescription !== item.description ? (
+                      <p className="text-[11px] text-white/35 mt-1 truncate">
+                        orig: {item.originalDescription}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>
@@ -1059,10 +1189,33 @@ export const InvoiceForm: React.FC = () => {
                       {t('unitShort')}
                     </label>
                     <Select
-                      options={unitSelectOptions(t)}
+                      options={(() => {
+                        const base = unitSelectOptions(t);
+                        if (
+                          item.unit &&
+                          !base.some((o) => o.value === item.unit)
+                        ) {
+                          return [
+                            {
+                              value: item.unit,
+                              label: `${item.unit} (з файлу)`,
+                            },
+                            ...base,
+                          ];
+                        }
+                        return base;
+                      })()}
                       value={item.unit}
                       onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
                     />
+                    {item.originalUnitRaw ? (
+                      <p className="text-[11px] text-white/35 mt-1 truncate">
+                        файл: {item.originalUnitRaw}
+                        {item.originalQuantityRaw
+                          ? ` · qty ${item.originalQuantityRaw}`
+                          : ''}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>

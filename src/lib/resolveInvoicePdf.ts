@@ -76,8 +76,8 @@ async function generatePdfFromInvoice(
     service_period_start: invoice.work_period_start,
     service_period_end: invoice.work_period_end,
     object_address: invoice.object_address || '',
-    // Prefer current UI language (language list), then stored snapshot
-    invoice_language: labelLanguage || invoice.invoice_language || 'en',
+    // Prefer stored invoice document language; optional UI override as fallback
+    invoice_language: invoice.invoice_language || labelLanguage || 'en',
   };
 
   const companyData = buildCompanyFromInvoice(invoice, companyProfile);
@@ -88,7 +88,7 @@ async function generatePdfFromInvoice(
 
 /**
  * Resolve a shareable/downloadable PDF for a saved invoice row.
- * Created invoices are always regenerated in the current app language.
+ * Labels use the invoice document language when set.
  */
 export async function resolveInvoicePdfFile(
   invoice: AnyInvoice,
@@ -97,7 +97,7 @@ export async function resolveInvoicePdfFile(
   labelLanguage?: string
 ): Promise<{ blob: Blob; fileName: string }> {
   const docNo = invoice.document_no || invoice.document_number || invoice.id || 'invoice';
-  const lang = labelLanguage || invoice.invoice_language || 'en';
+  const lang = invoice.invoice_language || labelLanguage || 'en';
   const fileName = invoicePdfFileName(lang, String(docNo));
 
   // Uploaded external PDFs keep their original file

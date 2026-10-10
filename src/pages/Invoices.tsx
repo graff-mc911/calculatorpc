@@ -843,7 +843,7 @@ export const Invoices: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t, language } = useLanguage();
-  const { showSuccess, showError } = useToastContext();
+  const { showSuccess, showError, showWarning } = useToastContext();
   const queryClient = useQueryClient();
 
   // Стани UI
@@ -963,7 +963,7 @@ export const Invoices: React.FC = () => {
       if (!isInvoiceImportFile(file)) {
         showError(
           t('unsupportedImportFile') ||
-            'Підтримуються Excel (.xlsx), CSV або PDF',
+            'Підтримуються Excel (.xlsx/.xls), CSV, PDF або фото (JPG/PNG). Word DOC/DOCX — ні.',
         );
         return;
       }
@@ -971,10 +971,19 @@ export const Invoices: React.FC = () => {
         setImportBusy(true);
         const draft = await importInvoiceFromFile(file);
         storeInvoiceImportDraft(draft);
-        showSuccess(
-          t('invoiceImportReady') ||
-            `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
-        );
+        const sum = draft.items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+        const sheetLabel = draft.importedSheet || file.name;
+        const multi = sheetLabel.includes(' + ');
+        let msg = multi
+          ? `Імпортовано ${draft.items.length} позицій з аркушів «${sheetLabel}», разом ${sum.toFixed(2)} €.`
+          : `Імпортовано ${draft.items.length} позицій з аркуша «${sheetLabel}», разом ${sum.toFixed(2)} €.`;
+        if (draft.skippedSheets?.length) {
+          msg += ` Пропущено аркуші без таблиці: ${draft.skippedSheets.join(', ')}.`;
+        }
+        showSuccess(msg);
+        if (draft.warnings?.length) {
+          showWarning(draft.warnings.join(' '));
+        }
         navigate('/invoices/new?from_import=1');
       } catch (err: any) {
         console.error('Invoice import failed', err);
@@ -987,7 +996,7 @@ export const Invoices: React.FC = () => {
         setImportBusy(false);
       }
     },
-    [navigate, showError, showSuccess, t],
+    [navigate, showError, showSuccess, showWarning, t],
   );
 
   const startNewInvoice = useCallback(
@@ -1379,7 +1388,7 @@ export const Invoices: React.FC = () => {
       <input
         ref={importFileRef}
         type="file"
-        accept=".xlsx,.xls,.csv,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+        accept=".xlsx,.xls,.csv,application/pdf,.pdf,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
         className="hidden"
         onChange={handleImportFileChange}
       />

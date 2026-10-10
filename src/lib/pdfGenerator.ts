@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { translations, translateUnit } from './languages';
 import { expandItemsForInvoiceTable } from './invoiceTotals';
 import { ensurePdfUnicodeFont } from './pdfUnicodeFont';
+import { formatUnitForPdf } from './invoiceUnits';
 
 interface InvoiceItem {
   description: string;
@@ -60,7 +61,7 @@ function money(n: number): string {
 
 /**
  * DIN 5008 / German construction invoice PDF — mirrors InvoiceDocument layout.
- * Labels from translations[invoice_language] (callers should pass the app UI language).
+ * Labels from translations[invoice_language] (document language of the invoice).
  */
 export const generateInvoicePDF = async (
   invoice: InvoiceData,
@@ -77,7 +78,7 @@ export const generateInvoicePDF = async (
   const topMargin = 15;
   let y = topMargin;
 
-  // Callers pass the app UI language (language list) via invoice_language
+  // invoice_language is the document language (from import/form), not UI locale
   const lang = (invoice.invoice_language || 'en') as keyof typeof translations;
   const dict = translations[lang] || translations.en;
   const t = (key: string): string =>
@@ -208,7 +209,13 @@ export const generateInvoicePDF = async (
   }).map((row) =>
     row.is_section
       ? row
-      : { ...row, unit: translateUnit(row.unit, t) }
+      : {
+          ...row,
+          unit:
+            lang === 'es'
+              ? formatUnitForPdf(row.unit, lang)
+              : translateUnit(row.unit, t),
+        }
   );
 
   let pos = 0;
@@ -318,7 +325,7 @@ export const generateInvoicePDF = async (
       [
         t('position'),
         t('designation'),
-        t('amountShort'),
+        lang === 'es' ? t('quantityShort') : t('amountShort'),
         t('unit'),
         t('unitPriceShort'),
         t('totalPriceShort'),

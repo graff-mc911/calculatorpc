@@ -1,5 +1,5 @@
 import { calculateLineTotal } from './invoiceTotals';
-import { normalizeInvoiceUnit } from './invoiceUnits';
+import { resolveInvoiceUnit } from './invoiceUnits';
 import type { ProjectBundle, ProjectWorkItem } from './projectsApi';
 
 export type PrefillInvoiceItem = {
@@ -12,10 +12,29 @@ export type PrefillInvoiceItem = {
   materialDisplay: string;
   description: string;
   total: number;
+  /** Original description text from the source document (unchanged). */
+  originalDescription?: string;
+  /** Raw quantity / price cells before locale normalization. */
+  originalQuantityRaw?: string;
+  originalPriceRaw?: string;
+  originalUnitRaw?: string;
+  /** Line needs user review (ambiguous number, unknown unit, missing qty…). */
+  needsReview?: boolean;
+  reviewWarnings?: string[];
+  /**
+   * Critical uncertainty — blocks invoice save until the user edits the line
+   * or explicitly confirms review.
+   */
+  critical?: boolean;
+  /** User explicitly confirmed this reviewed line as-is. */
+  reviewConfirmed?: boolean;
+  /** Unit was mapped to a known select value. */
+  unitKnown?: boolean;
 };
 
 export function mapProjectUnitToInvoice(unit: string): string {
-  return normalizeInvoiceUnit(unit, 'm²');
+  const resolved = resolveInvoiceUnit(unit);
+  return resolved.known && resolved.normalized ? resolved.normalized : unit || 'pcs';
 }
 
 export function workItemToInvoiceLine(w: ProjectWorkItem): PrefillInvoiceItem {

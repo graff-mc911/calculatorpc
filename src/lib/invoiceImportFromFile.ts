@@ -1,13 +1,26 @@
 import * as XLSX from 'xlsx';
-import { calculateLineTotal } from './invoiceTotals';
+import { calculateLineTotal, roundMoney } from './invoiceTotals';
 import type { PrefillInvoiceItem } from './invoiceFromProject';
 import { extractInvoiceDataFromPDF } from './pdfTextExtractor';
 import {
+  classifySheetKind,
   isMaterialOnlyLabel,
-  normalizeInvoiceUnit,
+  looksLikePieceUnit,
+  looksLikeSquareMeter,
+  resolveInvoiceUnit,
   splitQtyUnit,
-  type InvoiceUnit,
 } from './invoiceUnits';
+import {
+  confirmedNumber,
+  parseLocaleNumber,
+  parseNeedsReview,
+  type ParseNumberStatus,
+} from './localeNumber';
+import {
+  canRunBrowserOcr,
+  extractEstimateTextViaOcr,
+  isSparseExtractedText,
+} from './invoiceImportOcr';
 import * as pdfjsLib from 'pdfjs-dist';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -16,6 +29,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 export const INVOICE_IMPORT_STORAGE_KEY = 'cpc-invoice-import-v1';
+
+/** Sales document kinds stored on invoices.document_type */
+export type ImportedDocumentType = 'invoice' | 'estimate' | 'proposal';
 
 export type ImportedInvoiceDraft = {
   client_name?: string;
@@ -26,8 +42,15 @@ export type ImportedInvoiceDraft = {
   object_address?: string;
   /** Document labels language for DIN 5008 PDF (German standard). */
   invoice_language?: string;
+  /** Detected from file name / titles — not guessed from layout. */
+  document_type?: ImportedDocumentType;
   items: PrefillInvoiceItem[];
   sourceFileName?: string;
+  importedSheet?: string;
+  skippedSheets?: string[];
+  warnings?: string[];
+  /** How line items were obtained */
+  extractionMethod?: 'spreadsheet' | 'pdf-text' | 'ocr';
 };
 
 type ColKey =
@@ -36,26 +59,45 @@ type ColKey =
   | 'unit'
   | 'price'
   | 'material'
-  | 'total';
+  | 'total'
+  | 'note'
+  | 'index';
 
-const HEADER_MAP: Record<ColKey, string[]> = {
+/** Normalize header / alias: NFD, strip diacritics, lowercase, collapse spaces, trim trailing punctuation. */
+function normHeader(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:]+$/g, '')
+    .trim();
+}
+
+/** Raw aliases (written without diacritics). Normalized once at module load. */
+const HEADER_ALIASES_RAW: Record<ColKey, string[]> = {
   description: [
     'description',
     'desc',
     'item',
     'artikel',
     'leistung',
-    'position',
-    'pos',
     'bezeichnung',
     'work',
     'service',
     'опис',
     'назва',
-    'позиція',
     'робота',
     'найменування',
     'arbeit',
+    'position',
+    'позиція',
+    'trabajo',
+    'descripcion',
+    'concepto',
+    'designacion',
+    'partida',
   ],
   quantity: [
     'qty',
@@ -67,6 +109,10 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'к-сть',
     'ксть',
     'кол',
+    'cantidad',
+    'cant',
+    'medicion',
+    'medicion / cant',
   ],
   unit: [
     'unit',
@@ -77,6 +123,9 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'одиниця',
     'um',
     'од вим',
+    'unidad',
+    'ud',
+    'unid',
   ],
   price: [
     'price',
@@ -88,25 +137,23 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'ціна',
     'ставка',
     'ціна од',
-    'arbeit',
-    'lohn',
-    'labor',
-    'робота',
-    'ціна роботи',
     'arbeitpreis',
     'lohnpreis',
+    'precio',
+    'precio sin iva',
+    'precio, sin iva',
+    'precio unitario',
+    'pu',
   ],
   material: [
-    'material',
-    'mat',
-    'mat.',
-    'матеріал',
-    'мат',
-    'материал',
     'materialpreis',
     'mat preis',
     'ціна матеріалу',
     'werkstoff',
+    'mat price',
+    'material price',
+    'material',
+    'materiales',
   ],
   total: [
     'total',
@@ -117,37 +164,55 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'сума',
     'всього',
     'разом',
+    'total €',
+    'importe',
   ],
+  note: [
+    'observaciones',
+    'notas',
+    'nota',
+    'comentarios',
+    'примітка',
+    'bemerkung',
+    'notes',
+    'note',
+    'comments',
+  ],
+  index: ['#', '№', 'nº', 'n°', 'no', 'no.', 'num', 'pos', 'pos.', 'п/п', 'nr'],
 };
 
-function normHeader(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
+const HEADER_MAP: Record<ColKey, string[]> = (
+  Object.keys(HEADER_ALIASES_RAW) as ColKey[]
+).reduce(
+  (acc, key) => {
+    acc[key] = HEADER_ALIASES_RAW[key].map((a) => normHeader(a)).filter(Boolean);
+    return acc;
+  },
+  {} as Record<ColKey, string[]>,
+);
 
-function headerAliasHit(header: string, alias: string): boolean {
-  const h = header;
-  const a = alias;
-  if (!a) return false;
-  if (h === a) return true;
-  // Short aliases (me, mat, ep…) must be whole tokens — avoid "menge"→unit via "me"
-  if (a.length <= 3) {
-    return new RegExp(`(^|[^a-zа-яіїєґ0-9])${a}([^a-zа-яіїєґ0-9]|$)`, 'i').test(h);
+function headerAliasHit(headerNorm: string, aliasNorm: string): boolean {
+  if (!aliasNorm) return false;
+  if (headerNorm === aliasNorm) return true;
+  if (aliasNorm.length <= 5) {
+    return new RegExp(
+      `(^|[^a-zа-яіїєґ0-9])${aliasNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-zа-яіїєґ0-9]|$)`,
+      'i',
+    ).test(headerNorm);
   }
-  return h.includes(a);
+  return headerNorm.includes(aliasNorm);
 }
 
 function matchCol(header: string): ColKey | null {
   const h = normHeader(header);
   if (!h) return null;
-  // Prefer material / unit before generic "price" so "Materialpreis" wins
   const order: ColKey[] = [
-    'material',
+    'note',
+    'index',
     'quantity',
     'unit',
     'total',
+    'material',
     'price',
     'description',
   ];
@@ -157,43 +222,62 @@ function matchCol(header: string): ColKey | null {
   return null;
 }
 
-function parseNumber(raw: unknown): number {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  let s = String(raw ?? '')
-    .trim()
-    .replace(/[€$£\s]/g, '')
-    .replace(/[^\d,.\-]/g, '');
-  if (!s) return 0;
-  if (s.includes(',') && s.includes('.')) {
-    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
-      s = s.replace(/\./g, '').replace(',', '.');
-    } else {
-      s = s.replace(/,/g, '');
-    }
-  } else if (s.includes(',')) {
-    const parts = s.split(',');
-    s = parts[parts.length - 1].length <= 2 ? s.replace(',', '.') : s.replace(/,/g, '');
-  }
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+/**
+ * Parse a numeric cell. Never extracts digits from text that contains letters.
+ * Returns 0 only as a numeric fallback for legacy callers — prefer parseLocaleNumber
+ * + confirmedNumber so empty/invalid are not treated as confirmed zero.
+ */
+export function parseNumber(
+  raw: unknown,
+  options?: { preferGroupedThousandsDot?: boolean },
+): number {
+  return confirmedNumber(parseLocaleNumber(raw, options)) ?? 0;
+}
+
+function cellEmpty(raw: unknown): boolean {
+  if (raw == null) return true;
+  if (typeof raw === 'number') return !Number.isFinite(raw);
+  return String(raw).trim() === '';
 }
 
 function toItem(partial: {
   description?: string;
-  quantity?: number;
+  quantity?: number | null;
   unit?: string;
-  price?: number;
+  price?: number | null;
   material?: number | string;
+  originalQuantityRaw?: string;
+  originalPriceRaw?: string;
+  originalUnitRaw?: string;
+  needsReview?: boolean;
+  critical?: boolean;
+  reviewWarnings?: string[];
+  quantityStatus?: ParseNumberStatus;
+  priceStatus?: ParseNumberStatus;
+  unitKnown?: boolean;
+  /** Allow inventing qty=1 only for explicit lump-sum / when quantity was present as 1 */
+  allowDefaultQtyOne?: boolean;
 }): PrefillInvoiceItem | null {
-  let description = String(partial.description || '').trim();
-  let quantity = Number(partial.quantity) || 0;
-  let price = Number(partial.price) || 0;
+  let description = String(partial.description || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  let quantity =
+    partial.quantity == null || !Number.isFinite(partial.quantity)
+      ? 0
+      : Number(partial.quantity);
+  let price =
+    partial.price == null || !Number.isFinite(partial.price)
+      ? 0
+      : Number(partial.price);
   let materialNum =
     typeof partial.material === 'number'
       ? partial.material
       : parseNumber(partial.material);
+  const reviewWarnings = [...(partial.reviewWarnings || [])];
+  let needsReview = !!partial.needsReview;
+  let critical = !!partial.critical;
 
-  // "Material: 250" / "Матеріал 180€" inside description
+  // "Material: 250" inline in description
   const matInline = description.match(
     /(?:^|[|;/])\s*(?:material|матеріал|мат\.?)\s*[:\-]?\s*([0-9]+(?:[.,][0-9]+)?)/i,
   );
@@ -204,53 +288,114 @@ function toItem(partial: {
 
   if (!description && quantity <= 0 && price <= 0 && materialNum <= 0) return null;
 
-  const unit = normalizeInvoiceUnit(partial.unit, quantity > 0 ? 'm²' : 'pcs');
-  const material = materialNum > 0 ? String(materialNum) : '';
-  const qty = quantity || (price > 0 || materialNum > 0 ? 1 : 0);
+  const unitRaw = String(partial.unit || partial.originalUnitRaw || '').trim();
+  const resolved = resolveInvoiceUnit(unitRaw);
+  let unit = resolved.unit;
+  const unitKnown =
+    partial.unitKnown !== undefined ? partial.unitKnown : resolved.known;
 
-  // Pure material line → Lexware-style: work qty/price empty-ish, material filled
-  if (isMaterialOnlyLabel(description) && materialNum <= 0 && price > 0 && quantity <= 1) {
+  if (unitRaw && !unitKnown) {
+    // Keep original unit text — do not substitute pcs/m²
+    unit = unitRaw;
+    needsReview = true;
+    critical = true;
+    reviewWarnings.push(
+      `Невідома одиниця «${unitRaw}» — виберіть коректну перед збереженням`,
+    );
+  } else if (!unitRaw) {
+    unit = 'pcs';
+    needsReview = true;
+    reviewWarnings.push('Одиниця не вказана — підставлено pcs, перевірте');
+  }
+
+  // Do not invent quantity: only default to 1 for Pauschal / explicit allow
+  let qty = quantity;
+  const qtyStatus = partial.quantityStatus;
+  if (qtyStatus === 'invalid') {
+    critical = true;
+    needsReview = true;
+    reviewWarnings.push('Кількість некоректна (не число) — виправте');
+  } else if (qtyStatus === 'ambiguous') {
+    critical = true;
+    needsReview = true;
+  } else if (qtyStatus === 'empty' || (qty <= 0 && (price > 0 || materialNum > 0))) {
+    if (unit === 'Pauschal' || partial.allowDefaultQtyOne) {
+      qty = 1;
+    } else {
+      critical = true;
+      needsReview = true;
+      reviewWarnings.push('Порожня кількість — не підставлено 1');
+    }
+  }
+
+  const priceStatus = partial.priceStatus;
+  if (priceStatus === 'invalid') {
+    critical = true;
+    needsReview = true;
+    reviewWarnings.push('Ціна некоректна (не число) — виправте');
+  } else if (priceStatus === 'ambiguous') {
+    critical = true;
+    needsReview = true;
+  }
+
+  if (isMaterialOnlyLabel(description) && materialNum <= 0 && price > 0 && qty <= 1) {
+    const matAmount = roundMoney(price);
     return {
       quantity: 1,
       quantityDisplay: '1',
       unit: 'Pauschal',
       price: 0,
       priceDisplay: '',
-      material: String(price),
-      materialDisplay: String(price),
+      material: String(matAmount),
+      materialDisplay: String(matAmount),
       description: description || 'Material',
-      total: calculateLineTotal(1, 0, price),
+      originalDescription: description || 'Material',
+      originalQuantityRaw: partial.originalQuantityRaw,
+      originalPriceRaw: partial.originalPriceRaw,
+      originalUnitRaw: partial.originalUnitRaw || unitRaw,
+      total: calculateLineTotal(1, 0, matAmount),
+      needsReview,
+      critical,
+      unitKnown: true,
+      reviewWarnings: reviewWarnings.length ? reviewWarnings : undefined,
     };
   }
+
+  const roundedPrice = roundMoney(price);
 
   return {
     quantity: qty,
     quantityDisplay: String(qty || ''),
     unit,
-    price,
-    priceDisplay: price ? String(price) : '',
-    material,
-    materialDisplay: material,
+    price: roundedPrice,
+    priceDisplay: roundedPrice ? String(roundedPrice) : '',
+    material: materialNum > 0 ? String(roundMoney(materialNum)) : '',
+    materialDisplay: materialNum > 0 ? String(roundMoney(materialNum)) : '',
     description: description || 'Position',
-    total: calculateLineTotal(qty, price, materialNum || 0),
+    originalDescription: description || 'Position',
+    originalQuantityRaw: partial.originalQuantityRaw,
+    originalPriceRaw: partial.originalPriceRaw,
+    originalUnitRaw: partial.originalUnitRaw || unitRaw,
+    total: calculateLineTotal(qty, roundedPrice, materialNum || 0),
+    needsReview,
+    critical,
+    unitKnown,
+    reviewWarnings: reviewWarnings.length ? reviewWarnings : undefined,
   };
 }
 
-/** Attach material-only rows onto the previous work line (German Lexware style). */
 function coalesceMaterialRows(items: PrefillInvoiceItem[]): PrefillInvoiceItem[] {
   const out: PrefillInvoiceItem[] = [];
   for (const item of items) {
     const matOnly =
       isMaterialOnlyLabel(item.description) ||
-      (item.price === 0 && parseNumber(item.material) > 0 && /material|матеріал/i.test(item.description));
+      (item.price === 0 &&
+        parseNumber(item.material) > 0 &&
+        /material|матеріал/i.test(item.description));
 
     if (matOnly && out.length > 0) {
       const prev = out[out.length - 1];
-      const add =
-        parseNumber(item.material) ||
-        item.price ||
-        item.total ||
-        0;
+      const add = parseNumber(item.material) || item.price || item.total || 0;
       if (add > 0 && !parseNumber(prev.material)) {
         const material = String(add);
         out[out.length - 1] = {
@@ -267,85 +412,79 @@ function coalesceMaterialRows(items: PrefillInvoiceItem[]): PrefillInvoiceItem[]
   return out;
 }
 
-function detectHeaderMap(row: unknown[]): Partial<Record<ColKey, number>> | null {
+/** Build column map from a header row. Material→description when description missing. */
+function buildColMap(row: unknown[]): {
+  map: Partial<Record<ColKey, number>>;
+  keys: ColKey[];
+  labels: string[];
+} {
   const map: Partial<Record<ColKey, number>> = {};
-  let hits = 0;
+  const keys: ColKey[] = [];
+  const labels: string[] = [];
+
   row.forEach((cell, idx) => {
-    const key = matchCol(String(cell ?? ''));
-    if (key && map[key] === undefined) {
+    const label = String(cell ?? '').trim();
+    if (!label) return;
+    const key = matchCol(label);
+    if (!key) return;
+    labels.push(label);
+
+    if (key === 'material' && map.description === undefined) {
+      map.description = idx;
+      if (!keys.includes('description')) keys.push('description');
+      return;
+    }
+    if (map[key] === undefined) {
       map[key] = idx;
-      hits += 1;
+      keys.push(key);
     }
   });
-  if (map.description !== undefined && hits >= 2) return map;
-  if (map.description !== undefined && (map.price !== undefined || map.total !== undefined)) {
-    return map;
-  }
-  return null;
+
+  return { map, keys, labels };
 }
 
-function rowsToItems(
-  rows: unknown[][],
-  colMap: Partial<Record<ColKey, number>>,
-): PrefillInvoiceItem[] {
-  const items: PrefillInvoiceItem[] = [];
-  for (const row of rows) {
-    if (!Array.isArray(row) || row.every((c) => String(c ?? '').trim() === '')) continue;
-    const descIdx = colMap.description ?? 0;
-    let description = String(row[descIdx] ?? '').trim();
-    if (matchCol(description) === 'description') continue;
+function isValidHeaderMap(map: Partial<Record<ColKey, number>>, keys: ColKey[]): boolean {
+  if (map.description === undefined) return false;
+  const unique = new Set(keys);
+  if (unique.size < 3) return false;
+  return (
+    map.quantity !== undefined || map.price !== undefined || map.total !== undefined
+  );
+}
 
-    let quantity = 0;
-    let unit: InvoiceUnit | string = 'm²';
-
-    if (colMap.quantity !== undefined) {
-      const split = splitQtyUnit(row[colMap.quantity]);
-      quantity = split.quantity;
-      if (split.unit) unit = split.unit;
-    }
-
-    if (colMap.unit !== undefined) {
-      const uRaw = String(row[colMap.unit] ?? '').trim();
-      if (uRaw) unit = normalizeInvoiceUnit(uRaw, unit as InvoiceUnit);
-    }
-
-    // Unit glued into description: "Spachteln m2" / "Плінтус пог.м"
-    if (colMap.unit === undefined) {
-      const unitFromDesc = description.match(
-        /\b(m[²³23]|м[²³23]|qm|lm|lfm|пог\.?\s*м|м\.?\s*п|погонн\w*|шт|pcs|stk|h|std)\b/i,
-      );
-      if (unitFromDesc) {
-        unit = normalizeInvoiceUnit(unitFromDesc[1], unit as InvoiceUnit);
-      }
-    }
-
-    let price = colMap.price !== undefined ? parseNumber(row[colMap.price]) : 0;
-    const total = colMap.total !== undefined ? parseNumber(row[colMap.total]) : 0;
-    let material =
-      colMap.material !== undefined ? parseNumber(row[colMap.material]) : 0;
-
-    if (price <= 0 && total > 0 && material <= 0) {
-      quantity = quantity > 0 ? quantity : 1;
-      price = (total - material) / quantity;
-    } else if (price <= 0 && total > 0 && material > 0) {
-      quantity = quantity > 0 ? quantity : 1;
-      const laborPart = total - material;
-      price = laborPart > 0 ? laborPart / quantity : 0;
-    }
-    if (quantity <= 0 && (price > 0 || material > 0)) quantity = 1;
-
-    const item = toItem({ description, quantity, unit: String(unit), price, material });
-    if (item) items.push(item);
+function detectDocumentType(
+  fileName: string,
+  titles: string[] = [],
+): ImportedDocumentType {
+  const blob = [fileName, ...titles].join(' ').toLowerCase();
+  if (
+    /\b(presupuesto|presupuest|estimate|quotation|quote|кошторис|angebot|kostenvoranschlag|devis)\b/.test(
+      blob,
+    )
+  ) {
+    return 'estimate';
   }
-  return coalesceMaterialRows(items);
+  if (/\b(proposal|vorschlag|пропозиція|proposta)\b/.test(blob)) return 'proposal';
+  if (/\b(invoice|rechnung|factura|рахунок|facture)\b/.test(blob)) return 'invoice';
+  return 'invoice';
+}
+
+function detectInvoiceLanguage(fileName: string, titles: string[]): string | undefined {
+  const blob = [fileName, ...titles].join(' ').toLowerCase();
+  if (/\b(presupuesto|trabajo|materiales|mano de obra|unidad|medicion|precio)\b/.test(blob)) {
+    return 'es';
+  }
+  if (/\b(rechnung|leistung|menge|einheit|angebot)\b/.test(blob)) return 'de';
+  if (/\b(рахунок|кошторис|робота|матеріал|одиниця)\b/.test(blob)) return 'uk';
+  return undefined;
 }
 
 function guessMetaFromSheet(rows: unknown[][]): Partial<ImportedInvoiceDraft> {
   const meta: Partial<ImportedInvoiceDraft> = {};
-  const labelClient = /^(client|kunde|customer|клієнт|заказчик|firma|company)\b/i;
-  const labelDate = /^(date|datum|дата|rechnungsdatum)\b/i;
-  const labelNumber = /^(invoice|rechnung|номер|document|nr\.?|no\.?)\b/i;
-  const labelAddress = /^(address|adresse|адреса|object|об.?єкт)\b/i;
+  const labelClient = /^(client|kunde|customer|клієнт|заказчик|firma|company|cliente)\b/i;
+  const labelDate = /^(date|datum|дата|rechnungsdatum|fecha)\b/i;
+  const labelNumber = /^(invoice|rechnung|номер|document|nr\.?|no\.?|factura)\b/i;
+  const labelAddress = /^(address|adresse|адреса|object|об.?єкт|direccion|dirección)\b/i;
 
   for (const row of rows.slice(0, 25)) {
     if (!Array.isArray(row)) continue;
@@ -360,12 +499,29 @@ function guessMetaFromSheet(rows: unknown[][]): Partial<ImportedInvoiceDraft> {
     if (!meta.document_number && labelNumber.test(a)) meta.document_number = b;
     if (!meta.object_address && labelAddress.test(a)) meta.object_address = b;
   }
+
+  if (!meta.date) {
+    for (const row of rows.slice(0, 5)) {
+      if (!Array.isArray(row)) continue;
+      for (const cell of row) {
+        if (typeof cell === 'string' || typeof cell === 'number') {
+          const n = parseExcelDate(String(cell));
+          if (n) {
+            meta.date = n;
+            break;
+          }
+        }
+      }
+      if (meta.date) break;
+    }
+  }
+
   return meta;
 }
 
 function parseExcelDate(raw: string): string {
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  const de = raw.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  const de = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
   if (de) {
     const dd = de[1].padStart(2, '0');
     const mm = de[2].padStart(2, '0');
@@ -379,133 +535,547 @@ function parseExcelDate(raw: string): string {
   return '';
 }
 
-async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: '',
-    raw: false,
-  }) as unknown[][];
+function rowsToItems(
+  rows: unknown[][],
+  colMap: Partial<Record<ColKey, number>>,
+  warnings: string[],
+  opts: { preferGroupedThousandsDot?: boolean } = {},
+): { items: PrefillInvoiceItem[]; fileTotal?: number } {
+  const items: PrefillInvoiceItem[] = [];
+  let fileTotal: number | undefined;
+  const descIdx = colMap.description!;
+  let unknownUnits = 0;
+  const numOpts = {
+    preferGroupedThousandsDot: !!opts.preferGroupedThousandsDot,
+  };
 
-  const meta = guessMetaFromSheet(rows);
+  for (let rowNum = 0; rowNum < rows.length; rowNum++) {
+    const row = rows[rowNum];
+    if (!Array.isArray(row)) continue;
 
-  let headerIdx = -1;
-  let colMap: Partial<Record<ColKey, number>> | null = null;
-  for (let i = 0; i < Math.min(rows.length, 40); i++) {
-    const found = detectHeaderMap(rows[i] || []);
-    if (found) {
-      headerIdx = i;
-      colMap = found;
+    const descriptionRaw = row[descIdx];
+    const description = String(descriptionRaw ?? '')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+    const qtyRaw = colMap.quantity !== undefined ? row[colMap.quantity] : undefined;
+    const priceRaw = colMap.price !== undefined ? row[colMap.price] : undefined;
+    const totalRaw = colMap.total !== undefined ? row[colMap.total] : undefined;
+    const unitRaw = colMap.unit !== undefined ? row[colMap.unit] : undefined;
+    const matRaw = colMap.material !== undefined ? row[colMap.material] : undefined;
+
+    // Never read numbers from columns left of description (index / №)
+    if (
+      cellEmpty(descriptionRaw) &&
+      cellEmpty(qtyRaw) &&
+      cellEmpty(priceRaw) &&
+      cellEmpty(totalRaw)
+    ) {
+      continue;
+    }
+
+    // Total / footer row → capture fileTotal and stop
+    if (/^(total|subtotal|suma|importe total|gesamt|summe|итого|разом|всього)\b/i.test(description)) {
+      if (colMap.total !== undefined) {
+        fileTotal = confirmedNumber(parseLocaleNumber(totalRaw, numOpts)) ?? undefined;
+      }
       break;
+    }
+
+    const lineWarnings: string[] = [];
+    let needsReview = false;
+    let critical = false;
+    let quantity: number | null = null;
+    let quantityStatus: ParseNumberStatus = 'empty';
+    let unit = '';
+    let unitKnown = true;
+
+    if (colMap.quantity !== undefined) {
+      if (
+        typeof qtyRaw === 'number' ||
+        (typeof qtyRaw === 'string' && !/\p{L}/u.test(String(qtyRaw)))
+      ) {
+        const parsed = parseLocaleNumber(qtyRaw, numOpts);
+        quantityStatus = parsed.status;
+        quantity = confirmedNumber(parsed);
+        if (parseNeedsReview(parsed)) {
+          needsReview = true;
+          if (parsed.status === 'ambiguous') {
+            critical = true;
+            lineWarnings.push(
+              `Неоднозначна кількість «${parsed.original}» → кандидат ${parsed.value}`,
+            );
+          } else if (parsed.status === 'invalid') {
+            critical = true;
+            lineWarnings.push(`Кількість «${parsed.original}» некоректна`);
+          }
+        }
+      } else if (colMap.unit === undefined) {
+        const split = splitQtyUnit(qtyRaw);
+        quantity = split.quantity;
+        quantityStatus = split.quantity > 0 ? 'ok' : 'invalid';
+        if (split.unit) {
+          unit = split.unit;
+          unitKnown = split.unitKnown !== false;
+        }
+        if (quantityStatus === 'invalid' && String(qtyRaw ?? '').trim()) {
+          critical = true;
+          needsReview = true;
+          lineWarnings.push(`Кількість «${qtyRaw}» некоректна`);
+        }
+      } else {
+        const parsed = parseLocaleNumber(qtyRaw, numOpts);
+        quantityStatus = parsed.status;
+        quantity = confirmedNumber(parsed);
+        if (parseNeedsReview(parsed)) {
+          needsReview = true;
+          if (parsed.status === 'invalid' || parsed.status === 'ambiguous') {
+            critical = true;
+            lineWarnings.push(
+              parsed.status === 'ambiguous'
+                ? `Неоднозначна кількість «${parsed.original}» → кандидат ${parsed.value}`
+                : `Кількість «${parsed.original}» некоректна`,
+            );
+          }
+        }
+      }
+    }
+
+    if (colMap.unit !== undefined) {
+      const uRaw = String(unitRaw ?? '').trim();
+      if (uRaw) {
+        const resolved = resolveInvoiceUnit(uRaw);
+        if (resolved.known && resolved.normalized) {
+          unit = resolved.normalized;
+          unitKnown = true;
+          // Guard against cross-mapping
+          if (looksLikeSquareMeter(uRaw) && unit !== 'm²') {
+            unit = 'm²';
+            needsReview = true;
+            lineWarnings.push(`Одиницю «${uRaw}» виправлено на m²`);
+          } else if (looksLikePieceUnit(uRaw) && unit !== 'pcs') {
+            unit = 'pcs';
+            needsReview = true;
+            lineWarnings.push(`Одиницю «${uRaw}» виправлено на pcs/ud`);
+          }
+        } else {
+          unit = uRaw;
+          unitKnown = false;
+          unknownUnits += 1;
+          critical = true;
+          needsReview = true;
+          lineWarnings.push(`Невідома одиниця «${uRaw}» — збережено оригінал`);
+        }
+      }
+    }
+
+    // Never treat the Pos/# index column as quantity (classic scramble bug)
+    if (
+      colMap.index !== undefined &&
+      colMap.quantity === colMap.index
+    ) {
+      critical = true;
+      needsReview = true;
+      lineWarnings.push('Колонка кількості збігається з № — перевірте');
+    }
+
+    const priceParsed =
+      colMap.price !== undefined
+        ? parseLocaleNumber(priceRaw, numOpts)
+        : parseLocaleNumber('');
+    let price = confirmedNumber(priceParsed);
+    const priceStatus = colMap.price !== undefined ? priceParsed.status : 'empty';
+    if (parseNeedsReview(priceParsed) && colMap.price !== undefined) {
+      needsReview = true;
+      if (priceParsed.status === 'ambiguous' || priceParsed.status === 'invalid') {
+        critical = true;
+        lineWarnings.push(
+          priceParsed.status === 'ambiguous'
+            ? `Неоднозначна ціна «${priceParsed.original}» → кандидат ${priceParsed.value}`
+            : `Ціна «${priceParsed.original}» некоректна`,
+        );
+      }
+    }
+
+    const totalParsed =
+      colMap.total !== undefined
+        ? parseLocaleNumber(totalRaw, numOpts)
+        : parseLocaleNumber('');
+    const total = confirmedNumber(totalParsed) ?? 0;
+
+    const material =
+      colMap.material !== undefined
+        ? confirmedNumber(parseLocaleNumber(matRaw, numOpts)) ?? 0
+        : 0;
+
+    const qtyNum = quantity ?? 0;
+    const priceNum = price ?? 0;
+
+    // Section header: description but no qty/price/total and empty unit
+    if (
+      description &&
+      qtyNum <= 0 &&
+      priceNum <= 0 &&
+      total <= 0 &&
+      !String(unitRaw ?? '').trim() &&
+      quantityStatus === 'empty' &&
+      priceStatus === 'empty'
+    ) {
+      continue;
+    }
+
+    // Derive missing unit price from Total only when price cell is empty — flag for review
+    if (priceNum <= 0 && total > 0 && qtyNum > 0 && priceStatus === 'empty') {
+      price = total / qtyNum;
+      needsReview = true;
+      critical = true;
+      lineWarnings.push(
+        `Ціну обчислено з Total (${total}) / qty — підтвердіть`,
+      );
+    } else if (priceNum <= 0 && total > 0 && qtyNum <= 0) {
+      critical = true;
+      needsReview = true;
+      lineWarnings.push(
+        `Є Total (${total}), але немає кількості/ціни — не вигадано значення`,
+      );
+    }
+
+    // Never silently rewrite qty or price when Total disagrees
+    if (priceNum > 0 && total > 0 && qtyNum > 0) {
+      const expected = roundMoney(qtyNum * priceNum);
+      if (Math.abs(expected - roundMoney(total)) > 0.02) {
+        needsReview = true;
+        lineWarnings.push(
+          `Розбіжність: qty×price=${expected.toFixed(2)}, Total у файлі=${roundMoney(total).toFixed(2)}`,
+        );
+        warnings.push(
+          `Рядок ${rowNum + 1}: qty×price ${expected.toFixed(2)} ≠ Total ${roundMoney(total).toFixed(2)} — значення не змінено`,
+        );
+      }
+    }
+
+    if (!description) continue;
+
+    // Never invent price from thin air when both empty
+    if (priceNum <= 0 && qtyNum <= 0 && material <= 0 && total <= 0) continue;
+
+    const item = toItem({
+      description,
+      quantity,
+      unit: unit || String(unitRaw ?? ''),
+      price,
+      material,
+      originalQuantityRaw:
+        qtyRaw == null || qtyRaw === '' ? undefined : String(qtyRaw),
+      originalPriceRaw:
+        priceRaw == null || priceRaw === '' ? undefined : String(priceRaw),
+      originalUnitRaw:
+        unitRaw == null || unitRaw === '' ? undefined : String(unitRaw),
+      needsReview,
+      critical,
+      quantityStatus,
+      priceStatus,
+      unitKnown,
+      reviewWarnings: lineWarnings,
+      allowDefaultQtyOne: false,
+    });
+    if (item) {
+      if (item.needsReview && item.reviewWarnings?.length) {
+        for (const w of item.reviewWarnings) {
+          warnings.push(`Рядок ${rowNum + 1}: ${w}`);
+        }
+      }
+      items.push(item);
     }
   }
 
-  let items: PrefillInvoiceItem[] = [];
-  if (colMap && headerIdx >= 0) {
-    items = rowsToItems(rows.slice(headerIdx + 1), colMap);
-  } else {
-    for (const row of rows) {
-      if (!Array.isArray(row) || row.length < 2) continue;
-      const cells = row.map((c) => String(c ?? '').trim());
-      if (cells.every((c) => !c)) continue;
-      if (matchCol(cells[0])) continue;
+  if (unknownUnits > 0) {
+    warnings.push(
+      `Нерозпізнаних одиниць: ${unknownUnits} (збережено оригінал, потрібна перевірка)`,
+    );
+  }
 
-      let description = '';
-      let quantity = 0;
-      let unit: InvoiceUnit = 'm²';
-      let price = 0;
-      let material = 0;
+  return { items, fileTotal };
+}
 
-      for (const cell of cells) {
-        if (!cell) continue;
-        const split = splitQtyUnit(cell);
-        if (!description && split.restText && !parseNumber(cell)) {
-          description = cell;
-          continue;
+/**
+ * Parse CSV into string cells only.
+ * XLSX coerces `12,5` → 125 and `20,00` → 2000 — fatal for EU decimals.
+ */
+function parseCsvRowsAsStrings(text: string): string[][] {
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim()) || '';
+  const semis = (firstLine.match(/;/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  const sep = semis > commas ? ';' : ',';
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  const src = text.replace(/^\uFEFF/, '');
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
         }
-        if (!description && /[a-zA-Zа-яА-Яіїєґ]/u.test(cell) && !/^\d/.test(cell)) {
-          // "120 m2" handled below; plain text = description
-          if (split.quantity <= 0) {
-            description = cell;
-            continue;
-          }
-        }
-        if (split.quantity > 0 && split.unit && quantity <= 0) {
-          quantity = split.quantity;
-          unit = split.unit;
-          continue;
-        }
+      } else {
+        cell += ch;
       }
-
-      const nums = cells
-        .map((c) => ({ c, n: parseNumber(c), split: splitQtyUnit(c) }))
-        .filter((x) => x.n > 0);
-
-      if (!description) {
-        description =
-          cells.find((c) => c && parseNumber(c) <= 0 && !matchCol(c)) || '';
-      }
-      if (!description) continue;
-
-      if (quantity <= 0 && nums[0]) {
-        quantity = nums[0].split.unit ? nums[0].split.quantity : nums[0].n;
-        if (nums[0].split.unit) unit = nums[0].split.unit;
-      }
-
-      // Heuristic: qty, labor price, material[, total]
-      if (nums.length >= 3) {
-        price = nums[1].n;
-        material = nums[2].n;
-        // if last looks like total ≈ qty*price+mat, treat nums[2] as total not material
-        const maybeTotal = nums[nums.length - 1].n;
-        const expect = quantity * price + (nums.length >= 4 ? nums[2].n : 0);
-        if (nums.length === 3 && Math.abs(maybeTotal - quantity * nums[1].n) < 0.05) {
-          price = nums[1].n;
-          material = 0;
-        } else if (nums.length >= 4) {
-          material = nums[2].n;
-          price = nums[1].n;
-        } else if (
-          nums.length === 3 &&
-          Math.abs(maybeTotal - (quantity * nums[1].n + nums[2].n)) < 0.05
-        ) {
-          // unlikely with only 3 — keep material
-        }
-        void expect;
-      } else if (nums.length === 2) {
-        price = nums[1].n;
-      } else if (nums.length === 1) {
-        price = nums[0].n;
-        quantity = quantity || 1;
-      }
-
-      // Unit tokens in any cell
-      for (const cell of cells) {
-        if (/m[²³23]|пог|lm|lfm|м\.?\s*п|шт|pcs/i.test(cell) && splitQtyUnit(cell).unit) {
-          unit = splitQtyUnit(cell).unit || unit;
-        } else if (/^(m2|м2|qm|lm|пог|шт|pcs|m²)$/i.test(cell.trim())) {
-          unit = normalizeInvoiceUnit(cell);
-        }
-      }
-
-      const item = toItem({ description, quantity, unit, price, material });
-      if (item) items.push(item);
+      continue;
     }
-    items = coalesceMaterialRows(items);
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === sep) {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+    if (ch === '\n') {
+      row.push(cell);
+      cell = '';
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+      continue;
+    }
+    if (ch === '\r') continue;
+    cell += ch;
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  return rows;
+}
+
+type ParsedSheetResult = {
+  sheetName: string;
+  items: PrefillInvoiceItem[];
+  fileTotal?: number;
+  warnings: string[];
+  titleCell?: string;
+  spanishHeaders: boolean;
+  sheetKind: 'labor' | 'materials' | 'unknown';
+};
+
+/**
+ * Parse one worksheet (or CSV table) into invoice lines.
+ * Materials sheets keep every priced row — never coalesce into Lexware "material" field.
+ */
+function parseSheetTable(
+  rows: unknown[][],
+  sheetName: string,
+): ParsedSheetResult | null {
+  const warnings: string[] = [];
+  let headerIdx = -1;
+  let colMap: Partial<Record<ColKey, number>> | null = null;
+  let recognizedLabels: string[] = [];
+
+  for (let i = 0; i < Math.min(rows.length, 40); i++) {
+    const { map, keys, labels } = buildColMap(rows[i] || []);
+    if (isValidHeaderMap(map, keys)) {
+      headerIdx = i;
+      colMap = map;
+      recognizedLabels = labels;
+      break;
+    }
+    if (labels.length) recognizedLabels = labels;
+  }
+
+  if (!colMap || headerIdx < 0) {
+    return null;
+  }
+
+  const titleCell = rows
+    .slice(0, headerIdx + 1)
+    .flat()
+    .map((c) => String(c ?? '').trim())
+    .find((t) => t.length > 3 && /[a-zA-Zа-яА-Я]/u.test(t));
+
+  const spanishHeaders = recognizedLabels.some((l) =>
+    /trabajo|unidad|medicion|precio|cantidad|material/i.test(normHeader(l)),
+  );
+
+  const sheetKind = classifySheetKind(
+    [sheetName, titleCell || '', ...recognizedLabels].join(' '),
+  );
+
+  const { items: rawItems, fileTotal } = rowsToItems(
+    rows.slice(headerIdx + 1),
+    colMap,
+    warnings,
+    { preferGroupedThousandsDot: spanishHeaders },
+  );
+
+  // Materials sheet: each row is its own position (saco/ud/lote…).
+  // Labor sheet: only coalesce true Lexware "Material …" companion rows.
+  let items: PrefillInvoiceItem[];
+  if (sheetKind === 'materials') {
+    items = rawItems;
+  } else {
+    const hasMaterialOnly = rawItems.some((it) =>
+      isMaterialOnlyLabel(it.description),
+    );
+    items = hasMaterialOnly ? coalesceMaterialRows(rawItems) : rawItems;
   }
 
   if (items.length === 0) {
-    throw new Error('No invoice lines found in spreadsheet');
+    return null;
   }
+
+  const sum = items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+  if (fileTotal != null && Math.abs(sum - fileTotal) > 0.05) {
+    warnings.push(
+      `Аркуш «${sheetName}»: сума ${sum.toFixed(2)} ≠ підсумок у файлі ${fileTotal.toFixed(2)}`,
+    );
+  }
+
+  return {
+    sheetName,
+    items,
+    fileTotal,
+    warnings,
+    titleCell,
+    spanishHeaders,
+    sheetKind,
+  };
+}
+
+/**
+ * Presupuesto often has labor + materials sheets.
+ * Invoice import uses labor (Mano de obra / Total 3500 €) — not labor+materials (4900 €).
+ */
+function selectSheetsForInvoice(parsedSheets: ParsedSheetResult[]): {
+  selected: ParsedSheetResult[];
+  deferred: ParsedSheetResult[];
+} {
+  const labor = parsedSheets.filter((s) => s.sheetKind === 'labor');
+  if (labor.length > 0) {
+    return {
+      selected: labor,
+      deferred: parsedSheets.filter((s) => s.sheetKind !== 'labor'),
+    };
+  }
+  const nonMaterials = parsedSheets.filter((s) => s.sheetKind !== 'materials');
+  if (nonMaterials.length > 0) {
+    return {
+      selected: [nonMaterials[0]],
+      deferred: parsedSheets.filter((s) => s !== nonMaterials[0]),
+    };
+  }
+  // Workbook is materials-only
+  return { selected: parsedSheets, deferred: [] };
+}
+
+async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
+  const buf = await file.arrayBuffer();
+  const nameLower = file.name.toLowerCase();
+  const isCsv = nameLower.endsWith('.csv') || file.type === 'text/csv';
+
+  const parsedSheets: ParsedSheetResult[] = [];
+  const unreadableSheets: string[] = [];
+  let metaRows: unknown[][] = [];
+
+  if (isCsv) {
+    const text = new TextDecoder('utf-8').decode(buf);
+    const rows = parseCsvRowsAsStrings(text);
+    const sheetName = file.name.replace(/\.[^.]+$/, '') || 'CSV';
+    metaRows = rows;
+    const one = parseSheetTable(rows, sheetName);
+    if (!one) {
+      throw new Error(
+        'Не знайдено заголовки таблиці. Потрібні колонки: назва, одиниця, кількість, ціна (і/або сума).',
+      );
+    }
+    parsedSheets.push(one);
+  } else {
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    if (!wb.SheetNames.length) {
+      throw new Error('Spreadsheet has no sheets');
+    }
+    for (const name of wb.SheetNames) {
+      const sheet = wb.Sheets[name];
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: '',
+        raw: true,
+      }) as unknown[][];
+      if (!metaRows.length) metaRows = rows;
+      const one = parseSheetTable(rows, name);
+      if (one) {
+        parsedSheets.push(one);
+      } else {
+        unreadableSheets.push(name);
+      }
+    }
+  }
+
+  if (parsedSheets.length === 0) {
+    throw new Error(
+      'Не знайдено жодного аркуша з таблицею позицій (назва, одиниця, кількість, ціна).',
+    );
+  }
+
+  const { selected, deferred } = selectSheetsForInvoice(parsedSheets);
+  const skippedSheets = [
+    ...deferred.map((s) => s.sheetName),
+    ...unreadableSheets,
+  ];
+
+  const meta = guessMetaFromSheet(metaRows);
+  const warnings: string[] = [];
+  const items: PrefillInvoiceItem[] = [];
+  let combinedFileTotal = 0;
+  let hasFileTotal = false;
+
+  for (const sheet of selected) {
+    warnings.push(...sheet.warnings);
+    items.push(...sheet.items);
+    if (sheet.fileTotal != null) {
+      combinedFileTotal += sheet.fileTotal;
+      hasFileTotal = true;
+    }
+  }
+
+  for (const sheet of deferred) {
+    const sheetSum = sheet.items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+    warnings.push(
+      `Аркуш «${sheet.sheetName}» (${sheet.items.length} поз., ~${sheetSum.toFixed(0)} €) не додано до інвойсу — лише роботи / mano de obra`,
+    );
+  }
+
+  const sum = items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+  if (hasFileTotal && Math.abs(sum - combinedFileTotal) > 0.05) {
+    warnings.push(
+      `Сума позицій ${sum.toFixed(2)} ≠ підсумок аркуша ${combinedFileTotal.toFixed(2)}`,
+    );
+  }
+
+  const titles = selected.map((s) => s.titleCell || s.sheetName);
+  const document_type = detectDocumentType(file.name, titles);
+  const invoice_language = detectInvoiceLanguage(file.name, titles);
+  const importedSheet = selected.map((s) => s.sheetName).join(' + ');
 
   return {
     ...meta,
     items,
     currency: meta.currency || 'EUR',
     sourceFileName: file.name,
-    notes: meta.notes || `Imported from ${file.name}`,
+    document_type,
+    invoice_language: invoice_language || meta.invoice_language,
+    importedSheet,
+    skippedSheets: skippedSheets.length ? skippedSheets : undefined,
+    warnings: warnings.length ? warnings : undefined,
+    extractionMethod: 'spreadsheet',
+    notes:
+      meta.notes ||
+      `Imported from ${file.name}` +
+        (document_type === 'estimate' ? ' (estimate / presupuesto)' : ''),
   };
 }
 
@@ -544,15 +1114,20 @@ async function extractPdfText(file: File, maxPages = 8): Promise<string> {
 }
 
 const PDF_UNIT =
-  'm²|m2|m³|m3|qm|lm|lfm|lfd\\.m|м²|м2|м³|пог\\.?\\s*м|м\\.п\\.?|шт|pcs|stk|h|std|psch|pauschal';
+  'm²|m2|m³|m3|qm|lm|ml|lfm|lfd\\.m|ud|uds|м²|м2|м³|пог\\.?\\s*м|м\\.п\\.?|шт|pcs|stk|h|std|psch|pauschal|global';
 
-function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
+function parsePdfLineItems(
+  text: string,
+  opts: { fromOcr?: boolean } = {},
+): PrefillInvoiceItem[] {
   const items: PrefillInvoiceItem[] = [];
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const preferThousands =
+    /medici[oó]n|cantidad|precio|trabajo|presupuesto|importe/i.test(text);
 
   for (const line of lines) {
     if (
-      /rechnung|invoice|datum|seite|page|gesamt|total|summe|netto|brutto|iban|bic|ust|mwst|vat|reverse/i.test(
+      /rechnung|invoice|datum|seite|page|gesamt|total|summe|netto|brutto|iban|bic|ust|mwst|vat|reverse|presupuesto/i.test(
         line,
       ) &&
       !/\d+[.,]\d{2}/.test(line)
@@ -560,52 +1135,101 @@ function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
       continue;
     }
 
-    // desc qty unit labor material? total?
     const withUnit = new RegExp(
-      `^(.{3,80}?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${PDF_UNIT})\\s+(\\d+(?:[.,]\\d{2})?)(?:\\s+(\\d+(?:[.,]\\d{2})?))?(?:\\s+(\\d+(?:[.,]\\d{2})?))?\\s*$`,
+      `^(.{3,120}?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${PDF_UNIT})\\s+(\\d+(?:[.,]\\d{2})?)(?:\\s+(\\d+(?:[.,]\\d{2})?))?(?:\\s+(\\d+(?:[.,]\\d{2})?))?\\s*$`,
       'i',
     );
     const m = line.match(withUnit);
     if (m) {
-      const quantity = parseNumber(m[2]);
-      const unit = normalizeInvoiceUnit(m[3]);
-      const n4 = parseNumber(m[4]);
-      const n5 = m[5] ? parseNumber(m[5]) : 0;
-      const n6 = m[6] ? parseNumber(m[6]) : 0;
-      let price = n4;
+      const qtyParsed = parseLocaleNumber(m[2], {
+        preferGroupedThousandsDot: preferThousands,
+      });
+      const quantity = confirmedNumber(qtyParsed);
+      const resolved = resolveInvoiceUnit(m[3]);
+      const n4 =
+        confirmedNumber(
+          parseLocaleNumber(m[4], {
+            preferGroupedThousandsDot: preferThousands,
+          }),
+        ) ?? 0;
+      const n5 = m[5]
+        ? confirmedNumber(
+            parseLocaleNumber(m[5], {
+              preferGroupedThousandsDot: preferThousands,
+            }),
+          ) ?? 0
+        : 0;
+      const n6 = m[6]
+        ? confirmedNumber(
+            parseLocaleNumber(m[6], {
+              preferGroupedThousandsDot: preferThousands,
+            }),
+          ) ?? 0
+        : 0;
+      let price: number | null = n4;
       let material = 0;
+      const qtyN = quantity ?? 0;
       if (n6 > 0) {
-        // qty unit price material total
         price = n4;
         material = n5;
       } else if (n5 > 0) {
-        // could be price+total or price+material
-        if (Math.abs(n5 - quantity * n4) < 0.05) {
+        if (Math.abs(n5 - qtyN * n4) < 0.05) {
           material = 0;
         } else {
           material = n5;
         }
       }
+      const lineWarnings: string[] = [];
+      let needsReview = !!opts.fromOcr || qtyParsed.ambiguous || !resolved.known;
+      let critical = !!opts.fromOcr || qtyParsed.status === 'ambiguous' || !resolved.known;
+      if (opts.fromOcr) lineWarnings.push('Рядок з OCR — обов’язкова перевірка');
+      if (qtyParsed.ambiguous) {
+        lineWarnings.push(`Неоднозначна кількість «${m[2]}»`);
+      }
+      if (!resolved.known) {
+        lineWarnings.push(`Невідома одиниця «${m[3]}»`);
+      }
       const item = toItem({
         description: m[1],
         quantity,
-        unit,
+        unit: resolved.unit || m[3],
         price,
         material,
+        originalQuantityRaw: m[2],
+        originalPriceRaw: m[4],
+        originalUnitRaw: m[3],
+        needsReview,
+        critical,
+        quantityStatus: qtyParsed.status,
+        unitKnown: resolved.known,
+        reviewWarnings: lineWarnings,
       });
       if (item) items.push(item);
       continue;
     }
 
     const m2 = line.match(
-      /^(.{3,80}?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d{2})?)\s+(\d+(?:[.,]\d{2})?)\s*$/,
+      /^(.{3,120}?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d{2})?)\s+(\d+(?:[.,]\d{2})?)\s*$/,
     );
     if (m2) {
       const item = toItem({
         description: m2[1],
-        quantity: parseNumber(m2[2]),
-        unit: 'm²',
-        price: parseNumber(m2[3]),
+        quantity: parseNumber(m2[2], {
+          preferGroupedThousandsDot: preferThousands,
+        }),
+        unit: 'pcs',
+        price: parseNumber(m2[3], {
+          preferGroupedThousandsDot: preferThousands,
+        }),
+        originalQuantityRaw: m2[2],
+        originalPriceRaw: m2[3],
+        needsReview: true,
+        critical: true,
+        reviewWarnings: [
+          opts.fromOcr
+            ? 'OCR: одиниця не вказана — підставлено pcs'
+            : 'PDF: одиниця не вказана — підставлено pcs',
+        ],
       });
       if (item) items.push(item);
     }
@@ -613,12 +1237,49 @@ function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
   return coalesceMaterialRows(items);
 }
 
-async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
-  const header = await extractInvoiceDataFromPDF(file);
-  const text = await extractPdfText(file);
-  let items = text.trim() ? parsePdfLineItems(text) : [];
+function taxHintsFromText(text: string): string[] {
+  const hints: string[] = [];
+  if (/iva\s*inclu|mwst\s*inkl|vat\s*incl|brutto|tax\s*included/i.test(text)) {
+    hints.push(
+      'У документі явно вказано, що податок уже включено в ціну — не додавайте IVA повторно без перевірки',
+    );
+  }
+  if (/(?:iva|mwst|ust|vat|пдв)\s*[:=]?\s*(\d{1,2})(?:[.,]\d+)?\s*%/i.test(text)) {
+    const rates = new Set<string>();
+    const re =
+      /(?:iva|mwst|ust|vat|пдв)\s*[:=]?\s*(\d{1,2})(?:[.,]\d+)?\s*%/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) rates.add(m[1]);
+    if (rates.size > 1) {
+      hints.push(
+        `Знайдено кілька ставок податку (${[...rates].join(', ')}%) — у формі інвойсу одна ставка на документ; перевірте вручну`,
+      );
+    }
+  }
+  return hints;
+}
 
-  if (items.length === 0) {
+async function buildDraftFromPlainText(
+  file: File,
+  text: string,
+  opts: {
+    extractionMethod: 'pdf-text' | 'ocr';
+    header?: Awaited<ReturnType<typeof extractInvoiceDataFromPDF>>;
+  },
+): Promise<ImportedInvoiceDraft> {
+  const warnings = [...taxHintsFromText(text)];
+  if (opts.extractionMethod === 'ocr') {
+    warnings.push(
+      'Текст отримано через OCR на пристрої — обов’язково перевірте позиції перед збереженням',
+    );
+  }
+
+  let items = text.trim()
+    ? parsePdfLineItems(text, { fromOcr: opts.extractionMethod === 'ocr' })
+    : [];
+
+  const header = opts.header;
+  if (items.length === 0 && header) {
     const amount = parseNumber(header.totalAmount || '');
     if (amount > 0) {
       const single = toItem({
@@ -628,6 +1289,8 @@ async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
         quantity: 1,
         unit: 'Pauschal',
         price: amount,
+        needsReview: true,
+        reviewWarnings: ['Єдина сума з заголовка PDF — розбийте позиції вручну'],
       });
       if (single) items = [single];
     }
@@ -635,23 +1298,72 @@ async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
 
   if (items.length === 0) {
     throw new Error(
-      'Could not read invoice lines from PDF. Use an Excel/CSV with columns, or a text PDF.',
+      opts.extractionMethod === 'ocr'
+        ? 'OCR не знайшов таблицю позицій. Краще імпортувати Excel/CSV кошторису.'
+        : 'Could not read invoice lines from PDF. Use an Excel/CSV with columns, or a text PDF.',
     );
   }
 
+  const document_type = detectDocumentType(file.name, [text.slice(0, 500)]);
   return {
-    client_name: header.company || undefined,
-    document_number: header.invoiceNumber || undefined,
-    date: header.invoiceDate || undefined,
-    currency: header.currency || 'EUR',
+    client_name: header?.company || undefined,
+    document_number: header?.invoiceNumber || undefined,
+    date: header?.invoiceDate || undefined,
+    currency: header?.currency || 'EUR',
     items,
     sourceFileName: file.name,
-    notes: `Imported from ${file.name}`,
+    document_type,
+    extractionMethod: opts.extractionMethod,
+    warnings: warnings.length ? warnings : undefined,
+    notes: `Imported from ${file.name}${opts.extractionMethod === 'ocr' ? ' (OCR)' : ''}`,
   };
+}
+
+async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
+  const header = await extractInvoiceDataFromPDF(file);
+  let text = await extractPdfText(file);
+  let method: 'pdf-text' | 'ocr' = 'pdf-text';
+
+  if (isSparseExtractedText(text)) {
+    if (canRunBrowserOcr()) {
+      try {
+        text = await extractEstimateTextViaOcr(file);
+        method = 'ocr';
+      } catch (err) {
+        console.warn('PDF OCR fallback failed', err);
+      }
+    } else if (!text.trim()) {
+      throw new Error(
+        'Цей PDF без текстового шару (скан). Відкрийте імпорт у браузері для OCR, або завантажте Excel/CSV.',
+      );
+    }
+  }
+
+  return buildDraftFromPlainText(file, text, {
+    extractionMethod: method,
+    header,
+  });
+}
+
+async function parseImageEstimate(file: File): Promise<ImportedInvoiceDraft> {
+  if (!canRunBrowserOcr()) {
+    throw new Error(
+      'Імпорт фото кошторису потребує OCR у браузері. На комп’ютері краще Excel/CSV.',
+    );
+  }
+  const text = await extractEstimateTextViaOcr(file);
+  return buildDraftFromPlainText(file, text, { extractionMethod: 'ocr' });
 }
 
 export function isInvoiceImportFile(file: File): boolean {
   const name = file.name.toLowerCase();
+  const isImage =
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg') ||
+    name.endsWith('.png') ||
+    name.endsWith('.webp') ||
+    (file.type || '').startsWith('image/');
+  // DOC/DOCX intentionally not accepted — no Word parser in this app
   return (
     name.endsWith('.xlsx') ||
     name.endsWith('.xls') ||
@@ -659,15 +1371,25 @@ export function isInvoiceImportFile(file: File): boolean {
     name.endsWith('.pdf') ||
     file.type === 'application/pdf' ||
     file.type.includes('sheet') ||
-    file.type === 'text/csv'
+    file.type === 'text/csv' ||
+    isImage
   );
 }
 
-/** Parse Excel/CSV/PDF into an editable invoice draft (sales invoice lines). */
+/** Parse Excel/CSV/PDF/image into an editable invoice draft (sales invoice lines). */
 export async function importInvoiceFromFile(file: File): Promise<ImportedInvoiceDraft> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
     return parsePdf(file);
+  }
+  if (
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg') ||
+    name.endsWith('.png') ||
+    name.endsWith('.webp') ||
+    (file.type || '').startsWith('image/')
+  ) {
+    return parseImageEstimate(file);
   }
   if (
     name.endsWith('.xlsx') ||
@@ -678,8 +1400,14 @@ export async function importInvoiceFromFile(file: File): Promise<ImportedInvoice
   ) {
     return parseSpreadsheet(file);
   }
-  throw new Error('Unsupported file type. Use Excel (.xlsx), CSV, or PDF.');
+  throw new Error(
+    'Unsupported file type. Use Excel (.xlsx/.xls), CSV, PDF, or image (JPG/PNG). Word DOC/DOCX is not supported.',
+  );
 }
+
+/** Re-export for callers that validate before save. */
+export { validateImportedDraft } from './invoiceImportValidate';
+export { isSparseExtractedText, canRunBrowserOcr } from './invoiceImportOcr';
 
 export function storeInvoiceImportDraft(draft: ImportedInvoiceDraft): void {
   sessionStorage.setItem(INVOICE_IMPORT_STORAGE_KEY, JSON.stringify(draft));
