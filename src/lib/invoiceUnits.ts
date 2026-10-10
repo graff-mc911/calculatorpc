@@ -35,6 +35,60 @@ export function normalizeInvoiceUnit(
   const s = compactUnitText(String(raw || ''));
   if (!s) return fallback;
 
+  // Exact matches (after compact) — ES / pack / flat-rate tokens
+  if (
+    s === 'ml' ||
+    s === 'ml.' ||
+    s === 'm.l.' ||
+    s === 'm.l' ||
+    s === 'metro lineal' ||
+    s === 'metros lineales'
+  ) {
+    return 'lm';
+  }
+  if (
+    s === 'ud' ||
+    s === 'ud.' ||
+    s === 'uds' ||
+    s === 'uds.' ||
+    s === 'unidad' ||
+    s === 'unidades' ||
+    s === 'u' ||
+    s === 'un' ||
+    s === 'pz' ||
+    s === 'pza' ||
+    s === 'pieza' ||
+    s === 'ea' ||
+    s === 'each' ||
+    s === 'saco' ||
+    s === 'caja' ||
+    s === 'rollo' ||
+    s === 'bote' ||
+    s === 'cartucho'
+  ) {
+    return 'pcs';
+  }
+  if (
+    s === 'global' ||
+    s === 'gl' ||
+    s === 'glob' ||
+    s === 'pa' ||
+    s === 'partida' ||
+    s === 'partida alzada' ||
+    s === 'lote' ||
+    s === 'servicio' ||
+    s === 'tarifa plana' ||
+    s === 'flat' ||
+    s === 'flat rate' ||
+    s === 'ryczalt' ||
+    s === 'ryczałt'
+  ) {
+    return 'Pauschal';
+  }
+  if (s === 'hora' || s === 'horas') {
+    return 'h';
+  }
+
   // Square meters (before bare "m" / "ml")
   if (
     /^(m2|м2|qm|sqm|sq\.?m|м\s*2|квадратн|metro\s*cuadrado|metros\s*cuadrados)$/i.test(s) ||
@@ -75,7 +129,8 @@ export function normalizeInvoiceUnit(
     return 'lm';
   }
 
-  if (/^(h|hr|hrs|std|stunde|год|години|hour|hora|horas)$/i.test(s)) {
+  // Full-match only — avoid any word starting with "h…" becoming hours
+  if (/^(h|hr|hrs|hours|std|stunde|год|години|hour|hora|horas)$/i.test(s)) {
     return s.includes('stunde') || s === 'std' ? 'Stunde' : 'h';
   }
 
@@ -102,6 +157,17 @@ export function normalizeInvoiceUnit(
   }
 
   return fallback;
+}
+
+/** Localize stored unit label for PDF (ES wordmarks; other languages unchanged). */
+export function formatUnitForPdf(unit: string, language: string): string {
+  if (language === 'es') {
+    if (unit === 'pcs') return 'ud';
+    if (unit === 'lm') return 'ml';
+    if (unit === 'Pauschal') return 'global';
+    if (unit === 'Stunde') return 'h';
+  }
+  return unit;
 }
 
 /** Pull quantity + unit from a single cell like "120 m2" / "15 ml" / "8,5 м²". */
