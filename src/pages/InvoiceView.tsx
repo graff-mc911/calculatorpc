@@ -702,25 +702,57 @@ export const InvoiceView: React.FC = () => {
         </div>
       </div>
 
-      <div className="invoice-preview-chrome no-print grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <div className="invoice-preview-chrome no-print grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3">
           <p className="text-white/40 text-xs mb-1">Сума інвойсу</p>
-          <p className="text-white font-semibold text-sm">
+          <p className="text-white font-semibold text-sm tabular-nums">
             {formatMoney(totalInvoiceAmount, statsCurrency)}
           </p>
         </div>
 
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3">
           <p className="text-white/40 text-xs mb-1">Витрати по інвойсу</p>
-          <p className="text-red-400 font-semibold text-sm">
+          <p className="text-red-400 font-semibold text-sm tabular-nums">
             {formatMoney(totalInvoiceExpenses, statsCurrency)}
           </p>
         </div>
 
         <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3">
           <p className="text-white/40 text-xs mb-1">Маржа / прибуток</p>
-          <p className={`font-semibold text-sm ${totalInvoiceProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`font-semibold text-sm tabular-nums ${totalInvoiceProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {formatMoney(totalInvoiceProfit, statsCurrency)}
+          </p>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3">
+          <p className="text-white/40 text-xs mb-1">Сплачено</p>
+          <p className="text-emerald-300 font-semibold text-sm tabular-nums">
+            {formatMoney(paidTotal, statsCurrency)}
+          </p>
+          <p className="text-white/35 text-[11px] mt-1">
+            {payments.length === 0
+              ? 'Платежів немає'
+              : payments.length === 1
+                ? '1 платіж'
+                : `${payments.length} платежі`}
+          </p>
+        </div>
+
+        <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3">
+          <p className="text-white/40 text-xs mb-1">Залишок боргу</p>
+          <p
+            className={`font-semibold text-sm tabular-nums ${
+              debtRemaining > 0.009 ? 'text-orange-300' : 'text-emerald-300'
+            }`}
+          >
+            {formatMoney(debtRemaining, statsCurrency)}
+          </p>
+          <p className="text-white/35 text-[11px] mt-1">
+            {debtRemaining > 0.009
+              ? payments.length > 0
+                ? 'Оплата частинами'
+                : 'Не оплачено'
+              : 'Оплачено повністю'}
           </p>
         </div>
       </div>
