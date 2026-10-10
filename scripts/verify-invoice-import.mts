@@ -217,6 +217,17 @@ if (xlsxPath) {
   const sum = draft.items.reduce((s, i) => s + i.total, 0);
   assert(draft.items.length === 21, `10 21 labor lines got ${draft.items.length}`);
   assert(Math.abs(sum - 3500) < 0.05, `10 sum 3500 got ${sum}`);
+  // Live bug fingerprint (main heuristic): title+Trabajo+21+Total → 24 rows / €16051.90
+  assert(draft.items.length !== 24, '10 not main scramble row count 24');
+  assert(Math.abs(sum - 16051.9) > 1, '10 not main scramble total 16051.90');
+  assert(
+    !(
+      Math.abs(Number(draft.items[0]?.quantity) - 1) < 0.001 &&
+      Math.abs(Number(draft.items[0]?.price) - 9.95) < 0.001 &&
+      Math.abs(parseFloat(String(draft.items[0]?.material || '0')) - 27) < 0.001
+    ),
+    '10 not Pos→qty / qty→price / price→material scramble',
+  );
   assert(
     /Mano de obra/i.test(draft.importedSheet || ''),
     '10 imported Mano de obra',
