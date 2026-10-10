@@ -798,7 +798,8 @@ export const InvoiceForm: React.FC = () => {
       currency: formData.currency,
       status,
       document_type: formData.document_type,
-      invoice_language: language || formData.invoice_language || 'en',
+      // Prefer document language from import/form over UI language (ES presupuesto → ES PDF)
+      invoice_language: formData.invoice_language || language || 'en',
       project_id: formData.project_id || null,
       object_address:
         formData.object_address ||

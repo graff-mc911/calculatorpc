@@ -556,6 +556,7 @@ const baseTranslations = {
   position: 'Pos.',
   designation: 'Designation',
   amountShort: 'Amount',
+  quantityShort: 'Qty',
   unitPrice: 'Unit Price',
   totalPrice: 'Total Price',
   paymentInfo: 'Payment Information',

@@ -85,8 +85,8 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
 }) => {
   const { language } = useLanguage();
   const logoUrl = data.company_logo_url;
-  // Labels follow the language selected in the app language list
-  const labelLang = language || data.invoice_language || 'en';
+  // Prefer stored invoice document language (e.g. es from Presupuesto import)
+  const labelLang = data.invoice_language || language || 'en';
 
   const tInvoice = (key: string) => {
     const langTranslations = translations[labelLang as keyof typeof translations];

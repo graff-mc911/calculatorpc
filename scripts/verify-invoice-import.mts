@@ -10,7 +10,13 @@ import {
   isSparseExtractedText,
   canRunBrowserOcr,
 } from '../src/lib/invoiceImportFromFile.ts';
-import { calculateLineTotal, roundMoney, toCents, fromCents } from '../src/lib/invoiceTotals.ts';
+import {
+  calculateLineTotal,
+  expandItemsForInvoiceTable,
+  roundMoney,
+  toCents,
+  fromCents,
+} from '../src/lib/invoiceTotals.ts';
 import {
   parseLocaleNumber,
   confirmedNumber,
@@ -27,6 +33,7 @@ import {
   canPersistImportedItems,
   unresolvedCriticalIndexes,
 } from '../src/lib/invoiceImportValidate.ts';
+import { translations } from '../src/lib/languages.ts';
 
 let failed = 0;
 let passed = 0;
@@ -197,6 +204,8 @@ assert(enDraft.items[1].unit === 'h', 'EN hours');
 // —— 10–13 Presupuesto: invoice = Mano de obra only (€3500), not +Materiales (€4900) ——
 const xlsxCandidates = [
   '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_5bc4.xlsx',
+  '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_48ef.xlsx',
+  '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_e5b7.xlsx',
   '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_dafd.xlsx',
 ];
 const xlsxPath = xlsxCandidates.find((p) => existsSync(p));
@@ -219,6 +228,22 @@ if (xlsxPath) {
   assert(
     (draft.warnings || []).some((w) => /Materiales/i.test(w)),
     '10 warning about skipped materials sheet',
+  );
+  assert(
+    draft.invoice_language === 'es',
+    `10 invoice_language es got ${draft.invoice_language}`,
+  );
+  assert(
+    !draft.items.some((i) => /Presupuesto de mano de obra/i.test(i.description)),
+    '10 title is not a line item',
+  );
+  assert(
+    !draft.items.some((i) => /^Total$/i.test(String(i.description || '').trim())),
+    '10 Total row is not a line item',
+  );
+  assert(
+    draft.items.every((i) => !parseFloat(String(i.material || '0'))),
+    '10 no material amounts on labor lines',
   );
 
   const draft2 = await importInvoiceFromFile(
@@ -245,6 +270,15 @@ if (xlsxPath) {
   const demo = draft.items.find((i) =>
     /Demolici[oó]n de tabique con hueco/i.test(i.description),
   );
+  const mlLine = draft.items.find(
+    (i) => i.unit === 'lm' || /^(ml|m\.?l\.?)$/i.test(String(i.originalUnitRaw || '')),
+  );
+  const globalLine = draft.items.find(
+    (i) =>
+      i.unit === 'Pauschal' ||
+      /global/i.test(String(i.originalUnitRaw || '')) ||
+      /global/i.test(String(i.unit || '')),
+  );
   assert(
     !!door && door.unit === 'pcs' && Math.abs(door.quantity - 1) < 0.001,
     'puerta 1 pcs',
@@ -253,11 +287,42 @@ if (xlsxPath) {
     !!demo && demo.unit === 'm²' && Math.abs(demo.quantity - 9.95) < 0.001,
     'demo 9.95 m²',
   );
+  assert(!!mlLine, 'has ml→lm running-meter line');
+  assert(
+    formatUnitForPdf(mlLine!.unit, 'es') === 'ml',
+    `pdf unit ml got ${formatUnitForPdf(mlLine!.unit, 'es')}`,
+  );
+  assert(formatUnitForPdf('pcs', 'es') === 'ud', 'pdf unit ud');
+  if (globalLine) {
+    assert(
+      formatUnitForPdf(globalLine.unit, 'es') === 'global' ||
+        /global/i.test(formatUnitForPdf(globalLine.unit, 'es')),
+      'pdf unit global',
+    );
+  }
 
   assert(
     !draft.items.some((i) => i.description === 'Матеріал' || /^Material$/i.test(i.description)),
     'no ghost Material rows',
   );
+
+  // Expand path used by PDF: 21 rows, no synthetic Material, total €3500
+  const expanded = expandItemsForInvoiceTable(draft.items, {
+    materialLabel: 'Material',
+    pauschalUnit: 'global',
+  });
+  assert(expanded.length === 21, `expand 21 rows got ${expanded.length}`);
+  assert(
+    !expanded.some((r) => r.is_material_row || /^Material$/i.test(r.description)),
+    'expand no Material ghost rows',
+  );
+  const expandSum = expanded.reduce((s, r) => s + (r.is_section ? 0 : r.total), 0);
+  assert(Math.abs(expandSum - 3500) < 0.05, `expand sum 3500 got ${expandSum}`);
+
+  // ES PDF column heading must use short label (avoid Cantidad wrap)
+  const esDict = translations.es as Record<string, string>;
+  assert(esDict.quantityShort === 'Cant.', 'es quantityShort Cant.');
+  assert((translations.en as Record<string, string>).quantityShort === 'Qty', 'en quantityShort');
 
   const v = validateImportedDraft(draft);
   assert(
@@ -273,7 +338,8 @@ if (xlsxPath) {
     '13 prior import snapshot unchanged',
   );
 } else {
-  console.warn('SKIP Presupuesto file tests');
+  console.error('FAIL: Presupuesto fixture missing — cannot verify critical import path');
+  failed += 1;
 }
 
 // UA CSV

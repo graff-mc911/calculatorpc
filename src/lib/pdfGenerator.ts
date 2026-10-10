@@ -61,7 +61,7 @@ function money(n: number): string {
 
 /**
  * DIN 5008 / German construction invoice PDF — mirrors InvoiceDocument layout.
- * Labels from translations[invoice_language] (callers should pass the app UI language).
+ * Labels from translations[invoice_language] (document language of the invoice).
  */
 export const generateInvoicePDF = async (
   invoice: InvoiceData,
@@ -78,7 +78,7 @@ export const generateInvoicePDF = async (
   const topMargin = 15;
   let y = topMargin;
 
-  // Callers pass the app UI language (language list) via invoice_language
+  // invoice_language is the document language (from import/form), not UI locale
   const lang = (invoice.invoice_language || 'en') as keyof typeof translations;
   const dict = translations[lang] || translations.en;
   const t = (key: string): string =>
