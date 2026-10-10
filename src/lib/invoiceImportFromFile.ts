@@ -223,23 +223,42 @@ function matchCol(header: string): ColKey | null {
 }
 
 /** Parse locale numbers: 3,500.00 | 3.500,00 | 3500 | 9.95 */
+/** Parse a numeric cell. Never extracts digits from text that contains letters. */
 export function parseNumber(raw: unknown): number {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? raw : 0;
+  }
   let s = String(raw ?? '')
     .trim()
-    .replace(/[€$£\s\u00a0]/g, '')
-    .replace(/[^\d,.\-]/g, '');
+    .replace(/[€$£\s\u00a0]/g, '');
+  if (!s) return 0;
+  // Any letter → not a number (do not strip letters to salvage digits)
+  if (/\p{L}/u.test(s)) return 0;
+  // Keep only digits, separators, and leading minus
+  s = s.replace(/[^\d,.\-]/g, '');
   if (!s || s === '-' || s === '.' || s === ',') return 0;
+
   if (s.includes(',') && s.includes('.')) {
+    // Decimal separator is the one that appears last
     if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
       s = s.replace(/\./g, '').replace(',', '.');
     } else {
       s = s.replace(/,/g, '');
     }
   } else if (s.includes(',')) {
-    const parts = s.split(',');
-    s = parts[parts.length - 1].length <= 2 ? s.replace(',', '.') : s.replace(/,/g, '');
+    // Thousands: 1,234 or 1,234,567 — otherwise decimal
+    if (/^\d{1,3}(,\d{3})+$/.test(s)) {
+      s = s.replace(/,/g, '');
+    } else {
+      s = s.replace(',', '.');
+    }
+  } else if (s.includes('.')) {
+    // Two or more thousand-group dots: 1.234.567 — otherwise decimal
+    if (/^\d{1,3}(\.\d{3}){2,}$/.test(s)) {
+      s = s.replace(/\./g, '');
+    }
   }
+
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 }
