@@ -57,12 +57,6 @@ type ExpenseDocumentRow = {
   expense_category?: string | null;
 };
 
-const formatPaymentDate = (paidAt: string | null | undefined) => {
-  if (!paidAt) return '—';
-  const iso = paidAt.length === 10 ? `${paidAt}T12:00:00` : paidAt;
-  return new Date(iso).toLocaleDateString('uk-UA');
-};
-
 const formatMoney = (amount: number, currency = 'EUR') => {
   return `${amount.toLocaleString('de-DE', {
     minimumFractionDigits: 2,
@@ -601,7 +595,7 @@ export const InvoiceView: React.FC = () => {
         </div>
 
         {/* Primary mobile actions — Share stays one tap via Web Share API */}
-        <div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 mb-3">
           <button
             type="button"
             onClick={() => void handleDownloadPdf()}
@@ -631,33 +625,6 @@ export const InvoiceView: React.FC = () => {
           >
             <Share2 size={18} />
             Share
-          </button>
-          <button
-            type="button"
-            onClick={openPayModal}
-            disabled={markingPaid || debtRemaining <= 0.009}
-            className="min-h-[52px] flex flex-col items-center justify-center gap-1 text-[11px] font-medium disabled:opacity-50"
-            style={{
-              background:
-                debtRemaining <= 0.009
-                  ? 'rgba(120,180,130,0.18)'
-                  : 'var(--cpc-card)',
-              border: '1px solid var(--cpc-line)',
-              borderRadius: 12,
-              color: debtRemaining <= 0.009 ? '#9fd4a8' : 'var(--cpc-text)',
-            }}
-          >
-            <CheckCircle
-              size={18}
-              style={{
-                color: debtRemaining <= 0.009 ? '#9fd4a8' : 'var(--cpc-copper-light)',
-              }}
-            />
-            {debtRemaining <= 0.009
-              ? 'Paid'
-              : payments.length > 0
-                ? 'Додати оплату'
-                : 'Mark as Paid'}
           </button>
         </div>
 
@@ -691,6 +658,24 @@ export const InvoiceView: React.FC = () => {
           >
             <Send size={16} className="mr-2" />
             {t('sendToClient') || t('sendInvoice') || 'Send to client'}
+          </Button>
+
+          <Button
+            type="button"
+            onClick={openPayModal}
+            disabled={markingPaid || debtRemaining <= 0.009}
+            className={
+              debtRemaining <= 0.009
+                ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-60'
+                : 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30'
+            }
+          >
+            <CheckCircle size={16} className="mr-2" />
+            {debtRemaining <= 0.009
+              ? 'Paid'
+              : payments.length > 0
+                ? 'Додати оплату'
+                : 'Mark as Paid'}
           </Button>
 
           {!invoice.signature_data_url && (
@@ -854,95 +839,6 @@ export const InvoiceView: React.FC = () => {
           </div>
         </div>
       )}
-
-      <div className="invoice-preview-chrome no-print bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mt-6">
-        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Banknote className="h-5 w-5 text-emerald-400" />
-            <h3 className="text-lg font-semibold text-white">
-              Платежі{payments.length > 0 ? ` (${payments.length})` : ''}
-            </h3>
-          </div>
-          {debtRemaining > 0.009 && (
-            <button
-              type="button"
-              onClick={openPayModal}
-              disabled={markingPaid}
-              className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 px-4 py-2 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
-            >
-              {payments.length > 0 ? 'Додати оплату' : 'Mark as Paid'}
-            </button>
-          )}
-        </div>
-
-        {payments.length > 0 ? (
-          <div className="space-y-2">
-            {payments.map((payment, index) => (
-              <div
-                key={payment.id}
-                className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-white/50 text-xs mb-0.5">
-                    Платіж {index + 1}
-                  </p>
-                  <p className="text-white/70 text-sm">
-                    {formatPaymentDate(payment.paid_at)}
-                  </p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="font-semibold text-emerald-300 tabular-nums">
-                    {formatMoney(Number(payment.amount) || 0, payment.currency || statsCurrency)}
-                  </p>
-                </div>
-              </div>
-            ))}
-
-            <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-white/60">Загальна сума інвойсу</span>
-                <span className="text-white font-medium tabular-nums">
-                  {formatMoney(totalInvoiceAmount, statsCurrency)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-white/60">Сплачено</span>
-                <span className="text-emerald-300 font-medium tabular-nums">
-                  {formatMoney(paidTotal, statsCurrency)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-white/60">Залишок боргу</span>
-                <span
-                  className={`font-semibold tabular-nums ${
-                    debtRemaining > 0.009 ? 'text-orange-300' : 'text-emerald-300'
-                  }`}
-                >
-                  {formatMoney(debtRemaining, statsCurrency)}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="border border-dashed border-white/20 rounded-xl p-6 text-center">
-            <Banknote className="mx-auto text-white/35 mb-3" size={28} />
-            <p className="text-white/55 text-sm mb-1">Платежів ще немає</p>
-            <p className="text-white/35 text-xs mb-4">
-              Залишок: {formatMoney(debtRemaining, statsCurrency)}
-            </p>
-            {debtRemaining > 0.009 && (
-              <button
-                type="button"
-                onClick={openPayModal}
-                disabled={markingPaid}
-                className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 px-4 py-2.5 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
-              >
-                Mark as Paid
-              </button>
-            )}
-          </div>
-        )}
-      </div>
 
       {showSignatureModal && (
         <SignatureCanvas
