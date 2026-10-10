@@ -81,6 +81,22 @@ export const QuickActionsBar: React.FC<{
       navigate(`/invoices/new?project_id=${projectId}&from_project=1`);
       return;
     }
+    // Already on this project and page registered a local handler — use it (no remount)
+    const onPath = projectIdFromPath(pathname) === projectId;
+    if (onPath) {
+      if (action === 'work' && handlers?.onWork) {
+        handlers.onWork();
+        return;
+      }
+      if (action === 'expense' && handlers?.onExpense) {
+        handlers.onExpense();
+        return;
+      }
+      if (action === 'prepayment' && handlers?.onAdvance) {
+        handlers.onAdvance();
+        return;
+      }
+    }
     navigate(`/projects/${projectId}?add=${action}`);
   };
 
@@ -102,12 +118,22 @@ export const QuickActionsBar: React.FC<{
     return list.slice(0, 8);
   }, [projects]);
 
+  const openWorkFallback = () => {
+    const pid = resolveProjectId();
+    if (pid) {
+      goWithProject(pid, 'work');
+      return;
+    }
+    setPendingAction('work');
+    setOpen(true);
+  };
+
   const items = [
     {
       key: 'work',
       label: t('qaWork') === 'qaWork' ? '+ Робота' : t('qaWork'),
       copper: true,
-      onClick: handlers?.onWork ?? (() => navigate('/projects')),
+      onClick: handlers?.onWork ?? openWorkFallback,
     },
     {
       key: 'expense',

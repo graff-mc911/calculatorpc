@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
+import { useQuickActionHandlers } from '../components/QuickActionsContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
@@ -216,11 +217,27 @@ export default function ProjectDetail() {
     setSheet('work');
   };
 
+  // In-page quick actions: open sheets locally (no ?add= remount that wipes the form)
+  useQuickActionHandlers({
+    onWork: () => openAddWork(),
+    onExpense: () => setSheet('expense'),
+    onAdvance: () => setSheet('prepayment'),
+    onPdf: () => setSheet('pdf'),
+  });
+
   // Deep-link from global + FAB: /projects/:id?add=work|expense|prepayment
+  // Consume each ?add= once — avoid re-running openAddWork and wiping template picks.
+  const consumedAddRef = useRef<string | null>(null);
   useEffect(() => {
     if (!id || !bundle) return;
     const add = searchParams.get('add');
-    if (!add) return;
+    if (!add) {
+      consumedAddRef.current = null;
+      return;
+    }
+    const token = `${id}:${add}`;
+    if (consumedAddRef.current === token) return;
+    consumedAddRef.current = token;
     if (add === 'work') openAddWork();
     else if (add === 'expense') setSheet('expense');
     else if (add === 'prepayment') setSheet('prepayment');
@@ -243,41 +260,69 @@ export default function ProjectDetail() {
   };
 
   const saveWorkMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (mode: 'close' | 'continue' = 'close') => {
       const qty = parseMoneyInput(workQty);
       const price = parseMoneyInput(workPrice);
-      if (!workTitle.trim() || !Number.isFinite(qty) || qty < 0 || !Number.isFinite(price)) {
-        throw new Error('INVALID');
-      }
+      if (!workTitle.trim()) throw new Error('NO_TITLE');
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error('NO_QTY');
+      if (!Number.isFinite(price) || price < 0) throw new Error('NO_PRICE');
       if (editingWorkId) {
-        return updateWorkItem(editingWorkId, {
+        const updated = await updateWorkItem(editingWorkId, {
           title: workTitle.trim(),
           category: workCategory,
           group_key: workGroup,
           quantity: qty,
-          unit: workUnit,
+          unit: workUnit || 'm2',
           unit_price: price,
         });
+        return { item: updated, mode, edited: true as const };
       }
-      return addWorkItem({
+      const created = await addWorkItem({
         project_id: id,
         title: workTitle.trim(),
         category: workCategory,
         catalog_work_id: templateId || null,
         group_key: workGroup,
         quantity: qty,
-        unit: workUnit,
+        unit: workUnit || 'm2',
         unit_price: price,
         sort_order: bundle?.workItems.length || 0,
       });
+      return { item: created, mode, edited: false as const };
     },
-    onSuccess: () => {
-      showSuccess(editingWorkId ? t('saved') || 'Saved' : t('projectWorkAdded') || 'Work added');
+    onSuccess: ({ mode, edited }) => {
+      showSuccess(
+        edited
+          ? t('saved') || 'Збережено'
+          : t('projectWorkAdded') || 'Роботу додано',
+      );
+      invalidate();
+      if (mode === 'continue' && !edited) {
+        // Keep sheet open for the next pick; clear fields for a new line
+        resetWorkForm();
+        setSheet('work');
+        return;
+      }
       setSheet(null);
       resetWorkForm();
-      invalidate();
     },
-    onError: onSchemaErr,
+    onError: (err) => {
+      if (err instanceof Error) {
+        if (err.message === 'NO_TITLE') {
+          showError('Вкажіть назву роботи або оберіть шаблон');
+          return;
+        }
+        if (err.message === 'NO_QTY') {
+          showError('Кількість має бути більше 0');
+          return;
+        }
+        if (err.message === 'NO_PRICE') {
+          showError('Вкажіть ціну за одиницю');
+          return;
+        }
+      }
+      onSchemaErr(err);
+    },
   });
 
   const addExpMut = useMutation({
@@ -423,15 +468,23 @@ export default function ProjectDetail() {
   });
 
   const applyTemplate = (catalogId: string, cat?: WorkCategory) => {
-    setTemplateId(catalogId);
     const work = CATALOG_WORKS.find((w) => w.id === catalogId);
-    if (!work) return;
-    if (cat) setWorkCategory(cat);
-    else setWorkCategory(work.category as WorkCategory);
+    if (!work) {
+      showError('Шаблон не знайдено');
+      return;
+    }
+    const nextCat = (cat || work.category) as WorkCategory;
+    setTemplateId(catalogId);
+    setEditingWorkId(null);
+    setWorkCategory(nextCat);
+    setExpandedCats((s) => ({ ...s, [nextCat]: true }));
     setWorkTitle(localizedWorkName(work, language));
-    setWorkUnit(work.unit);
-    const labor = work.labor[priceCountry];
-    if (labor) setWorkPrice(formatMoneyInput(labor.price, 2));
+    setWorkUnit(work.unit || 'm2');
+    if (!workQty.trim() || parseMoneyInput(workQty) <= 0) setWorkQty('1');
+    const labor = work.labor[priceCountry] || work.labor.ES || work.labor.DE || work.labor.UA;
+    if (labor && Number.isFinite(labor.price)) {
+      setWorkPrice(formatMoneyInput(labor.price, 2));
+    }
   };
 
   const duplicateWork = async (item: ProjectWorkItem) => {
@@ -1161,14 +1214,33 @@ export default function ProjectDetail() {
                       currencyHint={currencySymbol}
                     />
                   </div>
+                  {!workTitle.trim() && (
+                    <p className="cpc-muted text-[11px]">
+                      Оберіть шаблон вище або впишіть назву вручну
+                    </p>
+                  )}
                   <Button
                     className="w-full min-h-[48px]"
                     style={{ background: 'var(--cpc-copper)', color: 'var(--cpc-on-copper)' }}
                     disabled={saveWorkMut.isPending}
-                    onClick={() => saveWorkMut.mutate()}
+                    onClick={() => saveWorkMut.mutate('close')}
                   >
-                    {t('save') || 'Зберегти'}
+                    {saveWorkMut.isPending
+                      ? t('saving') || 'Збереження…'
+                      : editingWorkId
+                        ? t('save') || 'Зберегти'
+                        : 'Додати до списку'}
                   </Button>
+                  {!editingWorkId && (
+                    <Button
+                      className="w-full min-h-[48px]"
+                      style={{ background: 'var(--cpc-bg)', color: 'var(--cpc-text)' }}
+                      disabled={saveWorkMut.isPending}
+                      onClick={() => saveWorkMut.mutate('continue')}
+                    >
+                      Додати і ще одну
+                    </Button>
+                  )}
                 </div>
               )}
 

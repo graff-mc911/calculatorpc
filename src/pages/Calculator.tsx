@@ -486,12 +486,17 @@ export default function Calculator() {
   };
 
   const applyTemplate = (tpl: CalcTemplate) => {
+    setEditingLocalId(null);
     setDraftTitle(tpl.title);
     setDraftUnit(displayUnit(tpl.unit));
     setDraftPrice(tpl.price);
     setPriceDraftText(formatPrice(tpl.price));
     setDraftCatalogId(tpl.catalogWorkId || null);
     setDraftCategory(tpl.category || 'other');
+    if (draftQty <= 0) {
+      setDraftQty(1);
+      setQtyDraft(formatQty(1));
+    }
     setSheet(null);
   };
 
