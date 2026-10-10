@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  Upload,
-  FileText,
   Download,
-  Trash2,
   PenTool,
   Send,
   Mail,
@@ -14,12 +11,13 @@ import {
   Edit2,
   Eye,
   Receipt,
-  ScanLine,
   Share2,
   Printer,
   Link2,
   Copy,
   CheckCircle,
+  X,
+  Banknote,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { InvoicePreview } from '../components/InvoicePreview';
@@ -27,28 +25,23 @@ import { SignatureCanvas } from '../components/SignatureCanvas';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
-import { AnimatePresence } from 'framer-motion';
-import ReceiptScanReview from '../components/ReceiptScanReview';
-import { ScannedReceiptData } from '../lib/receiptOCR';
 import { calculateLineTotal } from '../lib/invoiceTotals';
 import { downloadPdfFiles, fetchPdfBlob, shareOrDownloadPdf } from '../lib/shareInvoice';
 import { generateInvoicePDFBlob } from '../lib/pdfGenerator';
-import { invoiceDocumentLabel, invoicePdfFileName } from '../lib/languages';
+import { currencies, invoiceDocumentLabel, invoicePdfFileName } from '../lib/languages';
 import {
   buildCompanyFromInvoice,
   resolveCompanyLogoUrl,
   resolveCompanySignatureUrl,
 } from '../lib/companyProfile';
-
-type InvoiceAttachment = {
-  id: string;
-  invoice_id: string;
-  user_id: string;
-  file_name: string | null;
-  file_url: string;
-  file_type: string | null;
-  created_at: string | null;
-};
+import { maskMoneyTyping, parseMoneyInput } from '../lib/moneyMask';
+import {
+  addInvoicePayment,
+  listInvoicePayments,
+  remainingBalance,
+  sumPayments,
+  type InvoicePayment,
+} from '../lib/invoicePayments';
 
 type ExpenseDocumentRow = {
   id: string;
@@ -64,19 +57,10 @@ type ExpenseDocumentRow = {
   expense_category?: string | null;
 };
 
-const sanitizeFileName = (fileName: string) => {
-  const lastDotIndex = fileName.lastIndexOf('.');
-  const baseName = lastDotIndex > 0 ? fileName.slice(0, lastDotIndex) : fileName;
-  const extension = lastDotIndex > 0 ? fileName.slice(lastDotIndex + 1).toLowerCase() : 'bin';
-
-  const safeBaseName = baseName
-    .normalize('NFKD')
-    .replace(/[^\w.-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80);
-
-  return `${safeBaseName || 'file'}.${extension}`;
+const formatPaymentDate = (paidAt: string | null | undefined) => {
+  if (!paidAt) return '—';
+  const iso = paidAt.length === 10 ? `${paidAt}T12:00:00` : paidAt;
+  return new Date(iso).toLocaleDateString('uk-UA');
 };
 
 const formatMoney = (amount: number, currency = 'EUR') => {
@@ -97,9 +81,6 @@ export const InvoiceView: React.FC = () => {
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [attachments, setAttachments] = useState<InvoiceAttachment[]>([]);
-  const [uploadingFile, setUploadingFile] = useState(false);
-
   const [invoiceExpenses, setInvoiceExpenses] = useState<ExpenseDocumentRow[]>([]);
 
   const [showSignatureModal, setShowSignatureModal] = useState(false);
@@ -111,14 +92,17 @@ export const InvoiceView: React.FC = () => {
   const [markingPaid, setMarkingPaid] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
+  const [payments, setPayments] = useState<InvoicePayment[]>([]);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payMode, setPayMode] = useState<'full' | 'partial' | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payCurrency, setPayCurrency] = useState('EUR');
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showFullScreenPDF, setShowFullScreenPDF] = useState(false);
   const [pdfZoom, setPdfZoom] = useState(100);
   const [sharing, setSharing] = useState(false);
-
-  const attachInputRef = useRef<HTMLInputElement>(null);
-  const scanInputRef = useRef<HTMLInputElement>(null);
-  const [scanFile, setScanFile] = useState<File | null>(null);
 
   const isMobile = window.innerWidth < 768;
 
@@ -207,18 +191,12 @@ export const InvoiceView: React.FC = () => {
 
       setInvoice(invoiceWithItems);
 
-      const { data: attachmentsData, error: attachmentsError } = await supabase
-        .from('invoice_attachments')
-        .select('*')
-        .eq('invoice_id', id)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (attachmentsError) {
-        console.error('Помилка завантаження вкладень:', attachmentsError);
-        setAttachments([]);
-      } else {
-        setAttachments((attachmentsData || []) as InvoiceAttachment[]);
+      try {
+        const rows = await listInvoicePayments(id);
+        setPayments(rows);
+      } catch (payErr) {
+        console.warn('Invoice payments load failed', payErr);
+        setPayments([]);
       }
 
       const { data: expensesData, error: expensesError } = await supabase
@@ -284,191 +262,6 @@ export const InvoiceView: React.FC = () => {
       void fetchInvoice();
     }
   }, [id, fetchInvoice]);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!id) {
-      showError('Не знайдено ID інвойсу');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      showError(t('fileSizeLimit10mb') || 'Файл має бути менше 10 МБ');
-      return;
-    }
-
-    setUploadingFile(true);
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        throw new Error('Користувач не авторизований');
-      }
-
-      const safeFileName = sanitizeFileName(file.name);
-      const filePath = `${user.id}/attachments/${id}-${Date.now()}-${safeFileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('invoice-pdfs')
-        .upload(filePath, file, {
-          upsert: false,
-          contentType: file.type || undefined,
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('invoice-pdfs').getPublicUrl(filePath);
-
-      if (!publicUrl) {
-        throw new Error('Не вдалося отримати URL файлу');
-      }
-
-      const { error: insertError } = await supabase
-        .from('invoice_attachments')
-        .insert([
-          {
-            invoice_id: id,
-            user_id: user.id,
-            file_name: file.name,
-            file_url: publicUrl,
-            file_type: file.type || null,
-          },
-        ]);
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      showSuccess(t('fileUploaded') || 'Файл завантажено');
-      await fetchInvoice();
-    } catch (error: any) {
-      console.error('File upload error:', error);
-      showError(error?.message || t('failedUploadFile') || 'Не вдалося завантажити файл');
-    } finally {
-      setUploadingFile(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleScanFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 20 * 1024 * 1024) {
-      showError(t('fileTooLarge') || 'File too large (max 20 MB)');
-      e.target.value = '';
-      return;
-    }
-
-    setScanFile(file);
-    e.target.value = '';
-  };
-
-  const handleScanConfirm = async (data: ScannedReceiptData, fileUrl: string) => {
-    try {
-      setScanFile(null);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        throw new Error('Користувач не авторизований');
-      }
-
-      if (!id) {
-        throw new Error('Не знайдено ID інвойсу');
-      }
-
-      const amount = Number(data.total || 0);
-      const amountNet = Number(data.amount_net || amount);
-      const vatAmount = Number(data.vat_amount || 0);
-      const vatRate = Number((data as any).vat_rate || 0);
-
-      const { error } = await supabase.from('expense_documents').insert({
-        user_id: user.id,
-        client_id: client?.id || invoice?.client_id || null,
-        invoice_id: id,
-        vendor_name: data.store_name || 'Receipt',
-        document_number: data.receipt_number || null,
-        document_date: data.date || new Date().toISOString().split('T')[0],
-        total_amount: amount,
-        amount_net: amountNet,
-        vat_amount: vatAmount,
-        vat_rate: vatRate,
-        currency: 'EUR',
-        payment_method: data.payment_method || 'cash',
-        document_type: 'receipt',
-        expense_category: 'materials',
-        original_file_url: fileUrl,
-        notes: data.items || null,
-      });
-
-      if (error) {
-        console.error('EXPENSE SAVE ERROR:', error);
-        throw error;
-      }
-
-      showSuccess('Чек додано як витрату');
-      await fetchInvoice();
-    } catch (err: any) {
-      console.error('SCAN ERROR:', err);
-      showError(err?.message || 'Помилка OCR');
-    }
-  };
-
-  const handleAttachmentDelete = async (attachment: InvoiceAttachment) => {
-    if (!attachment?.file_url || !attachment?.id) return;
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        throw new Error('Користувач не авторизований');
-      }
-
-      const url = new URL(attachment.file_url);
-      const pathParts = url.pathname.split('/storage/v1/object/public/invoice-pdfs/');
-      const filePath = pathParts[1];
-
-      if (filePath) {
-        const { error: deleteStorageError } = await supabase.storage
-          .from('invoice-pdfs')
-          .remove([filePath]);
-
-        if (deleteStorageError) {
-          throw deleteStorageError;
-        }
-      }
-
-      const { error: deleteDbError } = await supabase
-        .from('invoice_attachments')
-        .delete()
-        .eq('id', attachment.id)
-        .eq('user_id', user.id);
-
-      if (deleteDbError) {
-        throw deleteDbError;
-      }
-
-      showSuccess(t('fileDeleted') || 'Файл видалено');
-      await fetchInvoice();
-    } catch (error: any) {
-      console.error('File delete error:', error);
-      showError(error?.message || t('failedDeleteFile') || 'Не вдалося видалити файл');
-    }
-  };
 
   const handleSaveSignature = async (signatureDataUrl: string, signerName: string) => {
     try {
@@ -648,15 +441,75 @@ export const InvoiceView: React.FC = () => {
     }
   };
 
-  const handleMarkAsPaid = async () => {
-    if (!invoice || invoice.status === 'paid') return;
+  const openPayModal = () => {
+    if (!invoice) return;
+    const invCurrency = invoice.currency || 'EUR';
+    const total = Number(invoice.gross_total || invoice.total_gross || invoice.uploaded_amount || 0);
+    const paid = sumPayments(payments);
+    const due = remainingBalance(total, paid);
+    setPayMode(null);
+    setPayCurrency(invCurrency);
+    setPayDate(new Date().toISOString().slice(0, 10));
+    setPayAmount(due > 0 ? String(due).replace('.', ',') : '');
+    setPayModalOpen(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!invoice?.id || !payMode) return;
+    const total = Number(invoice.gross_total || invoice.total_gross || invoice.uploaded_amount || 0);
+    const paidSoFar = sumPayments(payments);
+    const due = remainingBalance(total, paidSoFar);
+
+    let amount = 0;
+    if (payMode === 'full') {
+      amount = due > 0 ? due : total;
+    } else {
+      amount = parseMoneyInput(payAmount);
+      if (!(amount > 0)) {
+        showError('Вкажіть суму оплати');
+        return;
+      }
+      if (due > 0 && amount > due + 0.009) {
+        showError(`Сума більша за залишок (${formatMoney(due, payCurrency)})`);
+        return;
+      }
+    }
+    if (!(amount > 0)) {
+      showError('Немає суми до оплати');
+      return;
+    }
+
     setMarkingPaid(true);
     try {
-      await markInvoiceStatus('paid');
-      showSuccess(t('paid') || 'Paid');
+      const row = await addInvoicePayment({
+        invoice_id: invoice.id,
+        amount,
+        currency: payCurrency || invoice.currency || 'EUR',
+        paid_at: payDate || new Date().toISOString().slice(0, 10),
+        note: payMode === 'full' ? 'full' : 'partial',
+      });
+      const nextPayments = [...payments, row];
+      setPayments(nextPayments);
+      const paidTotal = sumPayments(nextPayments);
+      const rem = remainingBalance(total, paidTotal);
+      if (rem <= 0.009) {
+        await markInvoiceStatus('paid');
+        showSuccess(t('paid') || 'Оплачено повністю');
+      } else {
+        if (invoice.status === 'draft' || !invoice.status) {
+          try {
+            await markInvoiceStatus('sent');
+          } catch {
+            /* ignore */
+          }
+        }
+        showSuccess(`Оплату записано. Залишок: ${formatMoney(rem, payCurrency)}`);
+      }
+      setPayModalOpen(false);
+      setPayMode(null);
     } catch (error: any) {
       console.error('Mark paid error:', error);
-      showError(error?.message || t('error') || 'Could not update status');
+      showError(error?.message || t('error') || 'Не вдалося зберегти оплату');
     } finally {
       setMarkingPaid(false);
     }
@@ -690,6 +543,8 @@ export const InvoiceView: React.FC = () => {
   }, [invoiceExpenses]);
   const totalInvoiceProfit = totalInvoiceAmount - totalInvoiceExpenses;
   const statsCurrency = invoice?.currency || invoiceExpenses[0]?.currency || 'EUR';
+  const paidTotal = sumPayments(payments);
+  const debtRemaining = remainingBalance(totalInvoiceAmount, paidTotal);
 
   if (isLoading) {
     return (
@@ -779,26 +634,30 @@ export const InvoiceView: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => void handleMarkAsPaid()}
-            disabled={markingPaid || invoice.status === 'paid'}
+            onClick={openPayModal}
+            disabled={markingPaid || debtRemaining <= 0.009}
             className="min-h-[52px] flex flex-col items-center justify-center gap-1 text-[11px] font-medium disabled:opacity-50"
             style={{
               background:
-                invoice.status === 'paid'
+                debtRemaining <= 0.009
                   ? 'rgba(120,180,130,0.18)'
                   : 'var(--cpc-card)',
               border: '1px solid var(--cpc-line)',
               borderRadius: 12,
-              color: invoice.status === 'paid' ? '#9fd4a8' : 'var(--cpc-text)',
+              color: debtRemaining <= 0.009 ? '#9fd4a8' : 'var(--cpc-text)',
             }}
           >
             <CheckCircle
               size={18}
               style={{
-                color: invoice.status === 'paid' ? '#9fd4a8' : 'var(--cpc-copper-light)',
+                color: debtRemaining <= 0.009 ? '#9fd4a8' : 'var(--cpc-copper-light)',
               }}
             />
-            {invoice.status === 'paid' ? 'Paid' : 'Mark as Paid'}
+            {debtRemaining <= 0.009
+              ? 'Paid'
+              : payments.length > 0
+                ? 'Додати оплату'
+                : 'Mark as Paid'}
           </button>
         </div>
 
@@ -998,130 +857,89 @@ export const InvoiceView: React.FC = () => {
 
       <div className="invoice-preview-chrome no-print bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 mt-6">
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <h3 className="text-lg font-semibold text-white">
-            {t('attachedFile') || 'Прикріплені файли'}
-          </h3>
-
-          <div className="flex gap-2 flex-wrap">
-            <label className="inline-block">
-              <input
-                ref={attachInputRef}
-                type="file"
-                onChange={handleFileUpload}
-                disabled={uploadingFile}
-                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                className="hidden"
-                capture="environment"
-              />
-              <span className="bg-white/10 backdrop-blur-xl border border-white/10 text-orange-500 hover:bg-white/20 px-4 py-2.5 rounded-xl font-medium cursor-pointer transition-all inline-block">
-                {uploadingFile ? (t('uploading') || 'Uploading...') : t('addFile')}
-              </span>
-            </label>
-
-            <label className="inline-block">
-              <input
-                ref={scanInputRef}
-                type="file"
-                onChange={handleScanFileSelect}
-                accept="image/*,application/pdf"
-                className="hidden"
-                capture="environment"
-              />
-              <span className="bg-teal-500/15 border border-teal-500/30 text-teal-400 hover:bg-teal-500/25 px-4 py-2.5 rounded-xl font-medium cursor-pointer transition-all inline-flex items-center gap-2">
-                <ScanLine size={16} />
-                {t('scanReceiptTitle')}
-              </span>
-            </label>
+          <div className="flex items-center gap-2">
+            <Banknote className="h-5 w-5 text-emerald-400" />
+            <h3 className="text-lg font-semibold text-white">
+              Платежі{payments.length > 0 ? ` (${payments.length})` : ''}
+            </h3>
           </div>
+          {debtRemaining > 0.009 && (
+            <button
+              type="button"
+              onClick={openPayModal}
+              disabled={markingPaid}
+              className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 px-4 py-2 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+            >
+              {payments.length > 0 ? 'Додати оплату' : 'Mark as Paid'}
+            </button>
+          )}
         </div>
 
-        {attachments.length > 0 ? (
-          <div className="space-y-3">
-            {attachments.map((attachment) => (
+        {payments.length > 0 ? (
+          <div className="space-y-2">
+            {payments.map((payment, index) => (
               <div
-                key={attachment.id}
-                className="flex items-center justify-between gap-3 bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-all cursor-pointer"
-                onClick={() => window.open(attachment.file_url, '_blank')}
+                key={payment.id}
+                className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-4 py-3"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="text-orange-400 flex-shrink-0" size={24} />
-                  <div className="min-w-0">
-                    <p className="text-white font-medium break-words">
-                      {attachment.file_name || t('file')}
-                    </p>
-                    <p className="text-white/60 text-sm break-words">
-                      {attachment.file_type || 'file'}
-                    </p>
-                  </div>
+                <div className="min-w-0">
+                  <p className="text-white/50 text-xs mb-0.5">
+                    Платіж {index + 1}
+                  </p>
+                  <p className="text-white/70 text-sm">
+                    {formatPaymentDate(payment.paid_at)}
+                  </p>
                 </div>
-
-                <div className="flex gap-2 flex-shrink-0">
-                  <a
-                    href={attachment.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-blue-400 transition-all"
-                    title="Відкрити оригінал"
-                  >
-                    <Download size={20} />
-                  </a>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleAttachmentDelete(attachment);
-                    }}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-red-400 transition-all"
-                    title="Видалити"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                <div className="text-right flex-shrink-0">
+                  <p className="font-semibold text-emerald-300 tabular-nums">
+                    {formatMoney(Number(payment.amount) || 0, payment.currency || statsCurrency)}
+                  </p>
                 </div>
               </div>
             ))}
+
+            <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-white/60">Загальна сума інвойсу</span>
+                <span className="text-white font-medium tabular-nums">
+                  {formatMoney(totalInvoiceAmount, statsCurrency)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-white/60">Сплачено</span>
+                <span className="text-emerald-300 font-medium tabular-nums">
+                  {formatMoney(paidTotal, statsCurrency)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-white/60">Залишок боргу</span>
+                <span
+                  className={`font-semibold tabular-nums ${
+                    debtRemaining > 0.009 ? 'text-orange-300' : 'text-emerald-300'
+                  }`}
+                >
+                  {formatMoney(debtRemaining, statsCurrency)}
+                </span>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="border-2 border-dashed border-white/20 rounded-xl p-8 text-center">
-            <Upload className="mx-auto text-white/40 mb-3" size={32} />
-            <p className="text-white/60 mb-4">
-              Додайте файл або одразу розпізнайте чек
+          <div className="border border-dashed border-white/20 rounded-xl p-6 text-center">
+            <Banknote className="mx-auto text-white/35 mb-3" size={28} />
+            <p className="text-white/55 text-sm mb-1">Платежів ще немає</p>
+            <p className="text-white/35 text-xs mb-4">
+              Залишок: {formatMoney(debtRemaining, statsCurrency)}
             </p>
-
-            <div className="flex gap-2 justify-center flex-wrap">
-              <label className="inline-block">
-                <input
-                  type="file"
-                  onChange={handleFileUpload}
-                  disabled={uploadingFile}
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  className="hidden"
-                  capture="environment"
-                />
-                <span className="bg-white/10 backdrop-blur-xl border border-white/10 text-orange-500 hover:bg-white/20 px-4 py-2.5 rounded-xl font-medium cursor-pointer transition-all inline-block">
-                  {uploadingFile ? t('uploading') : t('addFile')}
-                </span>
-              </label>
-
-              <label className="inline-block">
-                <input
-                  type="file"
-                  onChange={handleScanFileSelect}
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  capture="environment"
-                />
-                <span className="bg-teal-500/15 border border-teal-500/30 text-teal-400 hover:bg-teal-500/25 px-4 py-2.5 rounded-xl font-medium cursor-pointer transition-all inline-flex items-center gap-2">
-                  <ScanLine size={16} />
-                  {t('scanReceiptTitle')}
-                </span>
-              </label>
-            </div>
-
-            <p className="text-white/40 text-xs mt-2">
-              PDF, JPG, PNG до 20 МБ
-            </p>
+            {debtRemaining > 0.009 && (
+              <button
+                type="button"
+                onClick={openPayModal}
+                disabled={markingPaid}
+                className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 px-4 py-2.5 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+              >
+                Mark as Paid
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1133,6 +951,167 @@ export const InvoiceView: React.FC = () => {
           existingSignature={invoice.signature_data_url}
           existingSignerName={invoice.signed_by}
         />
+      )}
+
+      {payModalOpen && (
+        <div className="no-print fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl max-w-md w-full border border-white/10">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <Banknote className="text-emerald-400" size={24} />
+                <div>
+                  <h3 className="text-xl font-semibold text-white">Оплата</h3>
+                  <p className="text-white/50 text-xs mt-0.5">
+                    Залишок: {formatMoney(debtRemaining, payCurrency || statsCurrency)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPayModalOpen(false);
+                  setPayMode(null);
+                }}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="text-white" size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayMode('full');
+                    setPayAmount(
+                      debtRemaining > 0
+                        ? String(debtRemaining).replace('.', ',')
+                        : String(totalInvoiceAmount).replace('.', ',')
+                    );
+                  }}
+                  className="w-full text-left px-4 py-3.5 rounded-xl border transition-all"
+                  style={{
+                    background:
+                      payMode === 'full' ? 'rgba(80,180,120,0.18)' : 'rgba(255,255,255,0.04)',
+                    borderColor:
+                      payMode === 'full' ? 'rgba(120,200,150,0.55)' : 'rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <p className="text-white font-medium">Оплата повністю</p>
+                  <p className="text-white/50 text-xs mt-0.5">
+                    {formatMoney(
+                      debtRemaining > 0 ? debtRemaining : totalInvoiceAmount,
+                      payCurrency || statsCurrency
+                    )}
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPayMode('partial')}
+                  className="w-full text-left px-4 py-3.5 rounded-xl border transition-all"
+                  style={{
+                    background:
+                      payMode === 'partial' ? 'rgba(80,180,120,0.18)' : 'rgba(255,255,255,0.04)',
+                    borderColor:
+                      payMode === 'partial' ? 'rgba(120,200,150,0.55)' : 'rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <p className="text-white font-medium">Оплата частинами</p>
+                  <p className="text-white/50 text-xs mt-0.5">
+                    Вкажіть суму, валюту та дату платежу
+                  </p>
+                </button>
+              </div>
+
+              {payMode === 'partial' && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-sm font-medium text-white/80 mb-2">
+                      Сума
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(maskMoneyTyping(e.target.value))}
+                      placeholder="0,00"
+                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 tabular-nums"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Валюта
+                      </label>
+                      <select
+                        value={payCurrency}
+                        onChange={(e) => setPayCurrency(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                      >
+                        {currencies.map((c) => (
+                          <option key={c.code} value={c.code} className="bg-slate-900">
+                            {c.code} ({c.symbol})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Дата оплати
+                      </label>
+                      <input
+                        type="date"
+                        value={payDate}
+                        onChange={(e) => setPayDate(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {payMode === 'full' && (
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-2">
+                    Дата оплати
+                  </label>
+                  <input
+                    type="date"
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 p-6 border-t border-white/10">
+              <Button
+                type="button"
+                onClick={() => {
+                  setPayModalOpen(false);
+                  setPayMode(null);
+                }}
+                className="flex-1 bg-white/10 border border-white/10 text-white hover:bg-white/20"
+              >
+                {t('cancel') || 'Скасувати'}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleConfirmPayment()}
+                disabled={markingPaid || !payMode}
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {markingPaid ? 'Збереження...' : 'Підтвердити'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showEmailModal && (
@@ -1340,15 +1319,6 @@ export const InvoiceView: React.FC = () => {
         </div>
       )}
 
-      <AnimatePresence>
-        {scanFile && (
-          <ReceiptScanReview
-            file={scanFile}
-            onClose={() => setScanFile(null)}
-            onConfirm={handleScanConfirm}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };
