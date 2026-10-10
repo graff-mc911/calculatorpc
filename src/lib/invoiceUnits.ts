@@ -1,6 +1,6 @@
 /**
  * Normalize construction units from Excel/PDF (UA/DE/EN/ES) into app select values.
- * App units: m² | m³ | lm | m | h | pcs | kg | Pauschal | Stunde | ft²
+ * App units: m² | m³ | lm | m | h | d | pcs | kg | Pauschal | Stunde | ft²
  *
  * Never silently map kg→pcs or invent m² as a universal fallback.
  */
@@ -11,6 +11,7 @@ export type InvoiceUnit =
   | 'lm'
   | 'm'
   | 'h'
+  | 'd'
   | 'pcs'
   | 'kg'
   | 'Pauschal'
@@ -24,6 +25,7 @@ export const KNOWN_INVOICE_UNITS: readonly InvoiceUnit[] = [
   'lm',
   'm',
   'h',
+  'd',
   'pcs',
   'kg',
   'Pauschal',
@@ -136,6 +138,26 @@ function matchKnownUnit(s: string): InvoiceUnit | null {
     return 'h';
   }
 
+  // Calendar / work days — ES días (never confuse with bare "d" decimal)
+  if (
+    s === 'd' ||
+    s === 'day' ||
+    s === 'days' ||
+    s === 'dia' ||
+    s === 'dias' ||
+    s === 'día' ||
+    s === 'días' ||
+    s === 'tag' ||
+    s === 'tage' ||
+    s === 'день' ||
+    s === 'дні' ||
+    s === 'дней' ||
+    s === 'дн' ||
+    s === 'дн.'
+  ) {
+    return 'd';
+  }
+
   // Square meters (before bare "m" / "ml")
   if (
     /^(m2|м2|qm|sqm|sq\.?\s*m|sq\s*m|м\s*2|квадратн|metro\s*cuadrado|metros\s*cuadrados)$/i.test(
@@ -184,6 +206,12 @@ function matchKnownUnit(s: string): InvoiceUnit | null {
 
   if (/^(h|hr|hrs|hours|std|stunde|год|години|hour|hora|horas)$/i.test(s)) {
     return s.includes('stunde') || s === 'std' ? 'Stunde' : 'h';
+  }
+
+  if (
+    /^(d|day|days|dia|dias|día|días|tag|tage|день|дні|дней|дн\.?)$/i.test(s)
+  ) {
+    return 'd';
   }
 
   // Countable packs → pcs (not mass)
@@ -272,10 +300,14 @@ export function formatUnitForPdf(unit: string, language: string): string {
     if (unit === 'pcs') return 'ud';
     if (unit === 'lm') return 'ml';
     if (unit === 'm') return 'm';
+    if (unit === 'd') return 'días';
     if (unit === 'Pauschal') return 'global';
     if (unit === 'Stunde') return 'h';
+    if (unit === 'h') return 'h';
     if (unit === 'kg') return 'kg';
   }
+  if (language === 'uk' && unit === 'd') return 'дн';
+  if (language === 'de' && unit === 'd') return 'Tage';
   return unit;
 }
 

@@ -113,6 +113,9 @@ const HEADER_ALIASES_RAW: Record<ColKey, string[]> = {
     'cant',
     'medicion',
     'medicion / cant',
+    'metraje',
+    'metraje/cantidad',
+    'metraje / cantidad',
   ],
   unit: [
     'unit',
@@ -124,6 +127,7 @@ const HEADER_ALIASES_RAW: Record<ColKey, string[]> = {
     'um',
     'од вим',
     'unidad',
+    'unidad de medida',
     'ud',
     'unid',
   ],
@@ -165,6 +169,8 @@ const HEADER_ALIASES_RAW: Record<ColKey, string[]> = {
     'всього',
     'разом',
     'total €',
+    'total euros',
+    'total euros sin iva',
     'importe',
   ],
   note: [
@@ -733,10 +739,17 @@ function rowsToItems(
         `Ціну обчислено з Total (${total}) / qty — підтвердіть`,
       );
     } else if (priceNum <= 0 && total > 0 && qtyNum <= 0) {
-      critical = true;
+      // Lump-sum line: only Total filled (e.g. ES "Ducha" → 500 € global)
+      price = total;
+      quantity = 1;
+      quantityStatus = 'ok';
+      if (!String(unit || unitRaw || '').trim()) {
+        unit = 'Pauschal';
+        unitKnown = true;
+      }
       needsReview = true;
       lineWarnings.push(
-        `Є Total (${total}), але немає кількості/ціни — не вигадано значення`,
+        `Паушальна позиція з Total (${total}) — qty=1, підтвердіть`,
       );
     }
 

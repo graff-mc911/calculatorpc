@@ -104,6 +104,13 @@ assert(normalizeInvoiceUnit('mÂ²') === 'm²', '6 mojibake');
 assert(normalizeInvoiceUnit('m^2') === 'm²', '6 m^2');
 assert(formatUnitForPdf('pcs', 'es') === 'ud', '6 pdf ud');
 assert(formatUnitForPdf('kg', 'es') === 'kg', '6 pdf kg');
+assert(resolveInvoiceUnit('días').normalized === 'd', '6 días→d');
+assert(resolveInvoiceUnit('dias').normalized === 'd', '6 dias→d');
+assert(resolveInvoiceUnit('día').normalized === 'd', '6 día→d');
+assert(resolveInvoiceUnit('day').normalized === 'd', '6 day→d');
+assert(resolveInvoiceUnit('Tage').normalized === 'd', '6 Tage→d');
+assert(formatUnitForPdf('d', 'es') === 'días', '6 pdf días');
+assert(formatUnitForPdf('d', 'uk') === 'дн', '6 pdf дн');
 
 // —— 7. Unknown unit ——
 const unk = resolveInvoiceUnit('foobar');
@@ -363,6 +370,47 @@ assert(csvDraft.items[0].unit === 'm²' && csvDraft.items[0].total === 300, 'UA 
 
 assert(looksLikeSquareMeter('m²') && looksLikePieceUnit('ud'), 'looksLike helpers');
 assert(!looksLikeSquareMeter('ud'), 'no cross looksLike');
+
+// —— Elda ES presupuesto: días + Metraje/cantidad headers + lump-sum Ducha ——
+const eldaCandidates = [
+  '/home/ubuntu/.cursor/projects/workspace/uploads/Elda_17_09_26_ES_88ca.xlsx',
+];
+const eldaPath = eldaCandidates.find((p) => existsSync(p));
+if (eldaPath) {
+  const buf = readFileSync(eldaPath);
+  const elda = await importInvoiceFromFile(
+    new File([buf], 'Elda_17_09_26_ES.xlsx'),
+  );
+  const eldaSum = elda.items.reduce((s, i) => s + i.total, 0);
+  assert(elda.items.length === 27, `Elda 27 lines got ${elda.items.length}`);
+  assert(Math.abs(eldaSum - 11919.42) < 0.05, `Elda sum ~11919.42 got ${eldaSum}`);
+  assert(elda.invoice_language === 'es', 'Elda invoice_language es');
+  const demo = elda.items.find((i) => /^Demolici[oó]n$/i.test(i.description || ''));
+  assert(
+    !!demo && demo.unit === 'd' && Math.abs(demo.quantity - 2) < 0.001 && demo.price === 150,
+    `Elda Demolición 2 d × 150 got ${demo?.unit}/${demo?.quantity}/${demo?.price}`,
+  );
+  assert(formatUnitForPdf(demo!.unit, 'es') === 'días', 'Elda pdf días');
+  assert(
+    !elda.items.some((i) => i.critical && i.unit === 'días'),
+    'Elda días not critical unknown',
+  );
+  const ducha = elda.items.find((i) => /^Ducha$/i.test(i.description || ''));
+  assert(
+    !!ducha &&
+      ducha.unit === 'Pauschal' &&
+      Math.abs(ducha.quantity - 1) < 0.001 &&
+      Math.abs(ducha.total - 500) < 0.05,
+    `Elda Ducha lump-sum got ${ducha?.unit}/${ducha?.quantity}/${ducha?.total}`,
+  );
+  assert(
+    !elda.items.some((i) => /Informativo|Reserva|Anticipo|Superficie total/i.test(i.description || '')),
+    'Elda skips footer/info rows',
+  );
+} else {
+  console.error('FAIL: Elda fixture missing');
+  failed += 1;
+}
 
 if (failed) {
   console.error(`\n${failed} failed, ${passed} passed`);
