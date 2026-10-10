@@ -17,6 +17,7 @@ import {
   consumeInvoiceImportDraft,
   type ImportedInvoiceDraft,
 } from '../lib/invoiceImportFromFile';
+import { validateImportedDraft } from '../lib/invoiceImportValidate';
 import {
   fetchProjectBundle,
   listProjects,
@@ -44,6 +45,12 @@ interface InvoiceItem {
   materialDisplay: string;
   description: string;
   total: number;
+  originalDescription?: string;
+  originalQuantityRaw?: string;
+  originalPriceRaw?: string;
+  originalUnitRaw?: string;
+  needsReview?: boolean;
+  reviewWarnings?: string[];
 }
 
 const emptyItem = (): InvoiceItem => ({
@@ -115,7 +122,7 @@ export const InvoiceForm: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { t, language } = useLanguage();
-  const { showSuccess, showError } = useToastContext();
+  const { showSuccess, showError, showWarning } = useToastContext();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -312,16 +319,24 @@ export const InvoiceForm: React.FC = () => {
           materialDisplay: item.materialDisplay || '',
           description: item.description,
           total: item.total,
+          originalDescription: item.originalDescription,
+          originalQuantityRaw: item.originalQuantityRaw,
+          originalPriceRaw: item.originalPriceRaw,
+          originalUnitRaw: item.originalUnitRaw,
+          needsReview: item.needsReview,
+          reviewWarnings: item.reviewWarnings,
         })),
       );
     }
 
-    const reviewCount = draft.items.filter((i) => i.needsReview).length;
+    const validation = validateImportedDraft(draft);
+    const reviewCount = validation.reviewItemIndexes.length;
     const warnParts = [
       draft.sourceFileName
         ? `${t('importInvoice') || 'Import'}: ${draft.sourceFileName} (${draft.items.length})`
         : `${t('importInvoice') || 'Import'}: ${draft.items.length}`,
     ];
+    if (draft.extractionMethod === 'ocr') warnParts.push('OCR');
     if (draft.importedSheet) warnParts.push(`аркуш «${draft.importedSheet}»`);
     if (draft.skippedSheets?.length) {
       warnParts.push(`пропущено: ${draft.skippedSheets.join(', ')}`);
@@ -337,6 +352,11 @@ export const InvoiceForm: React.FC = () => {
       t('invoiceImportReady') ||
         `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
     );
+    if (reviewCount > 0) {
+      showWarning(
+        `${reviewCount} позицій позначено для перевірки (жовті рядки). Виправте перед створенням інвойсу.`,
+      );
+    }
   };
 
   const fetchCompanyProfile = async () => {
@@ -517,10 +537,26 @@ export const InvoiceForm: React.FC = () => {
     total: calculateLineTotal(item.quantity, item.price, item.material),
   });
 
+  /** User edited a reviewed field — clear import review flag for that row. */
+  const clearReview = (item: InvoiceItem): InvoiceItem => ({
+    ...item,
+    needsReview: false,
+    reviewWarnings: undefined,
+  });
+
   const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
     setItems((prev) => {
       const next = [...prev];
-      const updated = { ...next[index], [field]: value };
+      let updated = { ...next[index], [field]: value };
+      if (
+        field === 'description' ||
+        field === 'unit' ||
+        field === 'quantity' ||
+        field === 'price' ||
+        field === 'material'
+      ) {
+        updated = clearReview(updated);
+      }
 
       if (field === 'quantity' || field === 'price' || field === 'material') {
         next[index] = recomputeItem(updated);
@@ -584,7 +620,7 @@ export const InvoiceForm: React.FC = () => {
     setItems((prev) => {
       const next = [...prev];
       const evaluated = evalFieldExpression(value);
-      const base = { ...next[index], quantityDisplay: value };
+      const base = clearReview({ ...next[index], quantityDisplay: value });
       next[index] = recomputeItem({
         ...base,
         quantity: evaluated != null ? evaluated : next[index].quantity,
@@ -601,7 +637,7 @@ export const InvoiceForm: React.FC = () => {
     setItems((prev) => {
       const next = [...prev];
       const evaluated = evalFieldExpression(value);
-      const base = { ...next[index], priceDisplay: value };
+      const base = clearReview({ ...next[index], priceDisplay: value });
       next[index] = recomputeItem({
         ...base,
         price: evaluated != null ? evaluated : next[index].price,
@@ -683,6 +719,13 @@ export const InvoiceForm: React.FC = () => {
   };
 
   const persistInvoice = async (status: string): Promise<string> => {
+    const stillNeedReview = items.filter((i) => i.needsReview).length;
+    if (stillNeedReview > 0) {
+      showWarning(
+        `${stillNeedReview} позицій ще позначено для перевірки. Дані збережуться як є — переконайтесь у правильності сум.`,
+      );
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -1041,7 +1084,23 @@ export const InvoiceForm: React.FC = () => {
 
           <div className="space-y-3">
             {items.map((item, index) => (
-              <div key={index} className="bg-white/5 border border-white/10 rounded-xl p-3 md:p-4">
+              <div
+                key={index}
+                className="bg-white/5 rounded-xl p-3 md:p-4"
+                style={
+                  item.needsReview
+                    ? {
+                        border: '1px solid rgba(234, 179, 8, 0.65)',
+                        boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.15)',
+                      }
+                    : { border: '1px solid rgba(255,255,255,0.1)' }
+                }
+              >
+                {item.needsReview && item.reviewWarnings?.length ? (
+                  <p className="text-xs mb-2" style={{ color: '#eab308' }}>
+                    {item.reviewWarnings.join(' · ')}
+                  </p>
+                ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_5rem_6rem_7rem_7rem_2.5rem] gap-2 items-end">
                   <div>
                     <label className="md:hidden block mb-1.5 text-sm font-medium text-white/70">
@@ -1052,6 +1111,12 @@ export const InvoiceForm: React.FC = () => {
                       onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                       placeholder={t('lineTitle') || t('description')}
                     />
+                    {item.originalDescription &&
+                    item.originalDescription !== item.description ? (
+                      <p className="text-[11px] text-white/35 mt-1 truncate">
+                        orig: {item.originalDescription}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>

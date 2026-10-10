@@ -22,9 +22,11 @@ export type ParseLocaleNumberOptions = {
 };
 
 function stripMoneyNoise(raw: string): string {
+  // Spaces / NBSP / thin space / apostrophe thousands (CH/FR) are separators, not digits
   return raw
     .trim()
-    .replace(/[€$£\s\u00a0]/g, '');
+    .replace(/[€$£]/g, '')
+    .replace(/[\s\u00a0\u202f']/g, '');
 }
 
 /**

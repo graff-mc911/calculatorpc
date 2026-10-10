@@ -8,6 +8,11 @@ import {
   splitQtyUnit,
 } from './invoiceUnits';
 import { parseLocaleNumber } from './localeNumber';
+import {
+  canRunBrowserOcr,
+  extractEstimateTextViaOcr,
+  isSparseExtractedText,
+} from './invoiceImportOcr';
 import * as pdfjsLib from 'pdfjs-dist';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -36,6 +41,8 @@ export type ImportedInvoiceDraft = {
   importedSheet?: string;
   skippedSheets?: string[];
   warnings?: string[];
+  /** How line items were obtained */
+  extractionMethod?: 'spreadsheet' | 'pdf-text' | 'ocr';
 };
 
 type ColKey =
@@ -599,16 +606,31 @@ function rowsToItems(
       continue;
     }
 
-    if (price <= 0 && total > 0) {
-      price = total / (quantity || 1);
+    // Derive missing unit price from Total only when price cell is empty — flag for review
+    if (price <= 0 && total > 0 && quantity > 0) {
+      price = total / quantity;
+      needsReview = true;
+      lineWarnings.push(
+        `Ціну обчислено з Total (${total}) / qty — перевірте`,
+      );
+    } else if (price <= 0 && total > 0 && quantity <= 0) {
+      // Do not invent quantity=1 silently
+      needsReview = true;
+      lineWarnings.push(
+        `Є Total (${total}), але немає кількості/ціни — не вигадано значення`,
+      );
     }
 
+    // Never silently rewrite qty or price when Total disagrees — keep parsed cells, flag review
     if (price > 0 && total > 0 && quantity > 0) {
       const expected = roundMoney(quantity * price);
       if (Math.abs(expected - roundMoney(total)) > 0.02) {
-        price = total / quantity;
+        needsReview = true;
+        lineWarnings.push(
+          `Розбіжність: qty×price=${expected.toFixed(2)}, Total у файлі=${roundMoney(total).toFixed(2)}`,
+        );
         warnings.push(
-          `Рядок ${rowNum + 1}: розбіжність qty×price і Total — взято Total/qty`,
+          `Рядок ${rowNum + 1}: qty×price ${expected.toFixed(2)} ≠ Total ${roundMoney(total).toFixed(2)} — значення не змінено`,
         );
       }
     }
@@ -651,38 +673,88 @@ function rowsToItems(
   return { items, fileTotal };
 }
 
+/**
+ * Parse CSV into string cells only.
+ * XLSX coerces `12,5` → 125 and `20,00` → 2000 — fatal for EU decimals.
+ */
+function parseCsvRowsAsStrings(text: string): string[][] {
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim()) || '';
+  const semis = (firstLine.match(/;/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  const sep = semis > commas ? ';' : ',';
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  const src = text.replace(/^\uFEFF/, '');
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === sep) {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+    if (ch === '\n') {
+      row.push(cell);
+      cell = '';
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+      continue;
+    }
+    if (ch === '\r') continue;
+    cell += ch;
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  return rows;
+}
+
 async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
   const buf = await file.arrayBuffer();
   const nameLower = file.name.toLowerCase();
   const isCsv = nameLower.endsWith('.csv') || file.type === 'text/csv';
-  let wb: XLSX.WorkBook;
-  if (isCsv) {
-    // UTF-8 string + FS so UA headers (Опис;Кількість;Од;Ціна;Сума) round-trip
-    const text = new TextDecoder('utf-8').decode(buf);
-    const firstLine = text.split(/\r?\n/)[0] || '';
-    const semis = (firstLine.match(/;/g) || []).length;
-    const commas = (firstLine.match(/,/g) || []).length;
-    wb = XLSX.read(text, {
-      type: 'string',
-      cellDates: true,
-      codepage: 65001,
-      FS: semis > commas ? ';' : undefined,
-    });
-  } else {
-    wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  }
 
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) {
-    throw new Error('Spreadsheet has no sheets');
+  let sheetName = 'Sheet1';
+  let skippedSheets: string[] = [];
+  let rows: unknown[][];
+
+  if (isCsv) {
+    const text = new TextDecoder('utf-8').decode(buf);
+    rows = parseCsvRowsAsStrings(text);
+    sheetName = file.name.replace(/\.[^.]+$/, '') || 'CSV';
+  } else {
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    sheetName = wb.SheetNames[0];
+    if (!sheetName) {
+      throw new Error('Spreadsheet has no sheets');
+    }
+    skippedSheets = wb.SheetNames.slice(1);
+    const sheet = wb.Sheets[sheetName];
+    rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      defval: '',
+      raw: true,
+    }) as unknown[][];
   }
-  const skippedSheets = wb.SheetNames.slice(1);
-  const sheet = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: '',
-    raw: true,
-  }) as unknown[][];
 
   const meta = guessMetaFromSheet(rows);
   const warnings: string[] = [];
@@ -759,6 +831,7 @@ async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
     importedSheet: sheetName,
     skippedSheets: skippedSheets.length ? skippedSheets : undefined,
     warnings: warnings.length ? warnings : undefined,
+    extractionMethod: 'spreadsheet',
     notes:
       meta.notes ||
       `Imported from ${file.name}` +
@@ -803,9 +876,14 @@ async function extractPdfText(file: File, maxPages = 8): Promise<string> {
 const PDF_UNIT =
   'm²|m2|m³|m3|qm|lm|ml|lfm|lfd\\.m|ud|uds|м²|м2|м³|пог\\.?\\s*м|м\\.п\\.?|шт|pcs|stk|h|std|psch|pauschal|global';
 
-function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
+function parsePdfLineItems(
+  text: string,
+  opts: { fromOcr?: boolean } = {},
+): PrefillInvoiceItem[] {
   const items: PrefillInvoiceItem[] = [];
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const preferThousands =
+    /medici[oó]n|cantidad|precio|trabajo|presupuesto|importe/i.test(text);
 
   for (const line of lines) {
     if (
@@ -818,16 +896,27 @@ function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
     }
 
     const withUnit = new RegExp(
-      `^(.{3,80}?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${PDF_UNIT})\\s+(\\d+(?:[.,]\\d{2})?)(?:\\s+(\\d+(?:[.,]\\d{2})?))?(?:\\s+(\\d+(?:[.,]\\d{2})?))?\\s*$`,
+      `^(.{3,120}?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${PDF_UNIT})\\s+(\\d+(?:[.,]\\d{2})?)(?:\\s+(\\d+(?:[.,]\\d{2})?))?(?:\\s+(\\d+(?:[.,]\\d{2})?))?\\s*$`,
       'i',
     );
     const m = line.match(withUnit);
     if (m) {
-      const quantity = parseNumber(m[2]);
+      const qtyParsed = parseLocaleNumber(m[2], {
+        preferGroupedThousandsDot: preferThousands,
+      });
+      const quantity = qtyParsed.value;
       const unit = normalizeInvoiceUnit(m[3]);
-      const n4 = parseNumber(m[4]);
-      const n5 = m[5] ? parseNumber(m[5]) : 0;
-      const n6 = m[6] ? parseNumber(m[6]) : 0;
+      const n4 = parseLocaleNumber(m[4], {
+        preferGroupedThousandsDot: preferThousands,
+      }).value;
+      const n5 = m[5]
+        ? parseLocaleNumber(m[5], { preferGroupedThousandsDot: preferThousands })
+            .value
+        : 0;
+      const n6 = m[6]
+        ? parseLocaleNumber(m[6], { preferGroupedThousandsDot: preferThousands })
+            .value
+        : 0;
       let price = n4;
       let material = 0;
       if (n6 > 0) {
@@ -840,26 +929,49 @@ function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
           material = n5;
         }
       }
+      const lineWarnings: string[] = [];
+      let needsReview = !!opts.fromOcr || qtyParsed.ambiguous;
+      if (opts.fromOcr) lineWarnings.push('Рядок з OCR — перевірте');
+      if (qtyParsed.ambiguous) {
+        lineWarnings.push(`Неоднозначна кількість «${m[2]}»`);
+      }
       const item = toItem({
         description: m[1],
         quantity,
         unit,
         price,
         material,
+        originalQuantityRaw: m[2],
+        originalPriceRaw: m[4],
+        originalUnitRaw: m[3],
+        needsReview,
+        reviewWarnings: lineWarnings,
       });
       if (item) items.push(item);
       continue;
     }
 
     const m2 = line.match(
-      /^(.{3,80}?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d{2})?)\s+(\d+(?:[.,]\d{2})?)\s*$/,
+      /^(.{3,120}?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d{2})?)\s+(\d+(?:[.,]\d{2})?)\s*$/,
     );
     if (m2) {
       const item = toItem({
         description: m2[1],
-        quantity: parseNumber(m2[2]),
+        quantity: parseNumber(m2[2], {
+          preferGroupedThousandsDot: preferThousands,
+        }),
         unit: 'pcs',
-        price: parseNumber(m2[3]),
+        price: parseNumber(m2[3], {
+          preferGroupedThousandsDot: preferThousands,
+        }),
+        originalQuantityRaw: m2[2],
+        originalPriceRaw: m2[3],
+        needsReview: true,
+        reviewWarnings: [
+          opts.fromOcr
+            ? 'OCR: одиниця не вказана — підставлено pcs'
+            : 'PDF: одиниця не вказана — підставлено pcs',
+        ],
       });
       if (item) items.push(item);
     }
@@ -867,12 +979,49 @@ function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
   return coalesceMaterialRows(items);
 }
 
-async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
-  const header = await extractInvoiceDataFromPDF(file);
-  const text = await extractPdfText(file);
-  let items = text.trim() ? parsePdfLineItems(text) : [];
+function taxHintsFromText(text: string): string[] {
+  const hints: string[] = [];
+  if (/iva\s*inclu|mwst\s*inkl|vat\s*incl|brutto|tax\s*included/i.test(text)) {
+    hints.push(
+      'У документі явно вказано, що податок уже включено в ціну — не додавайте IVA повторно без перевірки',
+    );
+  }
+  if (/(?:iva|mwst|ust|vat|пдв)\s*[:=]?\s*(\d{1,2})(?:[.,]\d+)?\s*%/i.test(text)) {
+    const rates = new Set<string>();
+    const re =
+      /(?:iva|mwst|ust|vat|пдв)\s*[:=]?\s*(\d{1,2})(?:[.,]\d+)?\s*%/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) rates.add(m[1]);
+    if (rates.size > 1) {
+      hints.push(
+        `Знайдено кілька ставок податку (${[...rates].join(', ')}%) — у формі інвойсу одна ставка на документ; перевірте вручну`,
+      );
+    }
+  }
+  return hints;
+}
 
-  if (items.length === 0) {
+async function buildDraftFromPlainText(
+  file: File,
+  text: string,
+  opts: {
+    extractionMethod: 'pdf-text' | 'ocr';
+    header?: Awaited<ReturnType<typeof extractInvoiceDataFromPDF>>;
+  },
+): Promise<ImportedInvoiceDraft> {
+  const warnings = [...taxHintsFromText(text)];
+  if (opts.extractionMethod === 'ocr') {
+    warnings.push(
+      'Текст отримано через OCR на пристрої — обов’язково перевірте позиції перед збереженням',
+    );
+  }
+
+  let items = text.trim()
+    ? parsePdfLineItems(text, { fromOcr: opts.extractionMethod === 'ocr' })
+    : [];
+
+  const header = opts.header;
+  if (items.length === 0 && header) {
     const amount = parseNumber(header.totalAmount || '');
     if (amount > 0) {
       const single = toItem({
@@ -882,6 +1031,8 @@ async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
         quantity: 1,
         unit: 'Pauschal',
         price: amount,
+        needsReview: true,
+        reviewWarnings: ['Єдина сума з заголовка PDF — розбийте позиції вручну'],
       });
       if (single) items = [single];
     }
@@ -889,26 +1040,72 @@ async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
 
   if (items.length === 0) {
     throw new Error(
-      'Could not read invoice lines from PDF. Use an Excel/CSV with columns, or a text PDF.',
+      opts.extractionMethod === 'ocr'
+        ? 'OCR не знайшов таблицю позицій. Краще імпортувати Excel/CSV кошторису.'
+        : 'Could not read invoice lines from PDF. Use an Excel/CSV with columns, or a text PDF.',
     );
   }
 
   const document_type = detectDocumentType(file.name, [text.slice(0, 500)]);
-
   return {
-    client_name: header.company || undefined,
-    document_number: header.invoiceNumber || undefined,
-    date: header.invoiceDate || undefined,
-    currency: header.currency || 'EUR',
+    client_name: header?.company || undefined,
+    document_number: header?.invoiceNumber || undefined,
+    date: header?.invoiceDate || undefined,
+    currency: header?.currency || 'EUR',
     items,
     sourceFileName: file.name,
     document_type,
-    notes: `Imported from ${file.name}`,
+    extractionMethod: opts.extractionMethod,
+    warnings: warnings.length ? warnings : undefined,
+    notes: `Imported from ${file.name}${opts.extractionMethod === 'ocr' ? ' (OCR)' : ''}`,
   };
+}
+
+async function parsePdf(file: File): Promise<ImportedInvoiceDraft> {
+  const header = await extractInvoiceDataFromPDF(file);
+  let text = await extractPdfText(file);
+  let method: 'pdf-text' | 'ocr' = 'pdf-text';
+
+  if (isSparseExtractedText(text)) {
+    if (canRunBrowserOcr()) {
+      try {
+        text = await extractEstimateTextViaOcr(file);
+        method = 'ocr';
+      } catch (err) {
+        console.warn('PDF OCR fallback failed', err);
+      }
+    } else if (!text.trim()) {
+      throw new Error(
+        'Цей PDF без текстового шару (скан). Відкрийте імпорт у браузері для OCR, або завантажте Excel/CSV.',
+      );
+    }
+  }
+
+  return buildDraftFromPlainText(file, text, {
+    extractionMethod: method,
+    header,
+  });
+}
+
+async function parseImageEstimate(file: File): Promise<ImportedInvoiceDraft> {
+  if (!canRunBrowserOcr()) {
+    throw new Error(
+      'Імпорт фото кошторису потребує OCR у браузері. На комп’ютері краще Excel/CSV.',
+    );
+  }
+  const text = await extractEstimateTextViaOcr(file);
+  return buildDraftFromPlainText(file, text, { extractionMethod: 'ocr' });
 }
 
 export function isInvoiceImportFile(file: File): boolean {
   const name = file.name.toLowerCase();
+  const isImage =
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg') ||
+    name.endsWith('.png') ||
+    name.endsWith('.webp') ||
+    (file.type || '').startsWith('image/');
+  // DOC/DOCX intentionally not accepted — no Word parser in this app
   return (
     name.endsWith('.xlsx') ||
     name.endsWith('.xls') ||
@@ -916,15 +1113,25 @@ export function isInvoiceImportFile(file: File): boolean {
     name.endsWith('.pdf') ||
     file.type === 'application/pdf' ||
     file.type.includes('sheet') ||
-    file.type === 'text/csv'
+    file.type === 'text/csv' ||
+    isImage
   );
 }
 
-/** Parse Excel/CSV/PDF into an editable invoice draft (sales invoice lines). */
+/** Parse Excel/CSV/PDF/image into an editable invoice draft (sales invoice lines). */
 export async function importInvoiceFromFile(file: File): Promise<ImportedInvoiceDraft> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
     return parsePdf(file);
+  }
+  if (
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg') ||
+    name.endsWith('.png') ||
+    name.endsWith('.webp') ||
+    (file.type || '').startsWith('image/')
+  ) {
+    return parseImageEstimate(file);
   }
   if (
     name.endsWith('.xlsx') ||
@@ -935,8 +1142,14 @@ export async function importInvoiceFromFile(file: File): Promise<ImportedInvoice
   ) {
     return parseSpreadsheet(file);
   }
-  throw new Error('Unsupported file type. Use Excel (.xlsx), CSV, or PDF.');
+  throw new Error(
+    'Unsupported file type. Use Excel (.xlsx/.xls), CSV, PDF, or image (JPG/PNG). Word DOC/DOCX is not supported.',
+  );
 }
+
+/** Re-export for callers that validate before save. */
+export { validateImportedDraft } from './invoiceImportValidate';
+export { isSparseExtractedText, canRunBrowserOcr } from './invoiceImportOcr';
 
 export function storeInvoiceImportDraft(draft: ImportedInvoiceDraft): void {
   sessionStorage.setItem(INVOICE_IMPORT_STORAGE_KEY, JSON.stringify(draft));

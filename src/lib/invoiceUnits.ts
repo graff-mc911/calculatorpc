@@ -21,7 +21,8 @@ export function compactUnitText(raw: string): string {
     .replace(/²/g, '2')
     .replace(/³/g, '3')
     .replace(/\u00a0/g, ' ')
-    .replace(/\s+/g, ' ');
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/g, '');
 }
 
 /**
@@ -69,8 +70,17 @@ export function normalizeInvoiceUnit(
     s === 'kilo' ||
     s === 'kilos' ||
     s === 'kilogramo' ||
-    s === 'kilogramos'
+    s === 'kilogramos' ||
+    s === 't' ||
+    s === 'to' ||
+    s === 'ton' ||
+    s === 'tonne' ||
+    s === 'tonnes' ||
+    s === 'т' ||
+    s === 'тонна' ||
+    s === 'тонни'
   ) {
+    // App select has no kg/t — store as pcs; caller may flag unknown mass units
     return 'pcs';
   }
   if (
@@ -96,19 +106,23 @@ export function normalizeInvoiceUnit(
 
   // Square meters (before bare "m" / "ml")
   if (
-    /^(m2|м2|qm|sqm|sq\.?m|м\s*2|квадратн|metro\s*cuadrado|metros\s*cuadrados)$/i.test(s) ||
+    /^(m2|м2|qm|sqm|sq\.?\s*m|sq\s*m|м\s*2|квадратн|metro\s*cuadrado|metros\s*cuadrados)$/i.test(
+      s,
+    ) ||
     s === 'm²' ||
     s.includes('м²') ||
     s.includes('квадр') ||
-    s.includes('cuadrad')
+    s.includes('cuadrad') ||
+    s.includes('square')
   ) {
     return 'm²';
   }
 
   // Cubic
   if (
-    /^(m3|м3|cbm|куб|metro\s*c[uú]bico)/i.test(s) ||
-    s.includes('м³')
+    /^(m3|м3|cbm|куб|metro\s*c[uú]bico|cubic)/i.test(s) ||
+    s.includes('м³') ||
+    s.includes('cubic')
   ) {
     return 'm³';
   }
@@ -139,22 +153,33 @@ export function normalizeInvoiceUnit(
     return s.includes('stunde') || s === 'std' ? 'Stunde' : 'h';
   }
 
+  // Days — no dedicated select value; map to h with same "time" semantics avoided:
+  // keep as pcs so we do not pretend day≡hour. Caller flags via unknown-unit heuristic.
+  if (/^(d|day|days|tag|tage|день|дні|dias?)$/i.test(s)) {
+    return 'pcs';
+  }
+
   // Pieces / countable packs — ES ud / saco / caja / litro / rollo…
   if (
-    /^(pcs|stk|stück|st|шт|штук|pc|ud|uds|u|unidad|unidades|pieza|piezas|saco|sacos|caja|cajas|rollo|rollos|bote|botes|cartucho|cartuchos|l|lt|lts|litro|litros)$/i.test(
+    /^(pcs|stk|stück|st|шт|штук|pc|ud|uds|u|unidad|unidades|pieza|piezas|saco|sacos|caja|cajas|rollo|rollos|bote|botes|cartucho|cartuchos|l|lt|lts|litro|litros|liter|litre)$/i.test(
       s,
     )
   ) {
     return 'pcs';
   }
 
-  // Flat rate / lump sum / service — ES global / pa / lote / servicio
+  // Flat rate / lump sum / service / set — ES global / pa / lote / servicio
   if (
-    /^(pausch|psch|pauschal|паушал|компл|global|pa|tanto\s*alzado|partida\s*alzada|lote|lotes|kit|servicio|servicios)$/i.test(
+    /^(pausch|psch|pauschal|паушал|компл|комплект|global|pa|tanto\s*alzado|partida\s*alzada|lote|lotes|kit|set|sets|servicio|servicios)$/i.test(
       s,
     )
   ) {
     return 'Pauschal';
+  }
+
+  // Percent is not a qty unit for invoice lines
+  if (s === '%' || s === 'percent' || s === 'pct') {
+    return fallback;
   }
 
   if (/^(ft2|sqft|sq\.?ft)/i.test(s)) {

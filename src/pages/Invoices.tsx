@@ -963,7 +963,7 @@ export const Invoices: React.FC = () => {
       if (!isInvoiceImportFile(file)) {
         showError(
           t('unsupportedImportFile') ||
-            'Підтримуються Excel (.xlsx), CSV або PDF',
+            'Підтримуються Excel (.xlsx/.xls), CSV, PDF або фото (JPG/PNG). Word DOC/DOCX — ні.',
         );
         return;
       }
@@ -1385,7 +1385,7 @@ export const Invoices: React.FC = () => {
       <input
         ref={importFileRef}
         type="file"
-        accept=".xlsx,.xls,.csv,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+        accept=".xlsx,.xls,.csv,application/pdf,.pdf,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
         className="hidden"
         onChange={handleImportFileChange}
       />
