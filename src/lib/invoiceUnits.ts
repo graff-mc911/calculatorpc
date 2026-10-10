@@ -1,17 +1,44 @@
 /**
  * Normalize construction units from Excel/PDF (UA/DE/EN/ES) into app select values.
- * App units: m² | m³ | lm | h | pcs | Pauschal | Stunde | ft²
+ * App units: m² | m³ | lm | m | h | pcs | kg | Pauschal | Stunde | ft²
+ *
+ * Never silently map kg→pcs or invent m² as a universal fallback.
  */
 
 export type InvoiceUnit =
   | 'm²'
   | 'm³'
   | 'lm'
+  | 'm'
   | 'h'
   | 'pcs'
+  | 'kg'
   | 'Pauschal'
   | 'Stunde'
   | 'ft²';
+
+/** Known units offered in the invoice form select. */
+export const KNOWN_INVOICE_UNITS: readonly InvoiceUnit[] = [
+  'm²',
+  'm³',
+  'lm',
+  'm',
+  'h',
+  'pcs',
+  'kg',
+  'Pauschal',
+  'Stunde',
+  'ft²',
+] as const;
+
+export type ResolvedInvoiceUnit = {
+  /** Value stored on the line (known code or original unknown text). */
+  unit: string;
+  /** True when mapped to a known InvoiceUnit. */
+  known: boolean;
+  /** Normalized known unit when known; otherwise null. */
+  normalized: InvoiceUnit | null;
+};
 
 /**
  * Fix common export/mojibake forms before matching.
@@ -42,16 +69,8 @@ export function compactUnitText(raw: string): string {
     .replace(/\.+$/g, '');
 }
 
-/**
- * Map free-text unit → stored invoice unit.
- * Spanish: ml = metro lineal, ud = unidad, global/pa = Pauschal
- */
-export function normalizeInvoiceUnit(
-  raw: string | null | undefined,
-  fallback: InvoiceUnit = 'pcs',
-): InvoiceUnit {
-  const s = compactUnitText(String(raw || ''));
-  if (!s) return fallback;
+function matchKnownUnit(s: string): InvoiceUnit | null {
+  if (!s) return null;
 
   // Exact matches (after compact) — ES / pack / flat-rate tokens
   if (
@@ -64,6 +83,20 @@ export function normalizeInvoiceUnit(
   ) {
     return 'lm';
   }
+
+  // Mass — never map to pcs
+  if (
+    s === 'kg' ||
+    s === 'kilo' ||
+    s === 'kilos' ||
+    s === 'kilogramo' ||
+    s === 'kilogramos' ||
+    s === 'kilogram' ||
+    s === 'kilograms'
+  ) {
+    return 'kg';
+  }
+
   if (
     s === 'ud' ||
     s === 'ud.' ||
@@ -77,29 +110,11 @@ export function normalizeInvoiceUnit(
     s === 'pza' ||
     s === 'pieza' ||
     s === 'ea' ||
-    s === 'each' ||
-    s === 'saco' ||
-    s === 'caja' ||
-    s === 'rollo' ||
-    s === 'bote' ||
-    s === 'cartucho' ||
-    s === 'kg' ||
-    s === 'kilo' ||
-    s === 'kilos' ||
-    s === 'kilogramo' ||
-    s === 'kilogramos' ||
-    s === 't' ||
-    s === 'to' ||
-    s === 'ton' ||
-    s === 'tonne' ||
-    s === 'tonnes' ||
-    s === 'т' ||
-    s === 'тонна' ||
-    s === 'тонни'
+    s === 'each'
   ) {
-    // App select has no kg/t — store as pcs; caller may flag unknown mass units
     return 'pcs';
   }
+
   if (
     s === 'global' ||
     s === 'gl' ||
@@ -121,7 +136,7 @@ export function normalizeInvoiceUnit(
     return 'h';
   }
 
-  // Square meters (before bare "m" / "ml") — never fall through to pcs
+  // Square meters (before bare "m" / "ml")
   if (
     /^(m2|м2|qm|sqm|sq\.?\s*m|sq\s*m|м\s*2|квадратн|metro\s*cuadrado|metros\s*cuadrados)$/i.test(
       s,
@@ -138,7 +153,7 @@ export function normalizeInvoiceUnit(
     return 'm²';
   }
 
-  // Cubic
+  // Cubic — never collapse to m²
   if (
     /^(m3|м3|cbm|куб|metro\s*c[uú]bico|cubic)/i.test(s) ||
     s.includes('м³') ||
@@ -148,7 +163,6 @@ export function normalizeInvoiceUnit(
   }
 
   // Linear / running meters — ES "ml", DE lfm, UA пог.м
-  // IMPORTANT: "ml" is metro lineal (ES), NOT millilitre in construction sheets
   if (
     /^(ml|lm|lfm|lf|lfdm|lfd\.?m?|мп|пм|пог|погон|metro\s*lineal|metros\s*lineales|m\.l\.?)$/i.test(
       s,
@@ -163,23 +177,16 @@ export function normalizeInvoiceUnit(
     return 'lm';
   }
 
-  // Bare "m" / "м" in construction = linear meter (not m²)
+  // Bare meter — separate from lm synonym when source says "m" (stored as 'm')
   if (s === 'm' || s === 'м' || s === 'метр' || s === 'meter' || s === 'metro') {
-    return 'lm';
+    return 'm';
   }
 
-  // Full-match only — avoid any word starting with "h…" becoming hours
   if (/^(h|hr|hrs|hours|std|stunde|год|години|hour|hora|horas)$/i.test(s)) {
     return s.includes('stunde') || s === 'std' ? 'Stunde' : 'h';
   }
 
-  // Days — no dedicated select value; map to h with same "time" semantics avoided:
-  // keep as pcs so we do not pretend day≡hour. Caller flags via unknown-unit heuristic.
-  if (/^(d|day|days|tag|tage|день|дні|dias?)$/i.test(s)) {
-    return 'pcs';
-  }
-
-  // Pieces / countable packs — ES ud / saco / caja / litro / rollo…
+  // Countable packs → pcs (not mass)
   if (
     /^(pcs|stk|stück|st|шт|штук|pc|ud|uds|u|unidad|unidades|pieza|piezas|saco|sacos|caja|cajas|rollo|rollos|bote|botes|cartucho|cartuchos|l|lt|lts|litro|litros|liter|litre)$/i.test(
       s,
@@ -188,7 +195,6 @@ export function normalizeInvoiceUnit(
     return 'pcs';
   }
 
-  // Flat rate / lump sum / service / set — ES global / pa / lote / servicio
   if (
     /^(pausch|psch|pauschal|паушал|компл|комплект|global|pa|tanto\s*alzado|partida\s*alzada|lote|lotes|kit|set|sets|servicio|servicios)$/i.test(
       s,
@@ -197,28 +203,53 @@ export function normalizeInvoiceUnit(
     return 'Pauschal';
   }
 
-  // Percent is not a qty unit for invoice lines
-  if (s === '%' || s === 'percent' || s === 'pct') {
-    return fallback;
-  }
-
   if (/^(ft2|sqft|sq\.?ft)/i.test(s)) {
     return 'ft²';
   }
 
+  return null;
+}
+
+/**
+ * Resolve free-text unit → stored value.
+ * Unknown units keep the original text (not pcs/m²).
+ */
+export function resolveInvoiceUnit(
+  raw: string | null | undefined,
+): ResolvedInvoiceUnit {
+  const original = String(raw ?? '').trim();
+  const s = compactUnitText(original);
+  if (!s) {
+    return { unit: '', known: false, normalized: null };
+  }
+  const known = matchKnownUnit(s);
+  if (known) {
+    return { unit: known, known: true, normalized: known };
+  }
+  // Keep original spelling for audit; do not invent pcs/m²
+  return { unit: original, known: false, normalized: null };
+}
+
+/**
+ * Map free-text unit → known InvoiceUnit.
+ * @deprecated Prefer resolveInvoiceUnit — unknown units must not silently become fallback.
+ * When unknown, returns fallback only if provided; empty raw → fallback.
+ */
+export function normalizeInvoiceUnit(
+  raw: string | null | undefined,
+  fallback: InvoiceUnit = 'pcs',
+): InvoiceUnit {
+  const resolved = resolveInvoiceUnit(raw);
+  if (resolved.normalized) return resolved.normalized;
+  if (!String(raw ?? '').trim()) return fallback;
   return fallback;
 }
 
-/** True when raw unit text clearly means square meters (for review / force-correct). */
+/** True when raw unit text clearly means square meters. */
 export function looksLikeSquareMeter(raw: string | null | undefined): boolean {
   const s = compactUnitText(String(raw || ''));
   if (!s) return false;
-  return (
-    normalizeInvoiceUnit(s, 'pcs') === 'm²' ||
-    /^(m2|м2|sqm)$/.test(s) ||
-    s.includes('cuadrad') ||
-    s.includes('квадр')
-  );
+  return matchKnownUnit(s) === 'm²';
 }
 
 /** True when raw unit text clearly means pieces / unidades. */
@@ -230,13 +261,20 @@ export function looksLikePieceUnit(raw: string | null | undefined): boolean {
   );
 }
 
+/** True when raw unit is mass (kg) — must not become pcs. */
+export function looksLikeMassUnit(raw: string | null | undefined): boolean {
+  return resolveInvoiceUnit(raw).normalized === 'kg';
+}
+
 /** Localize stored unit label for PDF (ES wordmarks; other languages unchanged). */
 export function formatUnitForPdf(unit: string, language: string): string {
   if (language === 'es') {
     if (unit === 'pcs') return 'ud';
     if (unit === 'lm') return 'ml';
+    if (unit === 'm') return 'm';
     if (unit === 'Pauschal') return 'global';
     if (unit === 'Stunde') return 'h';
+    if (unit === 'kg') return 'kg';
   }
   return unit;
 }
@@ -244,11 +282,10 @@ export function formatUnitForPdf(unit: string, language: string): string {
 /** Pull quantity + unit from a single cell like "120 m2" / "15 ml" / "8,5 м²". */
 export function splitQtyUnit(
   raw: unknown,
-): { quantity: number; unit?: InvoiceUnit; restText?: string } {
+): { quantity: number; unit?: string; unitKnown?: boolean; restText?: string } {
   const text = String(raw ?? '').trim();
   if (!text) return { quantity: 0 };
 
-  // Pure number (incl. 3,500.00 / 3.500,00) — not qty+unit
   const digitsOnly = text.replace(/[\s\u00a0]/g, '');
   if (
     /^-?\d{1,3}([.,]\d{3})+([.,]\d+)?$/.test(digitsOnly) ||
@@ -272,7 +309,6 @@ export function splitQtyUnit(
     return { quantity: Number(pure) || 0 };
   }
 
-  // qty + unit: unit part must start with a letter (not ",500.00")
   const m = text.match(
     /^(-?\d+(?:[.,]\d+)?)\s*([a-zA-Zа-яА-ЯіїєґІЇЄҐ][a-zA-Zа-яА-ЯіїєґІЇЄҐ0-9²³./\-\s]*)$/u,
   );
@@ -280,7 +316,12 @@ export function splitQtyUnit(
     const quantity = Number(m[1].replace(',', '.')) || 0;
     const unitPart = (m[2] || '').trim();
     if (unitPart) {
-      return { quantity, unit: normalizeInvoiceUnit(unitPart) };
+      const resolved = resolveInvoiceUnit(unitPart);
+      return {
+        quantity,
+        unit: resolved.unit,
+        unitKnown: resolved.known,
+      };
     }
     return { quantity };
   }
@@ -292,7 +333,6 @@ export function splitQtyUnit(
 export function isMaterialOnlyLabel(description: string): boolean {
   const d = compactUnitText(description);
   if (!d) return false;
-  // Explicit material line title (Lexware "Material …" or ES item "Material para …")
   if (
     /^(material|materiales|мат(?:еріал)?|мат\.?|werkstoff|verbrauch)(\b|:|\s|$)/.test(
       d,
@@ -300,7 +340,6 @@ export function isMaterialOnlyLabel(description: string): boolean {
   ) {
     return true;
   }
-  // Work / labor verbs win even if the word "material" appears inside (e.g. transporte de material)
   if (
     /\b(arbeit|lohn|labor|work|робота|роботи|mano\s*de\s*obra|trabajo|transporte|acarreo|subida|bajada|colocaci[oó]n|montaje|demolici[oó]n|instalaci[oó]n|protecci[oó]n|pintura|enfoscado|gotel[eé]|fábrica|fabrica|tratamiento|preparaci[oó]n)\b/.test(
       d,

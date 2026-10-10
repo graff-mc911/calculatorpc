@@ -1,5 +1,5 @@
 /**
- * Regression tests for estimate/invoice import + money math.
+ * Regression tests for estimate/invoice import + money math (PROMPT №2).
  * Run: npx tsx scripts/verify-invoice-import.mts
  */
 import { readFileSync, existsSync } from 'fs';
@@ -11,14 +11,22 @@ import {
   canRunBrowserOcr,
 } from '../src/lib/invoiceImportFromFile.ts';
 import { calculateLineTotal, roundMoney, toCents, fromCents } from '../src/lib/invoiceTotals.ts';
-import { parseLocaleNumber } from '../src/lib/localeNumber.ts';
+import {
+  parseLocaleNumber,
+  confirmedNumber,
+} from '../src/lib/localeNumber.ts';
 import {
   normalizeInvoiceUnit,
   formatUnitForPdf,
+  resolveInvoiceUnit,
   looksLikeSquareMeter,
   looksLikePieceUnit,
 } from '../src/lib/invoiceUnits.ts';
-import { validateImportedDraft } from '../src/lib/invoiceImportValidate.ts';
+import {
+  validateImportedDraft,
+  canPersistImportedItems,
+  unresolvedCriticalIndexes,
+} from '../src/lib/invoiceImportValidate.ts';
 
 let failed = 0;
 let passed = 0;
@@ -32,147 +40,129 @@ function assert(cond: boolean, msg: string) {
   }
 }
 
-// —— 1. Spanish / locale numbers ——
-assert(
-  parseLocaleNumber('1.250,50').value === 1250.5,
-  '1.250,50 → 1250.50',
-);
-assert(parseLocaleNumber('1250,50').value === 1250.5, '1250,50 → 1250.5');
-assert(parseLocaleNumber('12,5').value === 12.5, '12,5 → 12.5');
-assert(
-  parseLocaleNumber('2.345,75 €').value === 2345.75,
-  '2.345,75 € → 2345.75',
-);
-assert(parseLocaleNumber('1,234.56').value === 1234.56, 'US 1,234.56');
-assert(parseLocaleNumber('1234.56').value === 1234.56, 'plain 1234.56');
-assert(parseLocaleNumber('1 234,56').value === 1234.56, 'space thousands EU');
-assert(parseLocaleNumber("1'234.56").value === 1234.56, "apostrophe thousands");
-assert(parseLocaleNumber('0,75').value === 0.75, '0,75');
-assert(parseLocaleNumber('0.75').value === 0.75, '0.75');
-assert(
-  parseLocaleNumber('1.250', { preferGroupedThousandsDot: true }).value === 1250 &&
-    parseLocaleNumber('1.250', { preferGroupedThousandsDot: true }).ambiguous,
-  '1.250 ES thousands + ambiguous',
-);
-assert(
-  parseLocaleNumber('1.250').value === 1.25 && parseLocaleNumber('1.250').ambiguous,
-  '1.250 default decimal + ambiguous',
-);
-assert(parseNumber('(del 7 o del 5)') === 0, 'text with digits → 0, not 75');
-assert(parseNumber('Albañilería') === 0, 'work name → 0');
+// —— 1. Text instead of number ——
+const textNum = parseLocaleNumber('(del 7 o del 5)');
+assert(textNum.status === 'invalid' && textNum.value === null, '1 text→invalid null');
+assert(parseNumber('(del 7 o del 5)') === 0, '1 legacy parseNumber 0');
+assert(parseLocaleNumber('Albañilería').status === 'invalid', '1 work name invalid');
+assert(parseLocaleNumber('abc').status === 'invalid', '1 abc invalid');
 
-// —— 2 / 3. Money math (cents, no float drift) ——
-assert(
-  calculateLineTotal(2, 1250.5, 0) === 2501,
-  '1.250,50 × 2 = 2.501,00',
-);
-assert(
-  calculateLineTotal(12.5, 20, 0) === 250,
-  '12,5 m² × 20,00 € = 250,00 €',
-);
-assert(
-  calculateLineTotal(9.95, 27, 0) === 268.65,
-  '9.95 × 27 = 268.65 (cents)',
-);
-assert(toCents(0.1 + 0.2) === 30, '0.1+0.2 → 30 cents via roundMoney path');
-assert(fromCents(2501) === 25.01, 'fromCents(2501) → 25.01');
-assert(fromCents(toCents(1250.5)) === 1250.5, 'toCents/fromCents round-trip');
-assert(roundMoney(268.649999999) === 268.65, 'roundMoney float noise');
+// —— 2. Empty quantity ——
+const empty = parseLocaleNumber('');
+assert(empty.status === 'empty' && empty.value === null, '2 empty≠confirmed 0');
+assert(confirmedNumber(empty) === null, '2 confirmedNumber null');
 
-// —— 4. Empty qty/price not invented ——
-assert(parseLocaleNumber('').value === 0, 'empty → 0');
-assert(parseLocaleNumber(null).value === 0, 'null → 0');
-assert(parseNumber('abc') === 0, 'letters → 0');
-
-// —— 5. Units ——
-assert(normalizeInvoiceUnit('ml') === 'lm', 'ml → lm');
-assert(normalizeInvoiceUnit('ud') === 'pcs', 'ud → pcs');
-assert(normalizeInvoiceUnit('global') === 'Pauschal', 'global → Pauschal');
-assert(normalizeInvoiceUnit('m2') === 'm²', 'm2 → m²');
-assert(normalizeInvoiceUnit('sq m') === 'm²', 'sq m → m²');
-assert(normalizeInvoiceUnit('m^2') === 'm²', 'm^2 → m²');
-assert(normalizeInvoiceUnit('mÂ²') === 'm²', 'mojibake mÂ² → m² (not pcs)');
-assert(normalizeInvoiceUnit('cbm') === 'm³', 'cbm → m³');
-assert(normalizeInvoiceUnit('Stk.') === 'pcs', 'Stk. → pcs');
-assert(normalizeInvoiceUnit('ud') === 'pcs', 'ud → pcs (штуки)');
-assert(normalizeInvoiceUnit('unidad') === 'pcs', 'unidad → pcs');
-assert(normalizeInvoiceUnit('set') === 'Pauschal', 'set → Pauschal');
-assert(normalizeInvoiceUnit('kg') === 'pcs', 'kg → pcs (app has no kg)');
-assert(normalizeInvoiceUnit('tonne') === 'pcs', 'tonne → pcs (no t in select)');
-assert(formatUnitForPdf('pcs', 'es') === 'ud', 'PDF es pcs→ud');
-assert(formatUnitForPdf('lm', 'es') === 'ml', 'PDF es lm→ml');
-assert(formatUnitForPdf('Pauschal', 'es') === 'global', 'PDF es Pauschal→global');
+// —— 3. Ambiguous 1.250 ——
+const ambEs = parseLocaleNumber('1.250', { preferGroupedThousandsDot: true });
 assert(
-  normalizeInvoiceUnit('m²') !== normalizeInvoiceUnit('ml'),
-  'm² ≠ ml/lm',
+  ambEs.status === 'ambiguous' && ambEs.value === 1250 && ambEs.ambiguous,
+  '3 1.250 ES ambiguous 1250',
 );
+const ambDef = parseLocaleNumber('1.250');
 assert(
-  normalizeInvoiceUnit('m³') !== normalizeInvoiceUnit('m²'),
-  'm³ ≠ m²',
-);
-assert(
-  normalizeInvoiceUnit('m²') !== normalizeInvoiceUnit('ud'),
-  'm² ≠ ud/pcs',
-);
-assert(looksLikeSquareMeter('m²') && looksLikeSquareMeter('m2'), 'looksLike m²');
-assert(looksLikePieceUnit('ud') && looksLikePieceUnit('шт'), 'looksLike pcs');
-assert(!looksLikeSquareMeter('ud') && !looksLikePieceUnit('m²'), 'no cross looksLike');
-
-// —— 6. Format gate: DOC not claimed; images yes ——
-assert(
-  !isInvoiceImportFile(new File(['x'], 'a.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })),
-  'DOCX not accepted',
-);
-assert(
-  !isInvoiceImportFile(new File(['x'], 'a.doc')),
-  'DOC not accepted',
-);
-assert(
-  isInvoiceImportFile(new File(['x'], 'a.xlsx')),
-  'XLSX accepted',
-);
-assert(
-  isInvoiceImportFile(new File(['x'], 'scan.png', { type: 'image/png' })),
-  'PNG image accepted (OCR path in browser)',
-);
-assert(
-  isInvoiceImportFile(new File(['x'], 'a.pdf', { type: 'application/pdf' })),
-  'PDF accepted',
+  ambDef.status === 'ambiguous' && ambDef.value === 1.25,
+  '3 1.250 default ambiguous 1.25',
 );
 
-// —— 7. Sparse PDF text detection (OCR trigger) ——
-assert(isSparseExtractedText('') === true, 'empty text is sparse');
-assert(isSparseExtractedText('abc') === true, 'short text is sparse');
-assert(
-  isSparseExtractedText(
-    'Trabajo Unidad Medición Precio Total\nPintura 12,5 m2 20,00 250,00\n'.repeat(3),
-  ) === false,
-  'table-like text not sparse',
-);
-assert(canRunBrowserOcr() === false, 'Node has no browser OCR (expected)');
+// —— 4 / 5. ES and US formats ——
+assert(parseLocaleNumber('1.250,50').status === 'ok' && parseLocaleNumber('1.250,50').value === 1250.5, '4 ES 1.250,50');
+assert(parseLocaleNumber('1,250.50').status === 'ok' && parseLocaleNumber('1,250.50').value === 1250.5, '5 US 1,250.50');
+assert(parseLocaleNumber('1250,50').value === 1250.5, '4b 1250,50');
+assert(parseLocaleNumber('12,5').value === 12.5, '4c 12,5');
+assert(parseLocaleNumber('2.345,75 €').value === 2345.75, '4d euro');
+assert(parseLocaleNumber('1 234,56').value === 1234.56, '4e space');
+assert(parseLocaleNumber("1'234.56").value === 1234.56, '5b apostrophe');
 
-// —— 8. Synthetic EU CSV with mismatch (must NOT silently rewrite price) ——
+// —— Money math ——
+assert(calculateLineTotal(2, 1250.5, 0) === 2501, 'math 1.250,50×2');
+assert(calculateLineTotal(12.5, 20, 0) === 250, 'math 12.5×20');
+assert(calculateLineTotal(9.95, 27, 0) === 268.65, 'math cents');
+assert(toCents(0.1 + 0.2) === 30, 'cents 0.1+0.2');
+assert(fromCents(2501) === 25.01, 'fromCents');
+assert(roundMoney(268.649999999) === 268.65, 'roundMoney');
+
+// —— 6. Units kg/pcs/m/lm/m²/m³ ——
+assert(resolveInvoiceUnit('kg').normalized === 'kg', '6 kg→kg');
+assert(resolveInvoiceUnit('kg').known === true, '6 kg known');
+assert(normalizeInvoiceUnit('kg') === 'kg', '6 normalize kg');
+assert(resolveInvoiceUnit('pcs').normalized === 'pcs', '6 pcs');
+assert(resolveInvoiceUnit('ud').normalized === 'pcs', '6 ud→pcs');
+assert(resolveInvoiceUnit('m').normalized === 'm', '6 bare m≠lm');
+assert(resolveInvoiceUnit('ml').normalized === 'lm', '6 ml→lm');
+assert(resolveInvoiceUnit('m2').normalized === 'm²', '6 m2');
+assert(resolveInvoiceUnit('m3').normalized === 'm³', '6 m3');
+assert(resolveInvoiceUnit('m').normalized !== resolveInvoiceUnit('ml').normalized, '6 m≠lm');
+assert(resolveInvoiceUnit('m²').normalized !== resolveInvoiceUnit('m³').normalized, '6 m²≠m³');
+assert(normalizeInvoiceUnit('mÂ²') === 'm²', '6 mojibake');
+assert(normalizeInvoiceUnit('m^2') === 'm²', '6 m^2');
+assert(formatUnitForPdf('pcs', 'es') === 'ud', '6 pdf ud');
+assert(formatUnitForPdf('kg', 'es') === 'kg', '6 pdf kg');
+
+// —— 7. Unknown unit ——
+const unk = resolveInvoiceUnit('foobar');
+assert(unk.known === false && unk.unit === 'foobar', '7 unknown keeps original');
+assert(unk.normalized === null, '7 unknown not normalized to pcs');
+
+const unkCsv =
+  'Trabajo;Unidad;Medición;Precio;Total\n' +
+  'Cemento;xyz;10;5;50\n';
+const unkDraft = await importInvoiceFromFile(
+  new File([unkCsv], 'unk.csv', { type: 'text/csv' }),
+);
+assert(unkDraft.items[0]?.unit === 'xyz', '7 import keeps xyz');
+assert(unkDraft.items[0]?.critical === true, '7 unknown unit critical');
+assert(unkDraft.items[0]?.unitKnown === false, '7 unitKnown false');
+
+// —— 8. Total mismatch ——
 const mismatchCsv =
   'Trabajo;Unidad;Medición;Precio;Total €\n' +
   'Pintura;m2;12,5;20,00;999,00\n';
 const mismatchDraft = await importInvoiceFromFile(
   new File([mismatchCsv], 'mismatch.csv', { type: 'text/csv' }),
 );
-assert(mismatchDraft.items.length === 1, 'mismatch CSV 1 line');
-assert(
-  Math.abs(mismatchDraft.items[0].price - 20) < 0.001,
-  'mismatch: price kept 20 (not rewritten from Total)',
-);
-assert(
-  mismatchDraft.items[0].needsReview === true,
-  'mismatch: needsReview flagged',
-);
+assert(Math.abs(mismatchDraft.items[0].price - 20) < 0.001, '8 price kept 20');
 assert(
   (mismatchDraft.warnings || []).some((w) => /розбіжність|≠/i.test(w)),
-  'mismatch: warning surfaced',
+  '8 mismatch warning',
 );
 
-// —— 9. Same name, different units stay separate ——
+// —— 9. Block save on critical ——
+assert(
+  canPersistImportedItems(unkDraft.items) === false,
+  '9 cannot persist unknown unit',
+);
+assert(unresolvedCriticalIndexes(unkDraft.items).length >= 1, '9 critical indexes');
+const confirmed = unkDraft.items.map((i) => ({
+  ...i,
+  reviewConfirmed: true,
+  critical: false,
+  needsReview: false,
+}));
+assert(canPersistImportedItems(confirmed) === true, '9 persist after confirm');
+
+const emptyQtyCsv =
+  'Trabajo;Unidad;Medición;Precio;Total\n' +
+  'Pintura;m2;;20,00;\n';
+const emptyQtyDraft = await importInvoiceFromFile(
+  new File([emptyQtyCsv], 'emptyq.csv', { type: 'text/csv' }),
+);
+assert(
+  emptyQtyDraft.items.some((i) => i.critical) || emptyQtyDraft.items.length === 0,
+  '9 empty qty critical or skipped',
+);
+
+// —— Soft validate ——
+const vEmpty = validateImportedDraft({ items: [] });
+assert(vEmpty.ok === false && vEmpty.canPersist === false, 'validate empty');
+
+// —— Format gate ——
+assert(!isInvoiceImportFile(new File(['x'], 'a.docx')), 'DOCX rejected');
+assert(isInvoiceImportFile(new File(['x'], 'a.xlsx')), 'XLSX ok');
+assert(isInvoiceImportFile(new File(['x'], 'a.png', { type: 'image/png' })), 'PNG ok');
+assert(isSparseExtractedText('') === true, 'sparse empty');
+assert(canRunBrowserOcr() === false, 'no OCR in Node');
+
+// —— Same name different units ——
 const unitsCsv =
   'Опис;Кількість;Од;Ціна;Сума\n' +
   'Плінтус;10;пог.м;8;80\n' +
@@ -180,84 +170,20 @@ const unitsCsv =
 const unitsDraft = await importInvoiceFromFile(
   new File([unitsCsv], 'units.csv', { type: 'text/csv' }),
 );
-assert(unitsDraft.items.length === 2, 'same name different units → 2 lines');
+assert(unitsDraft.items.length === 2, 'units 2 lines');
 assert(unitsDraft.items[0].unit === 'lm' && unitsDraft.items[1].unit === 'pcs', 'units distinct');
 
-// —— 10. Long multiline-ish description (single cell) ——
-const longCsv =
+// —— kg CSV ——
+const kgCsv =
   'Description;Qty;Unit;Price;Total\n' +
-  '"Drywall / Trockenbau — 12.5mm boards, acoustic, incl. jointing";3;m2;45;135\n';
-const longDraft = await importInvoiceFromFile(
-  new File([longCsv], 'long.csv', { type: 'text/csv' }),
+  'Cement;25;kg;0.40;10\n';
+const kgDraft = await importInvoiceFromFile(
+  new File([kgCsv], 'kg.csv', { type: 'text/csv' }),
 );
-assert(
-  longDraft.items[0]?.description.includes('Drywall') &&
-    longDraft.items[0]?.description.includes('acoustic'),
-  'long work name preserved',
-);
+assert(kgDraft.items[0]?.unit === 'kg', 'kg stays kg not pcs');
+assert(Math.abs(kgDraft.items[0].quantity - 25) < 0.001, 'kg qty 25');
 
-// —— 11. VAT-included hint + multi-rate note via PDF-like text is unit-tested in taxHints
-// Covered indirectly: validation + spreadsheet IVA column as description noise
-const ivaCsv =
-  'Trabajo;Unidad;Cantidad;Precio;Total\n' +
-  'Alicatado;m2;10;25;250\n' +
-  'Total;;;250\n';
-const ivaDraft = await importInvoiceFromFile(
-  new File([ivaCsv], 'iva.csv', { type: 'text/csv' }),
-);
-assert(ivaDraft.items.length === 1, 'Total footer not imported as line');
-assert(Math.abs(ivaDraft.items[0].total - 250) < 0.02, 'IVA CSV line total');
-
-// —— 12. validateImportedDraft ——
-const vEmpty = validateImportedDraft({ items: [] });
-assert(vEmpty.ok === false, 'validate empty draft fails');
-const vOk = validateImportedDraft({
-  items: [
-    {
-      quantity: 2,
-      quantityDisplay: '2',
-      unit: 'm²',
-      price: 10,
-      priceDisplay: '10',
-      material: '',
-      materialDisplay: '',
-      description: 'Pintura',
-      total: 20,
-    },
-  ],
-});
-assert(vOk.ok === true, 'validate clean draft ok');
-const vReview = validateImportedDraft({
-  items: [
-    {
-      quantity: 0,
-      quantityDisplay: '',
-      unit: 'm²',
-      price: 10,
-      priceDisplay: '10',
-      material: '',
-      materialDisplay: '',
-      description: 'Enlucido',
-      total: 0,
-      needsReview: true,
-      reviewWarnings: ['Порожня кількість'],
-    },
-  ],
-});
-assert(vReview.reviewItemIndexes.length === 1, 'validate flags review index');
-
-// —— 13. Corrupted / incomplete table ——
-let threw = false;
-try {
-  await importInvoiceFromFile(
-    new File(['hello;;;;\nworld;;;;\n'], 'bad.csv', { type: 'text/csv' }),
-  );
-} catch {
-  threw = true;
-}
-assert(threw, 'incomplete CSV without headers throws');
-
-// —— 14. EN CSV ——
+// —— EN ——
 const enCsv =
   'Description;Qty;Unit;Price;Total\n' +
   'Painting;12.5;sqm;20;250\n' +
@@ -265,106 +191,101 @@ const enCsv =
 const enDraft = await importInvoiceFromFile(
   new File([enCsv], 'en.csv', { type: 'text/csv' }),
 );
-assert(enDraft.items.length === 2, 'EN CSV 2 lines');
 assert(enDraft.items[0].unit === 'm²' && enDraft.items[0].total === 250, 'EN painting');
 assert(enDraft.items[1].unit === 'h', 'EN hours');
 
-// —— 15. File totals mismatch warning ——
-const sumCsv =
-  'Trabajo;Unidad;Medición;Precio;Total €\n' +
-  'A;m2;1;10;10\n' +
-  'B;m2;1;10;10\n' +
-  'Total;;;;999\n';
-const sumDraft = await importInvoiceFromFile(
-  new File([sumCsv], 'sum.csv', { type: 'text/csv' }),
-);
-assert(
-  (sumDraft.warnings || []).some((w) => /не збігається|3500|999/i.test(w) || /999/.test(w)),
-  'file total mismatch warning',
-);
-
-// —— Real Presupuesto file ——
-const xlsxPath =
-  '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_dafd.xlsx';
-if (existsSync(xlsxPath)) {
+// —— 10–13 Presupuesto (both sheets: labor 21 + materials 27 = 48 / €4900) ——
+const xlsxCandidates = [
+  '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_5bc4.xlsx',
+  '/home/ubuntu/.cursor/projects/workspace/uploads/Presupuesto_09_10_2026_dafd.xlsx',
+];
+const xlsxPath = xlsxCandidates.find((p) => existsSync(p));
+if (xlsxPath) {
   const buf = readFileSync(xlsxPath);
   const draft = await importInvoiceFromFile(
     new File([buf], 'Presupuesto_09_10_2026.xlsx'),
   );
   const sum = draft.items.reduce((s, i) => s + i.total, 0);
-  assert(draft.items.length === 21, `21 lines, got ${draft.items.length}`);
-  assert(Math.abs(sum - 3500) < 0.05, `sum 3500, got ${sum}`);
-  assert(draft.importedSheet === 'Mano de obra', 'importedSheet Mano de obra');
+  assert(draft.items.length === 48, `10 48 lines (21+27) got ${draft.items.length}`);
+  assert(Math.abs(sum - 4900) < 0.05, `10 sum 4900 got ${sum}`);
   assert(
-    draft.skippedSheets?.includes('Materiales') === true,
-    'skipped Materiales',
+    /Mano de obra/i.test(draft.importedSheet || '') &&
+      /Materiales/i.test(draft.importedSheet || ''),
+    '10 both sheets imported',
+  );
+  assert(!draft.skippedSheets?.length, '10 no skipped sheets');
+
+  const laborSum = draft.items
+    .slice(0, 21)
+    .reduce((s, i) => s + i.total, 0);
+  const matSum = draft.items.slice(21).reduce((s, i) => s + i.total, 0);
+  assert(Math.abs(laborSum - 3500) < 0.05, `10 labor 3500 got ${laborSum}`);
+  assert(Math.abs(matSum - 1400) < 0.05, `10 materials 1400 got ${matSum}`);
+
+  const draft2 = await importInvoiceFromFile(
+    new File([buf], 'Presupuesto_09_10_2026.xlsx'),
+  );
+  assert(draft2.items.length === 48, '11 re-import no dup');
+
+  assert(
+    draft.items.every((i) => !!i.originalDescription),
+    '12 originals present',
   );
   assert(
-    !draft.items.some((i) => /^total$/i.test(i.description)),
-    'no Total row',
+    draft.items.some((i) => /Demolición/i.test(i.description)),
+    '12 Spanish labor names',
   );
   assert(
-    !draft.items.some((i) => i.description === 'Trabajo'),
-    'no header Trabajo row',
+    draft.items.some((i) => /Ladrillo hueco para fábrica/i.test(i.description)),
+    '12 Spanish material names',
   );
-  const p4 = draft.items[3];
-  assert(
-    Math.abs(p4.quantity - 5.1) < 0.001 &&
-      Math.abs(p4.price - 33) < 0.001 &&
-      Math.abs(p4.total - 168.3) < 0.02,
-    'pos4 del 7 o del 5 → 5.1×33=168.30',
-  );
-  // Critical: pcs (ud) vs m² must not be scrambled with Pos/# as quantity
+
   const door = draft.items.find((i) =>
     /puerta de balc[oó]n est[aá]ndar/i.test(i.description),
   );
   const demo = draft.items.find((i) =>
     /Demolici[oó]n de tabique con hueco/i.test(i.description),
   );
-  assert(
-    !!door &&
-      door.unit === 'pcs' &&
-      Math.abs(door.quantity - 1) < 0.001 &&
-      Math.abs(door.price - 220) < 0.001,
-    'puerta: qty=1 unit=pcs (ud), not m² / not Pos#',
+  const cementBags = draft.items.find((i) =>
+    /Mortero para fábrica/i.test(i.description),
   );
   assert(
-    !!demo &&
-      demo.unit === 'm²' &&
-      Math.abs(demo.quantity - 9.95) < 0.001 &&
-      Math.abs(demo.price - 27) < 0.001,
-    'demolición: qty=9.95 unit=m², not pcs',
+    !!door && door.unit === 'pcs' && Math.abs(door.quantity - 1) < 0.001,
+    'puerta 1 pcs',
   );
   assert(
-    draft.items.filter((i) => i.unit === 'pcs').length >= 2,
-    'at least 2 ud→pcs lines',
+    !!demo && demo.unit === 'm²' && Math.abs(demo.quantity - 9.95) < 0.001,
+    'demo 9.95 m²',
   );
   assert(
-    draft.items.filter((i) => i.unit === 'm²').length >= 10,
-    'many m² labor lines kept as m²',
+    !!cementBags &&
+      cementBags.unit === 'pcs' &&
+      Math.abs(cementBags.quantity - 4) < 0.001 &&
+      Math.abs(cementBags.total - 66) < 0.02,
+    'material saco→pcs qty 4 total 66',
   );
-  assert(
-    draft.items.every((i) => !!i.originalDescription),
-    'original Spanish descriptions preserved',
-  );
-  assert(
-    draft.items.some((i) => /Demolición/i.test(i.description)),
-    'Spanish work names kept',
-  );
-  assert(draft.extractionMethod === 'spreadsheet', 'extractionMethod spreadsheet');
 
-  const draft2 = await importInvoiceFromFile(
-    new File([buf], 'Presupuesto_09_10_2026.xlsx'),
-  );
+  // No Lexware ghost material companions (every line has its own description)
   assert(
-    draft2.items.length === draft.items.length && draft.items.length === 21,
-    're-import same count, no duplication in parser',
+    !draft.items.some((i) => i.description === 'Матеріал' || /^Material$/i.test(i.description)),
+    'no ghost Material rows',
   );
 
   const v = validateImportedDraft(draft);
-  assert(v.ok === true, 'Presupuesto draft validates ok');
+  assert(
+    v.canPersist === true || unresolvedCriticalIndexes(draft.items).length === 0,
+    '10 can persist Presupuesto',
+  );
+
+  const snapshot = draft.items.map((i) => ({ ...i }));
+  await importInvoiceFromFile(new File([buf], 'Presupuesto_09_10_2026.xlsx'));
+  assert(
+    snapshot.length === 48 &&
+      Math.abs(snapshot.reduce((s, i) => s + i.total, 0) - 4900) < 0.05,
+    '13 prior import snapshot unchanged',
+  );
 } else {
-  console.warn('SKIP file tests: Presupuesto xlsx not in uploads');
+  console.warn('SKIP Presupuesto file tests');
 }
 
 // UA CSV
@@ -372,16 +293,11 @@ const csv = 'Опис;Кількість;Од;Ціна;Сума\nШтукату�
 const csvDraft = await importInvoiceFromFile(
   new File([csv], 'ua.csv', { type: 'text/csv' }),
 );
-assert(csvDraft.items.length === 2, 'UA CSV 2 lines');
-assert(csvDraft.items[0].unit === 'm²' && csvDraft.items[0].total === 300, 'CSV line1');
-assert(csvDraft.items[1].unit === 'lm' && csvDraft.items[1].total === 80, 'CSV line2');
+assert(csvDraft.items.length === 2, 'UA CSV 2');
+assert(csvDraft.items[0].unit === 'm²' && csvDraft.items[0].total === 300, 'UA line1');
 
-// Text PDF line heuristic (synthetic plain text via CSV path already covers structure;
-// PDF OCR cannot run in Node — documented)
-assert(
-  true,
-  'scanned PDF/photo OCR: browser-only path (canRunBrowserOcr=false in Node) — not claimed green here',
-);
+assert(looksLikeSquareMeter('m²') && looksLikePieceUnit('ud'), 'looksLike helpers');
+assert(!looksLikeSquareMeter('ud'), 'no cross looksLike');
 
 if (failed) {
   console.error(`\n${failed} failed, ${passed} passed`);

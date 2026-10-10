@@ -17,7 +17,11 @@ import {
   consumeInvoiceImportDraft,
   type ImportedInvoiceDraft,
 } from '../lib/invoiceImportFromFile';
-import { validateImportedDraft } from '../lib/invoiceImportValidate';
+import {
+  canPersistImportedItems,
+  unresolvedCriticalIndexes,
+  validateImportedDraft,
+} from '../lib/invoiceImportValidate';
 import {
   fetchProjectBundle,
   listProjects,
@@ -51,6 +55,9 @@ interface InvoiceItem {
   originalUnitRaw?: string;
   needsReview?: boolean;
   reviewWarnings?: string[];
+  critical?: boolean;
+  reviewConfirmed?: boolean;
+  unitKnown?: boolean;
 }
 
 const emptyItem = (): InvoiceItem => ({
@@ -325,12 +332,16 @@ export const InvoiceForm: React.FC = () => {
           originalUnitRaw: item.originalUnitRaw,
           needsReview: item.needsReview,
           reviewWarnings: item.reviewWarnings,
+          critical: item.critical,
+          reviewConfirmed: item.reviewConfirmed,
+          unitKnown: item.unitKnown,
         })),
       );
     }
 
     const validation = validateImportedDraft(draft);
     const reviewCount = validation.reviewItemIndexes.length;
+    const criticalCount = validation.criticalItemIndexes.length;
     const warnParts = [
       draft.sourceFileName
         ? `${t('importInvoice') || 'Import'}: ${draft.sourceFileName} (${draft.items.length})`
@@ -352,9 +363,13 @@ export const InvoiceForm: React.FC = () => {
       t('invoiceImportReady') ||
         `Знайдено ${draft.items.length} позицій — перевірте і збережіть`,
     );
-    if (reviewCount > 0) {
+    if (criticalCount > 0) {
       showWarning(
-        `${reviewCount} позицій позначено для перевірки (жовті рядки). Виправте перед створенням інвойсу.`,
+        `${criticalCount} критичних позицій блокують збереження — виправте або підтвердіть перевірку.`,
+      );
+    } else if (reviewCount > 0) {
+      showWarning(
+        `${reviewCount} позицій позначено для перевірки (жовті рядки).`,
       );
     }
   };
@@ -541,8 +556,29 @@ export const InvoiceForm: React.FC = () => {
   const clearReview = (item: InvoiceItem): InvoiceItem => ({
     ...item,
     needsReview: false,
+    critical: false,
+    reviewConfirmed: true,
     reviewWarnings: undefined,
+    unitKnown: true,
   });
+
+  /** Explicitly confirm remaining review rows after visual check (no silent auto-fix). */
+  const confirmAllReviews = () => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.needsReview || item.critical
+          ? {
+              ...item,
+              reviewConfirmed: true,
+              needsReview: false,
+              critical: false,
+            }
+          : item,
+      ),
+    );
+    showSuccess('Перевірку підтверджено — можна зберігати інвойс');
+    setImportBanner(null);
+  };
 
   const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
     setItems((prev) => {
@@ -719,10 +755,16 @@ export const InvoiceForm: React.FC = () => {
   };
 
   const persistInvoice = async (status: string): Promise<string> => {
-    const stillNeedReview = items.filter((i) => i.needsReview).length;
-    if (stillNeedReview > 0) {
+    const criticalIdx = unresolvedCriticalIndexes(items);
+    if (criticalIdx.length > 0 || !canPersistImportedItems(items)) {
+      throw new Error(
+        `Неможливо зберегти: ${criticalIdx.length || 'є'} критичних позицій без перевірки (рядки ${criticalIdx.map((i) => i + 1).join(', ')}). Виправте значення або натисніть «Підтвердив перевірку».`,
+      );
+    }
+    const softReview = items.filter((i) => i.needsReview && !i.reviewConfirmed).length;
+    if (softReview > 0) {
       showWarning(
-        `${stillNeedReview} позицій ще позначено для перевірки. Дані збережуться як є — переконайтесь у правильності сум.`,
+        `${softReview} некритичних попереджень — збереження дозволено, перевірте суми.`,
       );
     }
 
@@ -924,14 +966,23 @@ export const InvoiceForm: React.FC = () => {
         </div>
         {importBanner && (
           <div
-            className="mt-3 px-3 py-2 rounded-xl text-sm"
+            className="mt-3 px-3 py-2 rounded-xl text-sm space-y-2"
             style={{
               background: 'rgba(196, 140, 90, 0.15)',
               border: '1px solid var(--cpc-copper)',
               color: 'var(--cpc-copper)',
             }}
           >
-            {importBanner}
+            <p>{importBanner}</p>
+            {items.some((i) => i.critical && !i.reviewConfirmed) ? (
+              <button
+                type="button"
+                onClick={confirmAllReviews}
+                className="text-xs underline underline-offset-2 hover:opacity-80"
+              >
+                Підтвердив перевірку критичних позицій
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -1137,7 +1188,22 @@ export const InvoiceForm: React.FC = () => {
                       {t('unitShort')}
                     </label>
                     <Select
-                      options={unitSelectOptions(t)}
+                      options={(() => {
+                        const base = unitSelectOptions(t);
+                        if (
+                          item.unit &&
+                          !base.some((o) => o.value === item.unit)
+                        ) {
+                          return [
+                            {
+                              value: item.unit,
+                              label: `${item.unit} (з файлу)`,
+                            },
+                            ...base,
+                          ];
+                        }
+                        return base;
+                      })()}
                       value={item.unit}
                       onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
                     />

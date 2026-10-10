@@ -973,9 +973,12 @@ export const Invoices: React.FC = () => {
         storeInvoiceImportDraft(draft);
         const sum = draft.items.reduce((s, it) => s + (Number(it.total) || 0), 0);
         const sheetLabel = draft.importedSheet || file.name;
-        let msg = `Імпортовано ${draft.items.length} позицій з аркуша «${sheetLabel}», разом ${sum.toFixed(2)} €.`;
+        const multi = sheetLabel.includes(' + ');
+        let msg = multi
+          ? `Імпортовано ${draft.items.length} позицій з аркушів «${sheetLabel}», разом ${sum.toFixed(2)} €.`
+          : `Імпортовано ${draft.items.length} позицій з аркуша «${sheetLabel}», разом ${sum.toFixed(2)} €.`;
         if (draft.skippedSheets?.length) {
-          msg += ` Пропущено аркуші: ${draft.skippedSheets.join(', ')}.`;
+          msg += ` Пропущено аркуші без таблиці: ${draft.skippedSheets.join(', ')}.`;
         }
         showSuccess(msg);
         if (draft.warnings?.length) {

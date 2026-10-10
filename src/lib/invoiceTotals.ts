@@ -10,7 +10,7 @@ export function parseMaterialAmount(material: string | number | null | undefined
 
   if (material == null) return 0;
 
-  return parseLocaleNumber(material).value;
+  return parseLocaleNumber(material).value ?? 0;
 }
 
 /** Line total = quantity × price + material cost (form / storage), rounded to cents. */

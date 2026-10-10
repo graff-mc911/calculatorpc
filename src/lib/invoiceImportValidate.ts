@@ -10,12 +10,17 @@ export type ImportValidationIssue = {
   itemIndex?: number;
   field?: string;
   message: string;
+  /** Critical issues block save until edit or explicit confirm */
+  critical?: boolean;
 };
 
 export type ImportValidationResult = {
   ok: boolean;
+  /** True when no unresolved critical issues remain */
+  canPersist: boolean;
   issues: ImportValidationIssue[];
   reviewItemIndexes: number[];
+  criticalItemIndexes: number[];
 };
 
 type DraftLike = {
@@ -32,14 +37,16 @@ function lineIssues(item: PrefillInvoiceItem, index: number): ImportValidationIs
       itemIndex: index,
       field: 'description',
       message: 'Порожня назва роботи',
+      critical: true,
     });
   }
   if (!(Number(item.quantity) > 0) && item.unit !== 'Pauschal') {
     out.push({
-      level: 'warning',
+      level: 'error',
       itemIndex: index,
       field: 'quantity',
       message: 'Кількість відсутня або 0',
+      critical: true,
     });
   }
   if (!(Number(item.price) > 0) && !(parseFloat(String(item.material || '0')) > 0)) {
@@ -48,6 +55,15 @@ function lineIssues(item: PrefillInvoiceItem, index: number): ImportValidationIs
       itemIndex: index,
       field: 'price',
       message: 'Немає ціни та матеріалу',
+    });
+  }
+  if (item.unitKnown === false || (item.critical && /одиниц/i.test((item.reviewWarnings || []).join(' ')))) {
+    out.push({
+      level: 'error',
+      itemIndex: index,
+      field: 'unit',
+      message: `Одиниця потребує перевірки: «${item.originalUnitRaw || item.unit}»`,
+      critical: true,
     });
   }
   const expected = calculateLineTotal(item.quantity, item.price, item.material);
@@ -63,12 +79,37 @@ function lineIssues(item: PrefillInvoiceItem, index: number): ImportValidationIs
       message: `Сума позиції ${item.total} ≠ qty×price ${expected}`,
     });
   }
-  if (item.needsReview) {
+  if (item.critical && !item.reviewConfirmed) {
+    for (const w of item.reviewWarnings || ['Критична невизначеність']) {
+      out.push({
+        level: 'error',
+        itemIndex: index,
+        message: w,
+        critical: true,
+      });
+    }
+  } else if (item.needsReview && !item.reviewConfirmed) {
     for (const w of item.reviewWarnings || ['Потребує перевірки']) {
       out.push({ level: 'warning', itemIndex: index, message: w });
     }
   }
   return out;
+}
+
+/** Unresolved critical lines that must be fixed or explicitly confirmed. */
+export function unresolvedCriticalIndexes(
+  items: PrefillInvoiceItem[],
+): number[] {
+  return items
+    .map((item, i) =>
+      item.critical && !item.reviewConfirmed ? i : -1,
+    )
+    .filter((i) => i >= 0);
+}
+
+/** Whether items may be persisted to an invoice. */
+export function canPersistImportedItems(items: PrefillInvoiceItem[]): boolean {
+  return unresolvedCriticalIndexes(items).length === 0;
 }
 
 /** Validate draft structure before creating / saving an invoice from import. */
@@ -77,8 +118,10 @@ export function validateImportedDraft(draft: DraftLike): ImportValidationResult 
   if (!draft?.items?.length) {
     return {
       ok: false,
-      issues: [{ level: 'error', message: 'Немає позицій після імпорту' }],
+      canPersist: false,
+      issues: [{ level: 'error', message: 'Немає позицій після імпорту', critical: true }],
       reviewItemIndexes: [],
+      criticalItemIndexes: [],
     };
   }
 
@@ -91,13 +134,16 @@ export function validateImportedDraft(draft: DraftLike): ImportValidationResult 
   }
 
   const reviewItemIndexes = draft.items
-    .map((item, i) => (item.needsReview ? i : -1))
+    .map((item, i) => (item.needsReview && !item.reviewConfirmed ? i : -1))
     .filter((i) => i >= 0);
 
+  const criticalItemIndexes = unresolvedCriticalIndexes(draft.items);
   const hasError = issues.some((i) => i.level === 'error');
   return {
     ok: !hasError,
+    canPersist: criticalItemIndexes.length === 0,
     issues,
     reviewItemIndexes,
+    criticalItemIndexes,
   };
 }

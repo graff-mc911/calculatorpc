@@ -1,10 +1,19 @@
 /**
  * Locale-aware number parsing for construction estimates (ES/DE/UA).
- * Never strips letters to salvage digits. Ambiguous forms are flagged.
+ * Never strips letters to salvage digits. Distinguishes ok / empty / invalid / ambiguous.
  */
 
+export type ParseNumberStatus = 'ok' | 'empty' | 'invalid' | 'ambiguous';
+
 export type ParsedLocaleNumber = {
-  value: number;
+  /** ok | empty | invalid | ambiguous — never treat invalid/empty as a confirmed 0 */
+  status: ParseNumberStatus;
+  /**
+   * Confirmed or candidate numeric value.
+   * null when status is empty or invalid (do not invent 0 as “truth”).
+   * For ambiguous, holds the preferred reading (still requires review).
+   */
+  value: number | null;
   /** True when the string could be read more than one way */
   ambiguous: boolean;
   /** Raw cleaned numeric text before numeric conversion */
@@ -29,9 +38,19 @@ function stripMoneyNoise(raw: string): string {
     .replace(/[\s\u00a0\u202f']/g, '');
 }
 
+function result(
+  status: ParseNumberStatus,
+  value: number | null,
+  normalized: string,
+  original: string,
+  ambiguous = false,
+): ParsedLocaleNumber {
+  return { status, value, ambiguous, normalized, original };
+}
+
 /**
  * Parse a numeric cell / money string.
- * Returns value 0 + ambiguous false for empty / non-numeric text with letters.
+ * Invalid / empty → value null (not 0). Ambiguous → candidate value + status ambiguous.
  */
 export function parseLocaleNumber(
   raw: unknown,
@@ -39,25 +58,23 @@ export function parseLocaleNumber(
 ): ParsedLocaleNumber {
   const original = raw == null ? '' : String(raw);
   if (typeof raw === 'number') {
-    return {
-      value: Number.isFinite(raw) ? raw : 0,
-      ambiguous: false,
-      normalized: String(raw),
-      original,
-    };
+    if (!Number.isFinite(raw)) {
+      return result('invalid', null, '', original);
+    }
+    return result('ok', raw, String(raw), original);
   }
 
   let s = stripMoneyNoise(original);
   if (!s) {
-    return { value: 0, ambiguous: false, normalized: '', original };
+    return result('empty', null, '', original);
   }
   // Never extract digits from words / mixed text
   if (/\p{L}/u.test(s)) {
-    return { value: 0, ambiguous: false, normalized: '', original };
+    return result('invalid', null, '', original);
   }
   s = s.replace(/[^\d,.\-]/g, '');
   if (!s || s === '-' || s === '.' || s === ',') {
-    return { value: 0, ambiguous: false, normalized: '', original };
+    return result('invalid', null, '', original);
   }
 
   let ambiguous = false;
@@ -90,12 +107,30 @@ export function parseLocaleNumber(
   }
 
   const n = Number(s);
-  return {
-    value: Number.isFinite(n) ? n : 0,
-    ambiguous,
-    normalized: s,
-    original,
-  };
+  if (!Number.isFinite(n)) {
+    return result('invalid', null, s, original);
+  }
+  if (ambiguous) {
+    return result('ambiguous', n, s, original, true);
+  }
+  return result('ok', n, s, original);
+}
+
+/** Confirmed numeric value for calculations; null if empty/invalid. */
+export function confirmedNumber(parsed: ParsedLocaleNumber): number | null {
+  if (parsed.status === 'ok' || parsed.status === 'ambiguous') {
+    return parsed.value;
+  }
+  return null;
+}
+
+/** True when the parse must be reviewed before invoice confirmation. */
+export function parseNeedsReview(parsed: ParsedLocaleNumber): boolean {
+  return (
+    parsed.status === 'ambiguous' ||
+    parsed.status === 'invalid' ||
+    parsed.status === 'empty'
+  );
 }
 
 /** Round money to cents (deterministic, avoids float drift for display/totals). */
