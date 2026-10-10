@@ -222,7 +222,10 @@ export default function ProjectDetail() {
         console.warn('linkable invoices load failed', err);
         return [];
       }
-      return data || [];
+      return (data || []).map((row: any) => ({
+        ...row,
+        clients: Array.isArray(row.clients) ? row.clients[0] || null : row.clients,
+      }));
     },
   });
 
