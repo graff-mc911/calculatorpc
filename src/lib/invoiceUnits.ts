@@ -13,9 +13,26 @@ export type InvoiceUnit =
   | 'Stunde'
   | 'ft²';
 
+/**
+ * Fix common export/mojibake forms before matching.
+ * Excel/CSV sometimes yields `mÂ²` (UTF-8 m² read as Latin-1) or `m^2`.
+ */
+function repairUnitMojibake(raw: string): string {
+  return String(raw || '')
+    .normalize('NFC')
+    .replace(/m[ÂÃâã]\s*²/gi, 'm²')
+    .replace(/m[ÂÃâã]\s*2/gi, 'm2')
+    .replace(/m[ÂÃâã]\s*³/gi, 'm³')
+    .replace(/m[ÂÃâã]\s*3/gi, 'm3')
+    .replace(/m\s*\^\s*2/gi, 'm2')
+    .replace(/m\s*\^\s*3/gi, 'm3')
+    .replace(/м\s*\^\s*2/gi, 'м2')
+    .replace(/м\s*\^\s*3/gi, 'м3');
+}
+
 /** Strip spaces / dots / lowercase for matching. */
 export function compactUnitText(raw: string): string {
-  return String(raw || '')
+  return repairUnitMojibake(raw)
     .trim()
     .toLowerCase()
     .replace(/²/g, '2')
@@ -104,16 +121,19 @@ export function normalizeInvoiceUnit(
     return 'h';
   }
 
-  // Square meters (before bare "m" / "ml")
+  // Square meters (before bare "m" / "ml") — never fall through to pcs
   if (
     /^(m2|м2|qm|sqm|sq\.?\s*m|sq\s*m|м\s*2|квадратн|metro\s*cuadrado|metros\s*cuadrados)$/i.test(
       s,
     ) ||
     s === 'm²' ||
+    s === 'm 2' ||
     s.includes('м²') ||
     s.includes('квадр') ||
     s.includes('cuadrad') ||
-    s.includes('square')
+    s.includes('square') ||
+    /^m\s*2$/.test(s) ||
+    /^м\s*2$/.test(s)
   ) {
     return 'm²';
   }
@@ -187,6 +207,27 @@ export function normalizeInvoiceUnit(
   }
 
   return fallback;
+}
+
+/** True when raw unit text clearly means square meters (for review / force-correct). */
+export function looksLikeSquareMeter(raw: string | null | undefined): boolean {
+  const s = compactUnitText(String(raw || ''));
+  if (!s) return false;
+  return (
+    normalizeInvoiceUnit(s, 'pcs') === 'm²' ||
+    /^(m2|м2|sqm)$/.test(s) ||
+    s.includes('cuadrad') ||
+    s.includes('квадр')
+  );
+}
+
+/** True when raw unit text clearly means pieces / unidades. */
+export function looksLikePieceUnit(raw: string | null | undefined): boolean {
+  const s = compactUnitText(String(raw || ''));
+  if (!s) return false;
+  return /^(ud|uds|u|unidad|unidades|pcs|stk|stück|st|шт|штук|pc|pieza|piezas|ea|each)$/.test(
+    s,
+  );
 }
 
 /** Localize stored unit label for PDF (ES wordmarks; other languages unchanged). */

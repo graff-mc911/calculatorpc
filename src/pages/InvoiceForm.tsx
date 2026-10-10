@@ -1141,6 +1141,14 @@ export const InvoiceForm: React.FC = () => {
                       value={item.unit}
                       onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
                     />
+                    {item.originalUnitRaw ? (
+                      <p className="text-[11px] text-white/35 mt-1 truncate">
+                        файл: {item.originalUnitRaw}
+                        {item.originalQuantityRaw
+                          ? ` · qty ${item.originalQuantityRaw}`
+                          : ''}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>

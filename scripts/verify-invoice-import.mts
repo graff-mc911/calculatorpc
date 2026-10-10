@@ -12,7 +12,12 @@ import {
 } from '../src/lib/invoiceImportFromFile.ts';
 import { calculateLineTotal, roundMoney, toCents, fromCents } from '../src/lib/invoiceTotals.ts';
 import { parseLocaleNumber } from '../src/lib/localeNumber.ts';
-import { normalizeInvoiceUnit, formatUnitForPdf } from '../src/lib/invoiceUnits.ts';
+import {
+  normalizeInvoiceUnit,
+  formatUnitForPdf,
+  looksLikeSquareMeter,
+  looksLikePieceUnit,
+} from '../src/lib/invoiceUnits.ts';
 import { validateImportedDraft } from '../src/lib/invoiceImportValidate.ts';
 
 let failed = 0;
@@ -85,8 +90,12 @@ assert(normalizeInvoiceUnit('ud') === 'pcs', 'ud → pcs');
 assert(normalizeInvoiceUnit('global') === 'Pauschal', 'global → Pauschal');
 assert(normalizeInvoiceUnit('m2') === 'm²', 'm2 → m²');
 assert(normalizeInvoiceUnit('sq m') === 'm²', 'sq m → m²');
+assert(normalizeInvoiceUnit('m^2') === 'm²', 'm^2 → m²');
+assert(normalizeInvoiceUnit('mÂ²') === 'm²', 'mojibake mÂ² → m² (not pcs)');
 assert(normalizeInvoiceUnit('cbm') === 'm³', 'cbm → m³');
 assert(normalizeInvoiceUnit('Stk.') === 'pcs', 'Stk. → pcs');
+assert(normalizeInvoiceUnit('ud') === 'pcs', 'ud → pcs (штуки)');
+assert(normalizeInvoiceUnit('unidad') === 'pcs', 'unidad → pcs');
 assert(normalizeInvoiceUnit('set') === 'Pauschal', 'set → Pauschal');
 assert(normalizeInvoiceUnit('kg') === 'pcs', 'kg → pcs (app has no kg)');
 assert(normalizeInvoiceUnit('tonne') === 'pcs', 'tonne → pcs (no t in select)');
@@ -101,6 +110,13 @@ assert(
   normalizeInvoiceUnit('m³') !== normalizeInvoiceUnit('m²'),
   'm³ ≠ m²',
 );
+assert(
+  normalizeInvoiceUnit('m²') !== normalizeInvoiceUnit('ud'),
+  'm² ≠ ud/pcs',
+);
+assert(looksLikeSquareMeter('m²') && looksLikeSquareMeter('m2'), 'looksLike m²');
+assert(looksLikePieceUnit('ud') && looksLikePieceUnit('шт'), 'looksLike pcs');
+assert(!looksLikeSquareMeter('ud') && !looksLikePieceUnit('m²'), 'no cross looksLike');
 
 // —— 6. Format gate: DOC not claimed; images yes ——
 assert(
@@ -297,6 +313,35 @@ if (existsSync(xlsxPath)) {
       Math.abs(p4.price - 33) < 0.001 &&
       Math.abs(p4.total - 168.3) < 0.02,
     'pos4 del 7 o del 5 → 5.1×33=168.30',
+  );
+  // Critical: pcs (ud) vs m² must not be scrambled with Pos/# as quantity
+  const door = draft.items.find((i) =>
+    /puerta de balc[oó]n est[aá]ndar/i.test(i.description),
+  );
+  const demo = draft.items.find((i) =>
+    /Demolici[oó]n de tabique con hueco/i.test(i.description),
+  );
+  assert(
+    !!door &&
+      door.unit === 'pcs' &&
+      Math.abs(door.quantity - 1) < 0.001 &&
+      Math.abs(door.price - 220) < 0.001,
+    'puerta: qty=1 unit=pcs (ud), not m² / not Pos#',
+  );
+  assert(
+    !!demo &&
+      demo.unit === 'm²' &&
+      Math.abs(demo.quantity - 9.95) < 0.001 &&
+      Math.abs(demo.price - 27) < 0.001,
+    'demolición: qty=9.95 unit=m², not pcs',
+  );
+  assert(
+    draft.items.filter((i) => i.unit === 'pcs').length >= 2,
+    'at least 2 ud→pcs lines',
+  );
+  assert(
+    draft.items.filter((i) => i.unit === 'm²').length >= 10,
+    'many m² labor lines kept as m²',
   );
   assert(
     draft.items.every((i) => !!i.originalDescription),

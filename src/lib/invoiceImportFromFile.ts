@@ -4,6 +4,8 @@ import type { PrefillInvoiceItem } from './invoiceFromProject';
 import { extractInvoiceDataFromPDF } from './pdfTextExtractor';
 import {
   isMaterialOnlyLabel,
+  looksLikePieceUnit,
+  looksLikeSquareMeter,
   normalizeInvoiceUnit,
   splitQtyUnit,
 } from './invoiceUnits';
@@ -567,11 +569,31 @@ function rowsToItems(
     if (colMap.unit !== undefined) {
       const uRaw = String(unitRaw ?? '').trim();
       if (uRaw) {
-        const asPcs = normalizeInvoiceUnit(uRaw, 'pcs');
-        const asSentinel = normalizeInvoiceUnit(uRaw, 'm³');
-        if (asPcs === 'pcs' && asSentinel === 'm³') unknownUnits += 1;
-        unit = asPcs;
+        let normalized = normalizeInvoiceUnit(uRaw, 'pcs');
+        // Guard: mojibake / odd encoding must not turn m² into pcs (штуки)
+        if (looksLikeSquareMeter(uRaw) && normalized === 'pcs') {
+          normalized = 'm²';
+          needsReview = true;
+          lineWarnings.push(`Одиницю «${uRaw}» виправлено на m² (не шт)`);
+        } else if (looksLikePieceUnit(uRaw) && normalized === 'm²') {
+          normalized = 'pcs';
+          needsReview = true;
+          lineWarnings.push(`Одиницю «${uRaw}» виправлено на pcs/ud (не m²)`);
+        } else {
+          const asSentinel = normalizeInvoiceUnit(uRaw, 'm³');
+          if (normalized === 'pcs' && asSentinel === 'm³') unknownUnits += 1;
+        }
+        unit = normalized;
       }
+    }
+
+    // Never treat the Pos/# index column as quantity (classic scramble bug)
+    if (
+      colMap.index !== undefined &&
+      colMap.quantity === colMap.index
+    ) {
+      needsReview = true;
+      lineWarnings.push('Колонка кількості збігається з № — перевірте');
     }
 
     const priceParsed =
