@@ -173,7 +173,15 @@ export function searchWorksLocal(
     return { work, labor: work.labor[country], score };
   }).filter((h) => (normalized ? h.score > 0 : true));
 
-  hits.sort((a, b) => b.score - a.score || a.work.names.en.localeCompare(b.work.names.en));
+  hits.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (normalized) {
+      const aUk = normalizePriceQuery(a.work.names.uk).startsWith(normalized) ? 1 : 0;
+      const bUk = normalizePriceQuery(b.work.names.uk).startsWith(normalized) ? 1 : 0;
+      if (bUk !== aUk) return bUk - aUk;
+    }
+    return a.work.names.uk.localeCompare(b.work.names.uk, 'uk');
+  });
   return hits.slice(0, limit);
 }
 
@@ -340,7 +348,15 @@ export async function searchWorksWithOverrides(
     })
     .filter((h) => (normalized ? h.score > 0 : true));
 
-  hits.sort((a, b) => b.score - a.score || a.work.names.en.localeCompare(b.work.names.en));
+  hits.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (normalized) {
+      const aUk = normalizePriceQuery(a.work.names.uk).startsWith(normalized) ? 1 : 0;
+      const bUk = normalizePriceQuery(b.work.names.uk).startsWith(normalized) ? 1 : 0;
+      if (bUk !== aUk) return bUk - aUk;
+    }
+    return a.work.names.uk.localeCompare(b.work.names.uk, 'uk');
+  });
   return hits.slice(0, limit);
 }
 
