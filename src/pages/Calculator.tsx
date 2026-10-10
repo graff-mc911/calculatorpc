@@ -73,11 +73,11 @@ type ExpenseSource = 'catalog' | 'manual' | 'project' | 'empty';
 
 type Sheet = 'project' | 'templates' | 'createProject' | null;
 
-const DEFAULT_TITLE = 'Штукатурка';
-const DEFAULT_QTY = 150;
-const DEFAULT_PRICE = 25;
+const DEFAULT_TITLE = '';
+const DEFAULT_QTY = 0;
+const DEFAULT_PRICE = 0;
 const DEFAULT_UNIT = 'm²';
-const DEFAULT_CATALOG = 'work-gypsum-plaster';
+const DEFAULT_CATALOG: string | null = null;
 
 function uid() {
   return `w-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -103,6 +103,15 @@ function formatEuroBalance(v: number) {
 
 function formatQty(n: number) {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10).replace('.', ',');
+}
+
+/** Empty editor fields: show blank, never a forced 0. */
+function displayQtyField(n: number) {
+  return n > 0 ? formatQty(n) : '';
+}
+
+function displayPriceField(n: number) {
+  return n > 0 ? formatPrice(n) : '';
 }
 
 function formatPrice(n: number) {
@@ -204,9 +213,9 @@ export default function Calculator() {
   const [draftPrice, setDraftPrice] = useState(DEFAULT_PRICE);
   const [draftUnit, setDraftUnit] = useState(DEFAULT_UNIT);
   const [draftCatalogId, setDraftCatalogId] = useState<string | null>(DEFAULT_CATALOG);
-  const [draftCategory, setDraftCategory] = useState('plaster');
-  const [qtyDraft, setQtyDraft] = useState(String(DEFAULT_QTY));
-  const [priceDraftText, setPriceDraftText] = useState(formatPrice(DEFAULT_PRICE));
+  const [draftCategory, setDraftCategory] = useState('other');
+  const [qtyDraft, setQtyDraft] = useState('');
+  const [priceDraftText, setPriceDraftText] = useState('');
   const [qtyFocused, setQtyFocused] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
   const [titleFocused, setTitleFocused] = useState(false);
@@ -388,7 +397,7 @@ export default function Calculator() {
     if (Number.isFinite(labor) && labor > 0) {
       const next = Math.round(labor * 1.15 * 100) / 100;
       setDraftPrice(next);
-      if (!priceFocused) setPriceDraftText(formatPrice(next));
+      if (!priceFocused) setPriceDraftText(displayPriceField(next));
     }
     if (detail.work?.unit) setDraftUnit(displayUnit(detail.work.unit));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -486,9 +495,9 @@ export default function Calculator() {
     setDraftPrice(DEFAULT_PRICE);
     setDraftUnit(DEFAULT_UNIT);
     setDraftCatalogId(DEFAULT_CATALOG);
-    setDraftCategory('plaster');
-    setQtyDraft(String(DEFAULT_QTY));
-    setPriceDraftText(formatPrice(DEFAULT_PRICE));
+    setDraftCategory('other');
+    setQtyDraft('');
+    setPriceDraftText('');
     setEditingLocalId(null);
   }
 
@@ -500,14 +509,14 @@ export default function Calculator() {
     setDraftUnit(w.unit);
     setDraftCatalogId(w.catalogWorkId || null);
     setDraftCategory(w.category || 'other');
-    setQtyDraft(formatQty(w.quantity));
-    setPriceDraftText(formatPrice(w.unitPrice));
+    setQtyDraft(displayQtyField(w.quantity));
+    setPriceDraftText(displayPriceField(w.unitPrice));
   }
 
   const bumpQty = (delta: number) => {
     setDraftQty((q) => {
       const next = Math.max(0, Math.round((q + delta) * 10) / 10);
-      setQtyDraft(formatQty(next));
+      setQtyDraft(displayQtyField(next));
       return next;
     });
   };
@@ -515,25 +524,35 @@ export default function Calculator() {
   const bumpPrice = (delta: number) => {
     setDraftPrice((p) => {
       const next = Math.max(0, Math.round((p + delta) * 100) / 100);
-      setPriceDraftText(formatPrice(next));
+      setPriceDraftText(displayPriceField(next));
       return next;
     });
   };
 
   const commitQty = () => {
     setQtyFocused(false);
+    if (!qtyDraft.trim()) {
+      setDraftQty(0);
+      setQtyDraft('');
+      return;
+    }
     const n = parseUaNumber(qtyDraft);
-    const next = n === null ? draftQty : Math.max(0, Math.round(n * 10) / 10);
+    const next = n === null ? 0 : Math.max(0, Math.round(n * 10) / 10);
     setDraftQty(next);
-    setQtyDraft(formatQty(next));
+    setQtyDraft(displayQtyField(next));
   };
 
   const commitPrice = () => {
     setPriceFocused(false);
+    if (!priceDraftText.trim()) {
+      setDraftPrice(0);
+      setPriceDraftText('');
+      return;
+    }
     const n = parseUaNumber(priceDraftText);
-    const next = n === null ? draftPrice : Math.max(0, Math.round(n * 100) / 100);
+    const next = n === null ? 0 : Math.max(0, Math.round(n * 100) / 100);
     setDraftPrice(next);
-    setPriceDraftText(formatPrice(next));
+    setPriceDraftText(displayPriceField(next));
   };
 
   const applyTemplate = (tpl: CalcTemplate) => {
@@ -1044,7 +1063,7 @@ export default function Calculator() {
                       setTitleFocused(false);
                     }
                   }}
-                  placeholder="Пошук виду роботи (напр. шту…)"
+                  placeholder=""
                   autoComplete="off"
                   role="combobox"
                   aria-expanded={showTitleSuggestions}
@@ -1115,16 +1134,21 @@ export default function Calculator() {
                   type="text"
                   inputMode="decimal"
                   enterKeyHint="done"
-                  value={qtyFocused ? qtyDraft : formatQty(draftQty)}
+                  value={qtyFocused ? qtyDraft : displayQtyField(draftQty)}
+                  placeholder=""
                   onFocus={(e) => {
                     setQtyFocused(true);
-                    setQtyDraft(formatQty(draftQty));
+                    setQtyDraft(displayQtyField(draftQty));
                     e.currentTarget.select();
                   }}
                   onChange={(e) => {
                     const raw = e.target.value;
                     if (!/^[0-9]*([.,][0-9]*)?$/.test(raw)) return;
                     setQtyDraft(raw);
+                    if (!raw.trim()) {
+                      setDraftQty(0);
+                      return;
+                    }
                     const n = parseUaNumber(raw);
                     if (n !== null) setDraftQty(Math.max(0, n));
                   }}
@@ -1171,16 +1195,21 @@ export default function Calculator() {
                   type="text"
                   inputMode="decimal"
                   enterKeyHint="done"
-                  value={priceFocused ? priceDraftText : formatPrice(draftPrice)}
+                  value={priceFocused ? priceDraftText : displayPriceField(draftPrice)}
+                  placeholder=""
                   onFocus={(e) => {
                     setPriceFocused(true);
-                    setPriceDraftText(formatPrice(draftPrice));
+                    setPriceDraftText(displayPriceField(draftPrice));
                     e.currentTarget.select();
                   }}
                   onChange={(e) => {
                     const raw = e.target.value;
                     if (!/^[0-9]*([.,][0-9]{0,2})?$/.test(raw)) return;
                     setPriceDraftText(raw);
+                    if (!raw.trim()) {
+                      setDraftPrice(0);
+                      return;
+                    }
                     const n = parseUaNumber(raw);
                     if (n !== null) setDraftPrice(Math.max(0, n));
                   }}
