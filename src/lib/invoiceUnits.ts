@@ -79,16 +79,18 @@ export function normalizeInvoiceUnit(
     return s.includes('stunde') || s === 'std' ? 'Stunde' : 'h';
   }
 
-  // Pieces / units — ES ud / uds / unidad
+  // Pieces / countable packs — ES ud / saco / caja / litro / rollo…
   if (
-    /^(pcs|stk|stück|st|шт|штук|pc|ud|uds|u|unidad|unidades|pieza|piezas)$/i.test(s)
+    /^(pcs|stk|stück|st|шт|штук|pc|ud|uds|u|unidad|unidades|pieza|piezas|saco|sacos|caja|cajas|rollo|rollos|bote|botes|cartucho|cartuchos|l|lt|lts|litro|litros)$/i.test(
+      s,
+    )
   ) {
     return 'pcs';
   }
 
-  // Flat rate / lump sum — ES global / pa / tanto alzado
+  // Flat rate / lump sum / service — ES global / pa / lote / servicio
   if (
-    /^(pausch|psch|pauschal|паушал|компл|global|pa|tanto\s*alzado|partida\s*alzada|lote|kit)$/i.test(
+    /^(pausch|psch|pauschal|паушал|компл|global|pa|tanto\s*alzado|partida\s*alzada|lote|lotes|kit|servicio|servicios)$/i.test(
       s,
     )
   ) {
@@ -153,7 +155,15 @@ export function splitQtyUnit(
 export function isMaterialOnlyLabel(description: string): boolean {
   const d = compactUnitText(description);
   if (!d) return false;
-  // Work / labor verbs win even if the word "material" appears inside
+  // Explicit material line title (Lexware "Material …" or ES item "Material para …")
+  if (
+    /^(material|materiales|мат(?:еріал)?|мат\.?|werkstoff|verbrauch)(\b|:|\s|$)/.test(
+      d,
+    )
+  ) {
+    return true;
+  }
+  // Work / labor verbs win even if the word "material" appears inside (e.g. transporte de material)
   if (
     /\b(arbeit|lohn|labor|work|робота|роботи|mano\s*de\s*obra|trabajo|transporte|acarreo|subida|bajada|colocaci[oó]n|montaje|demolici[oó]n|instalaci[oó]n|protecci[oó]n|pintura|enfoscado|gotel[eé]|fábrica|fabrica|tratamiento|preparaci[oó]n)\b/.test(
       d,
@@ -161,10 +171,7 @@ export function isMaterialOnlyLabel(description: string): boolean {
   ) {
     return false;
   }
-  // Only rows that *are* a material label (Lexware "Material …"), not any cell mentioning materials
-  return /^(material|materiales|мат(?:еріал)?|мат\.?|werkstoff|verbrauch)(\b|:|\s|$)/.test(
-    d,
-  );
+  return false;
 }
 
 /** True when description is labor/work (not material). */

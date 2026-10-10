@@ -182,10 +182,24 @@ function headerAliasHit(header: string, alias: string): boolean {
   const a = normHeader(alias);
   if (!a) return false;
   if (h === a) return true;
-  if (a.length <= 3) {
-    return new RegExp(`(^|[^a-zа-яіїєґ0-9])${a}([^a-zа-яіїєґ0-9]|$)`, 'i').test(h);
+  // Short aliases must be whole tokens — avoid "cantidades"→quantity via "cant",
+  // "menge"→unit via "me", notes text matching column names by substring.
+  if (a.length <= 5) {
+    return new RegExp(
+      `(^|[^a-zа-яіїєґ0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-zа-яіїєґ0-9]|$)`,
+      'i',
+    ).test(h);
   }
   return h.includes(a);
+}
+
+/** True when the cell is exactly a known column header label (not a long description). */
+function isExactHeaderLabel(cell: string): boolean {
+  const h = normHeader(cell);
+  if (!h || h.length > 40) return false;
+  return (Object.keys(HEADER_MAP) as ColKey[]).some((key) =>
+    HEADER_MAP[key].some((a) => normHeader(a) === h),
+  );
 }
 
 function matchCol(header: string): ColKey | null {
@@ -376,25 +390,41 @@ function toItem(
   const unit = normalizeInvoiceUnit(partial.unit, quantity > 0 ? 'm²' : 'pcs');
   const qty = quantity || (price > 0 || materialNum > 0 ? 1 : 0);
 
-  // Materials sheet / material-only label → Lexware: price in material field
-  const treatAsMaterial =
-    sheetKind === 'materials' ||
-    (isMaterialOnlyLabel(description) && materialNum <= 0 && price > 0);
+  // Materials *sheet* = real priced positions (qty × unit price), NOT Lexware companions.
+  // Lexware "Material" companion only when a labor sheet row is a material-only label.
+  if (sheetKind === 'materials' && materialNum <= 0 && (price > 0 || qty > 0)) {
+    const unitPrice = price > 0 ? price : 0;
+    const lineQty = qty || 1;
+    return {
+      quantity: lineQty,
+      quantityDisplay: String(lineQty),
+      unit,
+      price: unitPrice,
+      priceDisplay: unitPrice ? String(unitPrice) : '',
+      material: '',
+      materialDisplay: '',
+      description: description || 'Material',
+      total: calculateLineTotal(lineQty, unitPrice, 0),
+    };
+  }
 
-  if (treatAsMaterial && materialNum <= 0 && price > 0) {
-    const lineTotal = calculateLineTotal(qty, 0, price * (qty > 0 ? qty : 1));
-    // For materials sheet: qty × unit price goes entirely to material
+  if (
+    sheetKind !== 'materials' &&
+    isMaterialOnlyLabel(description) &&
+    materialNum <= 0 &&
+    price > 0
+  ) {
     const matAmount = qty > 0 ? qty * price : price;
     return {
-      quantity: qty || 1,
-      quantityDisplay: String(qty || 1),
-      unit: unit === 'm²' && qty <= 1 ? 'Pauschal' : unit,
+      quantity: 1,
+      quantityDisplay: '1',
+      unit: 'Pauschal',
       price: 0,
       priceDisplay: '',
       material: String(matAmount),
       materialDisplay: String(matAmount),
       description: description || 'Material',
-      total: calculateLineTotal(1, 0, matAmount) || lineTotal,
+      total: calculateLineTotal(1, 0, matAmount),
     };
   }
 
@@ -478,12 +508,12 @@ function rowsToItems(
     if (isTotalOrFooterRow(row, descIdx)) continue;
 
     let description = String(row[descIdx] ?? '').trim();
-    // Skip repeated header
-    if (matchCol(description) && classifyCellKind(description) === 'word') {
+    // Skip repeated header row only when description is an exact header label
+    // (e.g. "Material" / "Trabajo") — never skip "Material para mochetas…"
+    if (isExactHeaderLabel(description)) {
       const maybeHeader = detectHeaderMap(row);
       if (maybeHeader) continue;
     }
-    // Pos-only first cell: description may be in mapped column already
 
     let quantity = 0;
     let unit: InvoiceUnit | string = sheetKind === 'materials' ? 'Pauschal' : 'm²';
