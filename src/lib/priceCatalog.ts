@@ -41,6 +41,10 @@ const CATEGORY_LABELS: Record<WorkCategory, { en: string; uk: string; de: string
   demolition: { en: 'Demolition', uk: 'Демонтаж', de: 'Abbruch', es: 'Demolición' },
   doors_windows: { en: 'Doors & windows', uk: 'Двері / вікна', de: 'Türen & Fenster', es: 'Puertas y ventanas' },
   outdoor: { en: 'Outdoor', uk: 'Двір / вулиця', de: 'Außenanlagen', es: 'Exterior' },
+  garden: { en: 'Garden', uk: 'Сад / озеленення', de: 'Garten', es: 'Jardín' },
+  earthworks: { en: 'Earthworks', uk: 'Земельні роботи', de: 'Erdarbeiten', es: 'Movimiento de tierras' },
+  services: { en: 'Services', uk: 'Обслуговування', de: 'Dienstleistungen', es: 'Servicios' },
+  transport: { en: 'Transport', uk: 'Перевезення', de: 'Transport', es: 'Transporte' },
   other: { en: 'Other', uk: 'Інше', de: 'Sonstiges', es: 'Otros' },
 };
 
@@ -116,7 +120,7 @@ export function normalizePriceQuery(input: string): string {
 }
 
 function tokenize(q: string): string[] {
-  return normalizePriceQuery(q).split(' ').filter((t) => t.length > 1);
+  return normalizePriceQuery(q).split(' ').filter((t) => t.length >= 2);
 }
 
 function scoreWork(work: CatalogWork, tokens: string[], rawNormalized: string): number {
@@ -130,13 +134,15 @@ function scoreWork(work: CatalogWork, tokens: string[], rawNormalized: string): 
       work.category,
     ].join(' ')
   );
+  const words = haystack.split(' ').filter(Boolean);
 
   let score = 0;
   if (rawNormalized && haystack.includes(rawNormalized)) score += 50;
+  if (rawNormalized && words.some((w) => w.startsWith(rawNormalized))) score += 30;
 
   for (const token of tokens) {
     if (haystack.includes(token)) score += 10;
-    else if (token.length >= 3 && haystack.split(' ').some((w) => w.startsWith(token))) score += 4;
+    else if (words.some((w) => w.startsWith(token))) score += 8;
   }
 
   // Prefer exact size matches (e.g. 120x60)
@@ -167,7 +173,15 @@ export function searchWorksLocal(
     return { work, labor: work.labor[country], score };
   }).filter((h) => (normalized ? h.score > 0 : true));
 
-  hits.sort((a, b) => b.score - a.score || a.work.names.en.localeCompare(b.work.names.en));
+  hits.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (normalized) {
+      const aUk = normalizePriceQuery(a.work.names.uk).startsWith(normalized) ? 1 : 0;
+      const bUk = normalizePriceQuery(b.work.names.uk).startsWith(normalized) ? 1 : 0;
+      if (bUk !== aUk) return bUk - aUk;
+    }
+    return a.work.names.uk.localeCompare(b.work.names.uk, 'uk');
+  });
   return hits.slice(0, limit);
 }
 
@@ -334,7 +348,15 @@ export async function searchWorksWithOverrides(
     })
     .filter((h) => (normalized ? h.score > 0 : true));
 
-  hits.sort((a, b) => b.score - a.score || a.work.names.en.localeCompare(b.work.names.en));
+  hits.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (normalized) {
+      const aUk = normalizePriceQuery(a.work.names.uk).startsWith(normalized) ? 1 : 0;
+      const bUk = normalizePriceQuery(b.work.names.uk).startsWith(normalized) ? 1 : 0;
+      if (bUk !== aUk) return bUk - aUk;
+    }
+    return a.work.names.uk.localeCompare(b.work.names.uk, 'uk');
+  });
   return hits.slice(0, limit);
 }
 

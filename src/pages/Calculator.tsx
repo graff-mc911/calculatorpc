@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Search,
   Share2,
   Trash2,
   Wrench,
@@ -26,7 +27,13 @@ import { toPdfCompany } from '../lib/companyProfile';
 import { computeHomeMoney } from '../lib/homeMoney';
 import { getLastProjectId, setLastProjectId } from '../lib/lastProject';
 import { normalizeExpenseCategory } from '../lib/expenseCategories';
-import { getStoredPriceCountry, getWorkDetailLocal } from '../lib/priceCatalog';
+import {
+  getStoredPriceCountry,
+  getWorkDetailLocal,
+  localizedCategoryName,
+  localizedWorkName,
+  searchWorksLocal,
+} from '../lib/priceCatalog';
 import { shareProjectEstimatePdf } from '../lib/projectPdf';
 import { computeProjectMetrics, lineTotal } from '../lib/projectMetrics';
 import {
@@ -182,7 +189,7 @@ function workFromRemote(item: ProjectWorkItem): DraftWork {
 }
 
 export default function Calculator() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { showSuccess, showError } = useToastContext();
@@ -202,6 +209,9 @@ export default function Calculator() {
   const [priceDraftText, setPriceDraftText] = useState(formatPrice(DEFAULT_PRICE));
   const [qtyFocused, setQtyFocused] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
+  const [titleFocused, setTitleFocused] = useState(false);
+  const [titleHighlight, setTitleHighlight] = useState(0);
+  const titleWrapRef = useRef<HTMLDivElement>(null);
 
   const [expenses, setExpenses] = useState<ExpenseBucket>({
     materials: 0,
@@ -428,6 +438,47 @@ export default function Calculator() {
     () => [...POPULAR_TEMPLATES, ...loadCustomTemplates()],
     [sheet]
   );
+
+  const titleSuggestions = useMemo(() => {
+    const q = draftTitle.trim();
+    if (q.length < 2) return [];
+    return searchWorksLocal(q, priceCountry, 12);
+  }, [draftTitle, priceCountry]);
+
+  const showTitleSuggestions =
+    titleFocused && draftTitle.trim().length >= 2 && titleSuggestions.length > 0;
+
+  useEffect(() => {
+    if (!showTitleSuggestions) {
+      setTitleHighlight(0);
+      return;
+    }
+    setTitleHighlight((i) => Math.min(i, titleSuggestions.length - 1));
+  }, [showTitleSuggestions, titleSuggestions.length]);
+
+  useEffect(() => {
+    if (!titleFocused) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!titleWrapRef.current?.contains(e.target as Node)) {
+        setTitleFocused(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [titleFocused]);
+
+  function pickCatalogWork(workId: string) {
+    const hit = titleSuggestions.find((h) => h.work.id === workId)
+      || searchWorksLocal(draftTitle, priceCountry, 40).find((h) => h.work.id === workId);
+    const work = hit?.work || getWorkDetailLocal(workId, priceCountry)?.work;
+    if (!work) return;
+    setDraftTitle(localizedWorkName(work, language));
+    setDraftCatalogId(work.id);
+    setDraftCategory(work.category);
+    setDraftUnit(displayUnit(work.unit));
+    setTitleFocused(false);
+    setTitleHighlight(0);
+  }
 
   function resetEditorDefaults() {
     setDraftTitle(DEFAULT_TITLE);
@@ -959,18 +1010,92 @@ export default function Calculator() {
               </div>
             </div>
 
-            <input
-              value={draftTitle}
-              onChange={(e) => setDraftTitle(e.target.value)}
-              placeholder="Назва роботи"
-              className="w-full min-h-[48px] text-[15px] px-3 outline-none mb-2"
-              style={{
-                background: 'var(--cpc-bg)',
-                border: '1px solid var(--cpc-line)',
-                borderRadius: 10,
-                color: 'var(--cpc-text)',
-              }}
-            />
+            <div ref={titleWrapRef} className="relative mb-2">
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: 'var(--cpc-muted)' }}
+                />
+                <input
+                  value={draftTitle}
+                  onChange={(e) => {
+                    setDraftTitle(e.target.value);
+                    setDraftCatalogId(null);
+                    setTitleFocused(true);
+                    setTitleHighlight(0);
+                  }}
+                  onFocus={() => setTitleFocused(true)}
+                  onKeyDown={(e) => {
+                    if (!showTitleSuggestions) return;
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setTitleHighlight((i) => Math.min(i + 1, titleSuggestions.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setTitleHighlight((i) => Math.max(i - 1, 0));
+                    } else if (e.key === 'Enter') {
+                      const hit = titleSuggestions[titleHighlight];
+                      if (hit) {
+                        e.preventDefault();
+                        pickCatalogWork(hit.work.id);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setTitleFocused(false);
+                    }
+                  }}
+                  placeholder="Пошук виду роботи (напр. шту…)"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={showTitleSuggestions}
+                  aria-autocomplete="list"
+                  className="w-full min-h-[48px] text-[15px] pl-9 pr-3 outline-none"
+                  style={{
+                    background: 'var(--cpc-bg)',
+                    border: '1px solid var(--cpc-line)',
+                    borderRadius: 10,
+                    color: 'var(--cpc-text)',
+                  }}
+                />
+              </div>
+              {showTitleSuggestions && (
+                <ul
+                  role="listbox"
+                  className="absolute z-30 left-0 right-0 mt-1 max-h-[260px] overflow-y-auto py-1 shadow-lg"
+                  style={{
+                    background: 'var(--cpc-card, var(--cpc-bg))',
+                    border: '1px solid var(--cpc-line)',
+                    borderRadius: 10,
+                  }}
+                >
+                  {titleSuggestions.map((hit, idx) => {
+                    const name = localizedWorkName(hit.work, language);
+                    const cat = localizedCategoryName(hit.work.category, language);
+                    const active = idx === titleHighlight;
+                    return (
+                      <li key={hit.work.id} role="option" aria-selected={active}>
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2.5 min-h-[44px] border-0 cursor-pointer"
+                          style={{
+                            background: active ? 'var(--cpc-bg)' : 'transparent',
+                            color: 'var(--cpc-text)',
+                          }}
+                          onMouseEnter={() => setTitleHighlight(idx)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => pickCatalogWork(hit.work.id)}
+                        >
+                          <span className="block text-[14px] font-medium truncate">{name}</span>
+                          <span className="block text-[11px] truncate mt-0.5" style={{ color: 'var(--cpc-muted)' }}>
+                            {cat} · {displayUnit(hit.work.unit)} · {formatPrice(hit.labor.price)} €
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
 
             <div className="flex items-center justify-between gap-2 mt-1">
               <span className="text-[12px]" style={{ color: 'var(--cpc-text)' }}>
