@@ -1231,18 +1231,13 @@ export default function Calculator() {
             </button>
           </div>
 
-          {/* Other works */}
-          <div className="cpc-card">
-            <div className="inline-flex items-center gap-1.5 mb-2">
-              <List size={15} style={{ color: 'var(--cpc-copper-light)' }} />
-              <small className="cpc-card-label !mb-0">Інші роботи</small>
-            </div>
-
-            {works.length === 0 ? (
-              <p className="cpc-muted text-[12px] text-center py-3">
-                Ще немає робіт — додайте вище або з шаблонів
-              </p>
-            ) : (
+          {/* Added works — only when list is non-empty (no empty placeholder) */}
+          {works.length > 0 && (
+            <div className="cpc-card">
+              <div className="inline-flex items-center gap-1.5 mb-2">
+                <List size={15} style={{ color: 'var(--cpc-copper-light)' }} />
+                <small className="cpc-card-label !mb-0">Додані роботи</small>
+              </div>
               <div className="flex flex-col gap-1.5">
                 {works.map((w) => (
                   <div
@@ -1296,8 +1291,8 @@ export default function Calculator() {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2.5 min-w-0">
