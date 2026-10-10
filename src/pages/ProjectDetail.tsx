@@ -93,6 +93,10 @@ const TEMPLATE_GROUPS: WorkCategory[] = [
   'facade',
   'doors_windows',
   'outdoor',
+  'garden',
+  'earthworks',
+  'services',
+  'transport',
 ];
 
 function formatCompact(value: number, currency: string) {

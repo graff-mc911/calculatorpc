@@ -5,7 +5,7 @@
  *
  * Categories: tiling, plaster, paint, drywall, masonry, concrete, flooring,
  * plumbing, electrical, roofing, insulation, facade, demolition,
- * doors_windows, outdoor, other.
+ * doors_windows, outdoor, garden, earthworks, services, transport, other.
  * Every work has ≥1 curated YouTube how-to link.
  */
 
@@ -54,7 +54,26 @@ export type CatalogMaterial = {
 };
 
 export type WorkCategory =
-  | 'tiling' | 'plaster' | 'paint' | 'drywall' | 'masonry' | 'concrete' | 'flooring' | 'plumbing' | 'electrical' | 'roofing' | 'insulation' | 'facade' | 'demolition' | 'doors_windows' | 'outdoor' | 'other';
+  | 'tiling'
+  | 'plaster'
+  | 'paint'
+  | 'drywall'
+  | 'masonry'
+  | 'concrete'
+  | 'flooring'
+  | 'plumbing'
+  | 'electrical'
+  | 'roofing'
+  | 'insulation'
+  | 'facade'
+  | 'demolition'
+  | 'doors_windows'
+  | 'outdoor'
+  | 'garden'
+  | 'earthworks'
+  | 'services'
+  | 'transport'
+  | 'other';
 
 export type CatalogWork = {
   id: string;
@@ -848,6 +867,47 @@ function work(
   };
 }
 
+/** Compact field-work entry with auto YouTube search links. */
+function fieldWork(opts: {
+  id: string;
+  slug: string;
+  category: WorkCategory;
+  unit: string;
+  names: LocalizedName;
+  aliases?: string[];
+  labor: [number, number, number];
+  ranges?: {
+    de?: [number, number];
+    ua?: [number, number];
+    es?: [number, number];
+  };
+  materials?: CatalogWork['materials'];
+}): CatalogWork {
+  const yt = (query: string, title: string, lang: string): YoutubeLink => ({
+    url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+    title,
+    lang,
+  });
+  return work({
+    id: opts.id,
+    slug: opts.slug,
+    category: opts.category,
+    unit: opts.unit,
+    names: opts.names,
+    searchAliases: opts.aliases?.length
+      ? opts.aliases
+      : [opts.names.uk, opts.names.en, opts.names.de, opts.names.es],
+    youtube: [
+      yt(opts.names.en, opts.names.en, 'en'),
+      yt(opts.names.uk, opts.names.uk, 'uk'),
+      yt(opts.names.de, opts.names.de, 'de'),
+    ],
+    laborPrices: opts.labor,
+    laborRanges: opts.ranges,
+    materials: opts.materials || [],
+  });
+}
+
 export const CATALOG_WORKS: CatalogWork[] = [
   work({
     id: 'work-tile-120x60',
@@ -1393,7 +1453,9 @@ export const CATALOG_WORKS: CatalogWork[] = [
     },
     searchAliases: [
       'штукатурка',
+      'шту',
       'гіпсова штукатурка',
+      'гіпсова',
       'gipsputz',
       'putz',
       'enlucido',
@@ -5057,6 +5119,844 @@ export const CATALOG_WORKS: CatalogWork[] = [
     materials: [
       { materialId: 'mat-sand', qtyPerUnit: 10 },
     ],
+  }),
+
+  // —— Extra plaster variants (search: «шту…») ——
+  fieldWork({
+    id: 'work-sand-plaster',
+    slug: 'sand-cement-plaster',
+    category: 'plaster',
+    unit: 'm2',
+    names: {
+      en: 'Sand-cement plaster',
+      uk: 'Штукатурка піщана',
+      de: 'Sand-Zement-Putz',
+      es: 'Enlucido de arena-cemento',
+    },
+    aliases: [
+      'штукатурка',
+      'шту',
+      'піщана штукатурка',
+      'пісчана штукатурка',
+      'пісок штукатурка',
+      'sand plaster',
+      'sandputz',
+      'цементно-піщана',
+    ],
+    labor: [32, 380, 26],
+    ranges: { de: [24, 42], ua: [280, 500], es: [20, 34] },
+    materials: [{ materialId: 'mat-cement-plaster', qtyPerUnit: 14 }],
+  }),
+  fieldWork({
+    id: 'work-lime-plaster',
+    slug: 'lime-plaster',
+    category: 'plaster',
+    unit: 'm2',
+    names: {
+      en: 'Lime plaster',
+      uk: 'Вапняна штукатурка',
+      de: 'Kalkputz',
+      es: 'Enlucido de cal',
+    },
+    aliases: ['штукатурка', 'вапняна', 'kalkputz', 'lime plaster', 'шту'],
+    labor: [34, 400, 28],
+    ranges: { de: [26, 44], ua: [300, 520], es: [22, 36] },
+  }),
+  fieldWork({
+    id: 'work-clay-plaster',
+    slug: 'clay-plaster',
+    category: 'plaster',
+    unit: 'm2',
+    names: {
+      en: 'Clay plaster',
+      uk: 'Глиняна штукатурка',
+      de: 'Lehmputz',
+      es: 'Enlucido de barro',
+    },
+    aliases: ['штукатурка', 'глиняна', 'lehmputz', 'clay plaster', 'шту'],
+    labor: [36, 420, 30],
+  }),
+  fieldWork({
+    id: 'work-ceiling-plaster',
+    slug: 'ceiling-plaster',
+    category: 'plaster',
+    unit: 'm2',
+    names: {
+      en: 'Ceiling plaster',
+      uk: 'Штукатурка стелі',
+      de: 'Deckenputz',
+      es: 'Enlucido de techo',
+    },
+    aliases: ['штукатурка', 'стеля', 'deckenputz', 'шту'],
+    labor: [40, 480, 34],
+  }),
+
+  // —— Garden / landscaping ——
+  fieldWork({
+    id: 'work-lawn-lay',
+    slug: 'lawn-sod-laying',
+    category: 'garden',
+    unit: 'm2',
+    names: {
+      en: 'Lawn sod laying',
+      uk: 'Укладання газону',
+      de: 'Rollrasen verlegen',
+      es: 'Colocación de césped',
+    },
+    aliases: ['газон', 'рулонний газон', 'rollrasen', 'lawn', 'сад'],
+    labor: [8, 95, 7],
+  }),
+  fieldWork({
+    id: 'work-lawn-seed',
+    slug: 'lawn-seeding',
+    category: 'garden',
+    unit: 'm2',
+    names: {
+      en: 'Lawn seeding',
+      uk: 'Посів газону',
+      de: 'Rasen säen',
+      es: 'Siembra de césped',
+    },
+    aliases: ['посів газону', 'насіння газон', 'rasen säen', 'сад'],
+    labor: [4, 45, 3.5],
+  }),
+  fieldWork({
+    id: 'work-hedge-trim',
+    slug: 'hedge-trimming',
+    category: 'garden',
+    unit: 'lm',
+    names: {
+      en: 'Hedge trimming',
+      uk: 'Стрижка живоплоту',
+      de: 'Hecke schneiden',
+      es: 'Poda de seto',
+    },
+    aliases: ['живопліт', 'стрижка кущів', 'hecke', 'сад', 'кущі'],
+    labor: [12, 140, 10],
+  }),
+  fieldWork({
+    id: 'work-tree-plant',
+    slug: 'tree-planting',
+    category: 'garden',
+    unit: 'pcs',
+    names: {
+      en: 'Tree planting',
+      uk: 'Посадка дерева',
+      de: 'Baum pflanzen',
+      es: 'Plantación de árbol',
+    },
+    aliases: ['посадка дерев', 'дерево', 'baum', 'сад'],
+    labor: [45, 550, 38],
+  }),
+  fieldWork({
+    id: 'work-shrub-plant',
+    slug: 'shrub-planting',
+    category: 'garden',
+    unit: 'pcs',
+    names: {
+      en: 'Shrub planting',
+      uk: 'Посадка кущів',
+      de: 'Strauch pflanzen',
+      es: 'Plantación de arbustos',
+    },
+    aliases: ['кущі', 'посадка', 'strauch', 'сад'],
+    labor: [18, 220, 15],
+  }),
+  fieldWork({
+    id: 'work-flower-bed',
+    slug: 'flower-bed-prep',
+    category: 'garden',
+    unit: 'm2',
+    names: {
+      en: 'Flower bed preparation',
+      uk: 'Влаштування клумби',
+      de: 'Beet anlegen',
+      es: 'Preparación de parterre',
+    },
+    aliases: ['клумба', 'квітник', 'beet', 'сад'],
+    labor: [15, 180, 12],
+  }),
+  fieldWork({
+    id: 'work-irrigation',
+    slug: 'garden-irrigation',
+    category: 'garden',
+    unit: 'lm',
+    names: {
+      en: 'Garden irrigation system',
+      uk: 'Система поливу саду',
+      de: 'Bewässerungsanlage',
+      es: 'Riego de jardín',
+    },
+    aliases: ['полив', 'крапельний полив', 'bewässerung', 'irrigation', 'сад'],
+    labor: [22, 270, 18],
+  }),
+  fieldWork({
+    id: 'work-mulching',
+    slug: 'garden-mulching',
+    category: 'garden',
+    unit: 'm2',
+    names: {
+      en: 'Garden mulching',
+      uk: 'Мульчування',
+      de: 'Mulchen',
+      es: 'Acolchado',
+    },
+    aliases: ['мульча', 'mulch', 'сад'],
+    labor: [5, 60, 4],
+  }),
+  fieldWork({
+    id: 'work-garden-fence',
+    slug: 'garden-fence-install',
+    category: 'garden',
+    unit: 'lm',
+    names: {
+      en: 'Garden fence installation',
+      uk: 'Монтаж садового паркану',
+      de: 'Gartenzaun montieren',
+      es: 'Instalación de valla de jardín',
+    },
+    aliases: ['паркан', 'огорожа', 'zaun', 'fence', 'сад'],
+    labor: [35, 420, 28],
+  }),
+  fieldWork({
+    id: 'work-garden-path',
+    slug: 'garden-path',
+    category: 'garden',
+    unit: 'm2',
+    names: {
+      en: 'Garden path paving',
+      uk: 'Садова доріжка',
+      de: 'Gartenweg pflastern',
+      es: 'Sendero de jardín',
+    },
+    aliases: ['доріжка', 'стежка', 'gartenweg', 'сад'],
+    labor: [28, 340, 22],
+  }),
+  fieldWork({
+    id: 'work-tree-prune',
+    slug: 'tree-pruning',
+    category: 'garden',
+    unit: 'pcs',
+    names: {
+      en: 'Tree pruning',
+      uk: 'Обрізка дерев',
+      de: 'Baumschnitt',
+      es: 'Poda de árboles',
+    },
+    aliases: ['обрізка', 'кронування', 'baumschnitt', 'сад'],
+    labor: [55, 650, 45],
+  }),
+  fieldWork({
+    id: 'work-leaf-cleanup',
+    slug: 'leaf-cleanup',
+    category: 'garden',
+    unit: 'm2',
+    names: {
+      en: 'Leaf / garden cleanup',
+      uk: 'Прибирання листя в саду',
+      de: 'Laub entfernen',
+      es: 'Limpieza de hojas',
+    },
+    aliases: ['листя', 'прибирання саду', 'laub', 'сад'],
+    labor: [2.5, 30, 2],
+  }),
+
+  // —— Earthworks ——
+  fieldWork({
+    id: 'work-excavation-hand',
+    slug: 'hand-excavation',
+    category: 'earthworks',
+    unit: 'm3',
+    names: {
+      en: 'Hand excavation',
+      uk: 'Ручна копка / земляні роботи',
+      de: 'Handaushub',
+      es: 'Excavación manual',
+    },
+    aliases: ['земляні', 'копка', 'копання', 'виїмка', 'excavation', 'erdarbeiten'],
+    labor: [55, 650, 45],
+  }),
+  fieldWork({
+    id: 'work-excavation-machine',
+    slug: 'machine-excavation',
+    category: 'earthworks',
+    unit: 'm3',
+    names: {
+      en: 'Machine excavation',
+      uk: 'Механізована виїмка ґрунту',
+      de: 'Maschinenaushub',
+      es: 'Excavación con máquina',
+    },
+    aliases: ['екскаватор', 'виїмка', 'земляні', 'aushub', 'excavation'],
+    labor: [28, 340, 22],
+  }),
+  fieldWork({
+    id: 'work-trench-dig',
+    slug: 'trench-digging',
+    category: 'earthworks',
+    unit: 'lm',
+    names: {
+      en: 'Trench digging',
+      uk: 'Копання траншеї',
+      de: 'Graben ausheben',
+      es: 'Apertura de zanja',
+    },
+    aliases: ['траншея', 'канава', 'graben', 'trench', 'земляні'],
+    labor: [18, 220, 15],
+  }),
+  fieldWork({
+    id: 'work-foundation-trench',
+    slug: 'foundation-trench',
+    category: 'earthworks',
+    unit: 'm3',
+    names: {
+      en: 'Foundation trench',
+      uk: 'Котлован під фундамент',
+      de: 'Fundamentaushub',
+      es: 'Zanja de cimentación',
+    },
+    aliases: ['котлован', 'фундамент земля', 'fundamentaushub', 'земляні'],
+    labor: [35, 420, 28],
+  }),
+  fieldWork({
+    id: 'work-backfill',
+    slug: 'soil-backfill',
+    category: 'earthworks',
+    unit: 'm3',
+    names: {
+      en: 'Backfill / soil fill',
+      uk: 'Зворотна засипка ґрунту',
+      de: 'Verfüllung',
+      es: 'Relleno de tierra',
+    },
+    aliases: ['засипка', 'зворотна засипка', 'verfüllung', 'backfill', 'земляні'],
+    labor: [22, 270, 18],
+  }),
+  fieldWork({
+    id: 'work-site-level',
+    slug: 'site-leveling',
+    category: 'earthworks',
+    unit: 'm2',
+    names: {
+      en: 'Site leveling / grading',
+      uk: 'Планування ділянки',
+      de: 'Gelände planieren',
+      es: 'Nivelación del terreno',
+    },
+    aliases: ['планування', 'вирівнювання ділянки', 'planieren', 'grading', 'земляні'],
+    labor: [6, 75, 5],
+  }),
+  fieldWork({
+    id: 'work-soil-removal',
+    slug: 'soil-removal',
+    category: 'earthworks',
+    unit: 'm3',
+    names: {
+      en: 'Soil / spoil removal',
+      uk: 'Вивіз ґрунту',
+      de: 'Erdaushub abfahren',
+      es: 'Retirada de tierras',
+    },
+    aliases: ['вивіз ґрунту', 'вивіз землі', 'аутхуб', 'spoil', 'земляні'],
+    labor: [40, 480, 32],
+  }),
+  fieldWork({
+    id: 'work-sand-base',
+    slug: 'sand-base-layer',
+    category: 'earthworks',
+    unit: 'm2',
+    names: {
+      en: 'Sand base layer',
+      uk: 'Піщана підсипка',
+      de: 'Sandbett herstellen',
+      es: 'Capa de arena',
+    },
+    aliases: ['підсипка', 'пісок основа', 'sandbett', 'земляні'],
+    labor: [8, 95, 6.5],
+    materials: [{ materialId: 'mat-sand', qtyPerUnit: 50 }],
+  }),
+  fieldWork({
+    id: 'work-gravel-base',
+    slug: 'gravel-base-layer',
+    category: 'earthworks',
+    unit: 'm2',
+    names: {
+      en: 'Gravel base layer',
+      uk: 'Щебенева підготовка',
+      de: 'Schottertragschicht',
+      es: 'Base de grava',
+    },
+    aliases: ['щебінь', 'підготовка основи', 'schotter', 'gravel', 'земляні'],
+    labor: [10, 120, 8],
+    materials: [{ materialId: 'mat-gravel', qtyPerUnit: 60 }],
+  }),
+  fieldWork({
+    id: 'work-compaction',
+    slug: 'soil-compaction',
+    category: 'earthworks',
+    unit: 'm2',
+    names: {
+      en: 'Soil compaction',
+      uk: 'Ущільнення ґрунту',
+      de: 'Verdichtung',
+      es: 'Compactación del suelo',
+    },
+    aliases: ['трамбування', 'ущільнення', 'verdichtung', 'compaction', 'земляні'],
+    labor: [4, 50, 3.5],
+  }),
+
+  // —— Services / maintenance ——
+  fieldWork({
+    id: 'work-post-reno-clean',
+    slug: 'post-renovation-cleaning',
+    category: 'services',
+    unit: 'm2',
+    names: {
+      en: 'Post-renovation cleaning',
+      uk: 'Прибирання після ремонту',
+      de: 'Endreinigung nach Renovierung',
+      es: 'Limpieza post-obra',
+    },
+    aliases: ['прибирання', 'клінінг', 'cleaning', 'endreinigung', 'обслуговування'],
+    labor: [5, 60, 4],
+  }),
+  fieldWork({
+    id: 'work-window-clean',
+    slug: 'window-cleaning',
+    category: 'services',
+    unit: 'pcs',
+    names: {
+      en: 'Window cleaning',
+      uk: 'Миття вікон',
+      de: 'Fenster putzen',
+      es: 'Limpieza de ventanas',
+    },
+    aliases: ['вікна миття', 'fenster', 'window clean', 'обслуговування'],
+    labor: [8, 100, 6.5],
+  }),
+  fieldWork({
+    id: 'work-pressure-wash',
+    slug: 'pressure-washing',
+    category: 'services',
+    unit: 'm2',
+    names: {
+      en: 'Pressure washing',
+      uk: 'Мийка високим тиском',
+      de: 'Hochdruckreinigung',
+      es: 'Limpieza a presión',
+    },
+    aliases: ['керхер', 'миття фасаду', 'hochdruck', 'pressure wash', 'обслуговування'],
+    labor: [3.5, 42, 3],
+  }),
+  fieldWork({
+    id: 'work-gutter-clean',
+    slug: 'gutter-cleaning',
+    category: 'services',
+    unit: 'lm',
+    names: {
+      en: 'Gutter cleaning',
+      uk: 'Чистка ринв',
+      de: 'Dachrinne reinigen',
+      es: 'Limpieza de canalones',
+    },
+    aliases: ['ринви', 'жолоби', 'dachrinne', 'gutter', 'обслуговування'],
+    labor: [9, 110, 7.5],
+  }),
+  fieldWork({
+    id: 'work-furniture-assemble',
+    slug: 'furniture-assembly',
+    category: 'services',
+    unit: 'pcs',
+    names: {
+      en: 'Furniture assembly',
+      uk: 'Збірка меблів',
+      de: 'Möbelmontage',
+      es: 'Montaje de muebles',
+    },
+    aliases: ['меблі збірка', 'ікеа', 'möbel', 'assembly', 'обслуговування'],
+    labor: [35, 420, 28],
+  }),
+  fieldWork({
+    id: 'work-appliance-install',
+    slug: 'appliance-installation',
+    category: 'services',
+    unit: 'pcs',
+    names: {
+      en: 'Appliance installation',
+      uk: 'Підключення побутової техніки',
+      de: 'Geräteanschluss',
+      es: 'Instalación de electrodomésticos',
+    },
+    aliases: ['техніка підключення', 'пральна', 'посудомийна', 'geräte', 'обслуговування'],
+    labor: [45, 550, 38],
+  }),
+  fieldWork({
+    id: 'work-waste-removal',
+    slug: 'construction-waste-removal',
+    category: 'services',
+    unit: 'm3',
+    names: {
+      en: 'Construction waste removal',
+      uk: 'Вивіз будівельного сміття',
+      de: 'Bauschutt entsorgen',
+      es: 'Retirada de escombros',
+    },
+    aliases: ['сміття', 'будівельне сміття', 'bauschutt', 'waste', 'обслуговування', 'вивіз'],
+    labor: [55, 650, 45],
+  }),
+  fieldWork({
+    id: 'work-handyman',
+    slug: 'general-handyman',
+    category: 'services',
+    unit: 'h',
+    names: {
+      en: 'General handyman hour',
+      uk: 'Різноробочий / майстер на годину',
+      de: 'Hausmeisterstunde',
+      es: 'Manitas por hora',
+    },
+    aliases: ['різноробочий', 'майстер', 'handyman', 'hausmeister', 'обслуговування'],
+    labor: [45, 450, 35],
+  }),
+  fieldWork({
+    id: 'work-snow-removal',
+    slug: 'snow-removal',
+    category: 'services',
+    unit: 'm2',
+    names: {
+      en: 'Snow removal',
+      uk: 'Прибирання снігу',
+      de: 'Schneeräumung',
+      es: 'Retirada de nieve',
+    },
+    aliases: ['сніг', 'розчистка', 'schnee', 'обслуговування'],
+    labor: [2, 25, 1.8],
+  }),
+  fieldWork({
+    id: 'work-moving-help',
+    slug: 'moving-help',
+    category: 'services',
+    unit: 'h',
+    names: {
+      en: 'Moving / loading help',
+      uk: 'Допомога з переїздом / вантажники',
+      de: 'Umzugshilfe',
+      es: 'Ayuda de mudanza',
+    },
+    aliases: ['вантажники', 'переїзд', 'umzug', 'moving', 'обслуговування'],
+    labor: [35, 400, 28],
+  }),
+  fieldWork({
+    id: 'work-pool-clean',
+    slug: 'pool-cleaning',
+    category: 'services',
+    unit: 'pcs',
+    names: {
+      en: 'Pool cleaning / service',
+      uk: 'Обслуговування басейну',
+      de: 'Poolreinigung',
+      es: 'Limpieza de piscina',
+    },
+    aliases: ['басейн', 'pool', 'обслуговування'],
+    labor: [80, 950, 65],
+  }),
+  fieldWork({
+    id: 'work-ac-service',
+    slug: 'ac-maintenance',
+    category: 'services',
+    unit: 'pcs',
+    names: {
+      en: 'AC / HVAC maintenance',
+      uk: 'Обслуговування кондиціонера',
+      de: 'Klimawartung',
+      es: 'Mantenimiento de aire acondicionado',
+    },
+    aliases: ['кондиціонер', 'клімат', 'klima', 'hvac', 'обслуговування'],
+    labor: [70, 850, 55],
+  }),
+
+  // —— Transport ——
+  fieldWork({
+    id: 'work-material-delivery',
+    slug: 'material-delivery',
+    category: 'transport',
+    unit: 'trip',
+    names: {
+      en: 'Building material delivery',
+      uk: 'Доставка будматеріалів',
+      de: 'Baustofflieferung',
+      es: 'Entrega de materiales',
+    },
+    aliases: ['доставка', 'перевезення', 'lieferung', 'delivery', 'транспорт'],
+    labor: [80, 1200, 65],
+  }),
+  fieldWork({
+    id: 'work-dump-truck',
+    slug: 'dump-truck-haul',
+    category: 'transport',
+    unit: 'trip',
+    names: {
+      en: 'Dump truck haul',
+      uk: 'Самоскид / вивіз вантажу',
+      de: 'Kippertransport',
+      es: 'Transporte con volquete',
+    },
+    aliases: ['самоскид', 'вивіз', 'kipper', 'dump truck', 'перевезення', 'транспорт'],
+    labor: [120, 1800, 95],
+  }),
+  fieldWork({
+    id: 'work-rubble-haul',
+    slug: 'rubble-haulage',
+    category: 'transport',
+    unit: 'm3',
+    names: {
+      en: 'Rubble haulage',
+      uk: 'Вивіз щебеню / буту',
+      de: 'Schutt abfahren',
+      es: 'Transporte de escombros',
+    },
+    aliases: ['вивіз щебеню', 'бут', 'schutt', 'rubble', 'перевезення'],
+    labor: [35, 420, 28],
+  }),
+  fieldWork({
+    id: 'work-sand-delivery',
+    slug: 'sand-gravel-delivery',
+    category: 'transport',
+    unit: 'm3',
+    names: {
+      en: 'Sand / gravel delivery',
+      uk: 'Доставка піску / щебеню',
+      de: 'Sand- / Schotterlieferung',
+      es: 'Entrega de arena / grava',
+    },
+    aliases: ['доставка піску', 'щебінь доставка', 'sandlieferung', 'перевезення'],
+    labor: [30, 380, 24],
+  }),
+  fieldWork({
+    id: 'work-furniture-move',
+    slug: 'furniture-transport',
+    category: 'transport',
+    unit: 'trip',
+    names: {
+      en: 'Furniture transport',
+      uk: 'Перевезення меблів',
+      de: 'Möbeltransport',
+      es: 'Transporte de muebles',
+    },
+    aliases: ['меблі перевезення', 'переїзд', 'möbeltransport', 'транспорт'],
+    labor: [100, 1500, 80],
+  }),
+  fieldWork({
+    id: 'work-equipment-haul',
+    slug: 'equipment-transport',
+    category: 'transport',
+    unit: 'trip',
+    names: {
+      en: 'Equipment / tool transport',
+      uk: 'Перевезення інструменту / техніки',
+      de: 'Gerätetransport',
+      es: 'Transporte de equipos',
+    },
+    aliases: ['техніка перевезення', 'інструмент', 'gerätetransport', 'транспорт'],
+    labor: [90, 1350, 72],
+  }),
+  fieldWork({
+    id: 'work-crew-transfer',
+    slug: 'crew-transfer',
+    category: 'transport',
+    unit: 'trip',
+    names: {
+      en: 'Crew transfer to site',
+      uk: 'Доставка бригади на об’єкт',
+      de: 'Mannschaftstransport',
+      es: 'Traslado de cuadrilla',
+    },
+    aliases: ['бригада доставка', 'робітники', 'mannschaft', 'транспорт', 'перевезення'],
+    labor: [40, 600, 32],
+  }),
+  fieldWork({
+    id: 'work-skip-hire',
+    slug: 'skip-container-hire',
+    category: 'transport',
+    unit: 'pcs',
+    names: {
+      en: 'Skip / container hire',
+      uk: 'Оренда контейнера під сміття',
+      de: 'Container mieten',
+      es: 'Alquiler de contenedor',
+    },
+    aliases: ['контейнер', 'skip', 'container', 'сміття контейнер', 'транспорт'],
+    labor: [150, 2200, 120],
+  }),
+  fieldWork({
+    id: 'work-crane-lift',
+    slug: 'crane-lift-service',
+    category: 'transport',
+    unit: 'h',
+    names: {
+      en: 'Crane lift service',
+      uk: 'Послуги крана / підйом',
+      de: 'Kraneinsatz',
+      es: 'Servicio de grúa',
+    },
+    aliases: ['кран', 'підйом', 'kran', 'crane', 'транспорт'],
+    labor: [120, 1800, 95],
+  }),
+  fieldWork({
+    id: 'work-pallet-delivery',
+    slug: 'pallet-delivery',
+    category: 'transport',
+    unit: 'pcs',
+    names: {
+      en: 'Pallet delivery',
+      uk: 'Доставка палетою',
+      de: 'Palettenlieferung',
+      es: 'Entrega en palé',
+    },
+    aliases: ['палета', 'палета доставка', 'palette', 'транспорт'],
+    labor: [25, 350, 20],
+  }),
+
+  // —— Extra common interior / exterior ——
+  fieldWork({
+    id: 'work-wallpaper',
+    slug: 'wallpaper-hanging',
+    category: 'paint',
+    unit: 'm2',
+    names: {
+      en: 'Wallpaper hanging',
+      uk: 'Поклейка шпалер',
+      de: 'Tapeten kleben',
+      es: 'Colocación de papel pintado',
+    },
+    aliases: ['шпалери', 'поклейка', 'tapete', 'wallpaper'],
+    labor: [12, 150, 10],
+  }),
+  fieldWork({
+    id: 'work-skirting',
+    slug: 'skirting-board-install',
+    category: 'flooring',
+    unit: 'lm',
+    names: {
+      en: 'Skirting board installation',
+      uk: 'Монтаж плінтуса',
+      de: 'Sockelleiste montieren',
+      es: 'Instalación de rodapié',
+    },
+    aliases: ['плінтус', 'sockelleiste', 'skirting'],
+    labor: [8, 95, 6.5],
+  }),
+  fieldWork({
+    id: 'work-stretch-ceiling',
+    slug: 'stretch-ceiling',
+    category: 'drywall',
+    unit: 'm2',
+    names: {
+      en: 'Stretch ceiling',
+      uk: 'Натяжна стеля',
+      de: 'Spanndecke',
+      es: 'Techo tensado',
+    },
+    aliases: ['натяжна', 'стеля натяжна', 'spanndecke'],
+    labor: [28, 340, 22],
+  }),
+  fieldWork({
+    id: 'work-facade-paint',
+    slug: 'facade-painting',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'Facade painting',
+      uk: 'Фарбування фасаду',
+      de: 'Fassadenanstrich',
+      es: 'Pintura de fachada',
+    },
+    aliases: ['фасад фарба', 'фарбування зовні', 'fassade streichen'],
+    labor: [14, 170, 11],
+  }),
+  fieldWork({
+    id: 'work-siding',
+    slug: 'siding-install',
+    category: 'facade',
+    unit: 'm2',
+    names: {
+      en: 'Siding / cladding install',
+      uk: 'Монтаж сайдингу / облицювання',
+      de: 'Fassadenverkleidung',
+      es: 'Instalación de revestimiento',
+    },
+    aliases: ['сайдинг', 'облицювання', 'verkleidung', 'siding'],
+    labor: [32, 380, 26],
+  }),
+  fieldWork({
+    id: 'work-fence-metal',
+    slug: 'metal-fence-install',
+    category: 'outdoor',
+    unit: 'lm',
+    names: {
+      en: 'Metal fence installation',
+      uk: 'Монтаж металевого паркану',
+      de: 'Metallzaun montieren',
+      es: 'Instalación de valla metálica',
+    },
+    aliases: ['паркан метал', 'профлист паркан', 'zaun', 'fence'],
+    labor: [40, 480, 32],
+  }),
+  fieldWork({
+    id: 'work-asphalt-patch',
+    slug: 'asphalt-patch',
+    category: 'outdoor',
+    unit: 'm2',
+    names: {
+      en: 'Asphalt patch / repair',
+      uk: 'Асфальтування / ямковий ремонт',
+      de: 'Asphaltausbesserung',
+      es: 'Reparación de asfalto',
+    },
+    aliases: ['асфальт', 'ямковий', 'asphalt'],
+    labor: [25, 300, 20],
+  }),
+  fieldWork({
+    id: 'work-intercom',
+    slug: 'intercom-install',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'Intercom / doorbell install',
+      uk: 'Монтаж домофону',
+      de: 'Gegensprechanlage',
+      es: 'Instalación de portero',
+    },
+    aliases: ['домофон', 'дзвінок', 'gegensprech'],
+    labor: [85, 1000, 70],
+  }),
+  fieldWork({
+    id: 'work-cctv',
+    slug: 'cctv-install',
+    category: 'electrical',
+    unit: 'pcs',
+    names: {
+      en: 'CCTV camera install',
+      uk: 'Монтаж камери відеоспостереження',
+      de: 'Überwachungskamera',
+      es: 'Instalación de cámara CCTV',
+    },
+    aliases: ['відеоспостереження', 'камера', 'cctv', 'überwachung'],
+    labor: [95, 1200, 80],
+  }),
+  fieldWork({
+    id: 'work-septic',
+    slug: 'septic-install',
+    category: 'plumbing',
+    unit: 'pcs',
+    names: {
+      en: 'Septic / treatment plant install',
+      uk: 'Монтаж септика / очисних',
+      de: 'Kläranlage montieren',
+      es: 'Instalación de fosa séptica',
+    },
+    aliases: ['септик', 'очисні', 'kläranlage', 'septic'],
+    labor: [450, 5500, 380],
   }),
 ];
 
