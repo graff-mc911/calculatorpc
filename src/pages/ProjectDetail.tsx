@@ -290,6 +290,46 @@ export default function ProjectDetail() {
     qc.invalidateQueries({ queryKey: ['project-linkable-invoices', id] });
   };
 
+  const importWorksFromInvoice = async (invoiceId: string) => {
+    const existingWorks = Array.isArray(bundle?.workItems) ? bundle!.workItems : [];
+    if (existingWorks.length > 0) return 0;
+    const { data: items, error: itemsErr } = await supabase
+      .from('invoice_items')
+      .select('description, material, quantity, unit, price, sort_order')
+      .eq('invoice_id', invoiceId)
+      .order('sort_order');
+    if (itemsErr) throw itemsErr;
+    let order = 0;
+    for (const item of items || []) {
+      const title = String(item.description || item.material || '').trim();
+      if (!title) continue;
+      await addWorkItem({
+        project_id: id,
+        title,
+        quantity: Number(item.quantity) || 1,
+        unit: String(item.unit || 'pcs'),
+        unit_price: Number(item.price) || 0,
+        sort_order: order++,
+      });
+    }
+    return order;
+  };
+
+  const importWorksMut = useMutation({
+    mutationFn: async (invoiceId: string) => importWorksFromInvoice(invoiceId),
+    onSuccess: (count) => {
+      showSuccess(
+        count > 0
+          ? `Імпортовано робіт: ${count}`
+          : 'Немає рядків для імпорту або роботи вже є'
+      );
+      invalidate();
+    },
+    onError: (err: any) => {
+      showError(err?.message || 'Не вдалося імпортувати роботи');
+    },
+  });
+
   const linkInvoiceMut = useMutation({
     mutationFn: async (invoiceId: string) => {
       const { error: err } = await supabase
@@ -298,32 +338,7 @@ export default function ProjectDetail() {
         .eq('id', invoiceId);
       if (err) throw err;
 
-      // Pull invoice lines into empty work sheet so the project shows the same scope.
-      const existingWorks = Array.isArray(bundle?.workItems) ? bundle!.workItems : [];
-      if (existingWorks.length === 0) {
-        const { data: items, error: itemsErr } = await supabase
-          .from('invoice_items')
-          .select('description, material, quantity, unit, price, sort_order')
-          .eq('invoice_id', invoiceId)
-          .order('sort_order');
-        if (itemsErr) {
-          console.warn('invoice items import skipped', itemsErr);
-        } else {
-          let order = 0;
-          for (const item of items || []) {
-            const title = String(item.description || item.material || '').trim();
-            if (!title) continue;
-            await addWorkItem({
-              project_id: id,
-              title,
-              quantity: Number(item.quantity) || 1,
-              unit: String(item.unit || 'pcs'),
-              unit_price: Number(item.price) || 0,
-              sort_order: order++,
-            });
-          }
-        }
-      }
+      await importWorksFromInvoice(invoiceId);
 
       // Keep object price aligned with invoice total when budget was empty/different.
       const linked = allRecentInvoices.find((inv) => inv.id === invoiceId) ||
@@ -994,8 +1009,18 @@ export default function ProjectDetail() {
           </button>
         </div>
         {workItems.length === 0 ? (
-          <div className="cpc-card text-center py-5">
+          <div className="cpc-card text-center py-5 space-y-2">
             <p className="cpc-muted text-sm mb-2">Ще немає робіт</p>
+            {projectInvoices[0] && (
+              <button
+                type="button"
+                className="cpc-btn-primary w-full"
+                disabled={importWorksMut.isPending}
+                onClick={() => importWorksMut.mutate(projectInvoices[0].id)}
+              >
+                Імпортувати роботи з рахунку
+              </button>
+            )}
             <button type="button" className="cpc-btn-primary" onClick={openAddWork}>
               Додати роботу
             </button>
@@ -1362,9 +1387,25 @@ export default function ProjectDetail() {
           </p>
         )}
         {workItems.length === 0 && projectInvoices.length > 0 && (
-          <p className="cpc-muted text-[11px] text-center mt-2">
-            Суми й роботи взято з рахунку.
-          </p>
+          <div className="mt-2 space-y-2">
+            <button
+              type="button"
+              disabled={importWorksMut.isPending}
+              onClick={() => importWorksMut.mutate(projectInvoices[0].id)}
+              className="w-full min-h-[44px] text-[13px] font-medium"
+              style={{
+                background: 'var(--cpc-card)',
+                border: '1px solid var(--cpc-line)',
+                borderRadius: 10,
+                color: 'var(--cpc-text)',
+              }}
+            >
+              Імпортувати роботи з {projectInvoices[0].document_no || 'рахунку'}
+            </button>
+            <p className="cpc-muted text-[11px] text-center">
+              Рахунок прив’язано. Імпортуйте рядки в Роботи одним натиском.
+            </p>
+          </div>
         )}
       </section>
 
