@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { translations, translateUnit } from './languages';
 import { expandItemsForInvoiceTable } from './invoiceTotals';
 import { ensurePdfUnicodeFont } from './pdfUnicodeFont';
+import { formatUnitForPdf } from './invoiceUnits';
 
 interface InvoiceItem {
   description: string;
@@ -208,7 +209,13 @@ export const generateInvoicePDF = async (
   }).map((row) =>
     row.is_section
       ? row
-      : { ...row, unit: translateUnit(row.unit, t) }
+      : {
+          ...row,
+          unit:
+            lang === 'es'
+              ? formatUnitForPdf(row.unit, lang)
+              : translateUnit(row.unit, t),
+        }
   );
 
   let pos = 0;
@@ -318,7 +325,7 @@ export const generateInvoicePDF = async (
       [
         t('position'),
         t('designation'),
-        t('amountShort'),
+        lang === 'es' ? t('quantityShort') : t('amountShort'),
         t('unit'),
         t('unitPriceShort'),
         t('totalPriceShort'),

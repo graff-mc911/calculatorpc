@@ -2,6 +2,7 @@ import React from 'react';
 import { currencies, translations, translateUnit } from '../../lib/languages';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { expandItemsForInvoiceTable } from '../../lib/invoiceTotals';
+import { formatUnitForPdf } from '../../lib/invoiceUnits';
 
 interface InvoiceItem {
   description: string;
@@ -108,7 +109,10 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
       ? row
       : {
           ...row,
-          unit: translateUnit(row.unit, tInvoice),
+          unit:
+            labelLang === 'es'
+              ? formatUnitForPdf(row.unit, labelLang)
+              : translateUnit(row.unit, tInvoice),
         }
   );
 
@@ -284,7 +288,7 @@ export const InvoiceDocument: React.FC<InvoiceDocumentProps> = ({
                 {tInvoice('designation')}
               </th>
               <th style={{ textAlign: 'right', padding: '1.8mm', width: '16mm', border: cellBorder, fontWeight: 700 }}>
-                {tInvoice('amountShort')}
+                {labelLang === 'es' ? tInvoice('quantityShort') : tInvoice('amountShort')}
               </th>
               <th style={{ textAlign: 'center', padding: '1.8mm', width: '18mm', border: cellBorder, fontWeight: 700 }}>
                 {tInvoice('unit')}
