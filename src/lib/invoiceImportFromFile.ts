@@ -3,12 +3,9 @@ import { calculateLineTotal } from './invoiceTotals';
 import type { PrefillInvoiceItem } from './invoiceFromProject';
 import { extractInvoiceDataFromPDF } from './pdfTextExtractor';
 import {
-  classifySheetKind,
-  compactUnitText,
   isMaterialOnlyLabel,
   normalizeInvoiceUnit,
   splitQtyUnit,
-  type InvoiceUnit,
 } from './invoiceUnits';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -35,6 +32,9 @@ export type ImportedInvoiceDraft = {
   document_type?: ImportedDocumentType;
   items: PrefillInvoiceItem[];
   sourceFileName?: string;
+  importedSheet?: string;
+  skippedSheets?: string[];
+  warnings?: string[];
 };
 
 type ColKey =
@@ -44,38 +44,44 @@ type ColKey =
   | 'price'
   | 'material'
   | 'total'
-  | 'notes'
-  | 'pos';
+  | 'note'
+  | 'index';
 
-/** Cell role after token classification (words / numbers / metrics). */
-export type CellKind = 'empty' | 'word' | 'number' | 'metric' | 'qty_unit' | 'date' | 'mixed';
+/** Normalize header / alias: NFD, strip diacritics, lowercase, collapse spaces, trim trailing punctuation. */
+function normHeader(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:]+$/g, '')
+    .trim();
+}
 
-const HEADER_MAP: Record<ColKey, string[]> = {
+/** Raw aliases (written without diacritics). Normalized once at module load. */
+const HEADER_ALIASES_RAW: Record<ColKey, string[]> = {
   description: [
     'description',
     'desc',
     'item',
     'artikel',
     'leistung',
-    'position',
     'bezeichnung',
     'work',
     'service',
     'опис',
     'назва',
-    'позиція',
     'робота',
     'найменування',
     'arbeit',
+    'position',
+    'позиція',
     'trabajo',
-    'trabajos',
-    'concepto',
-    'partida',
     'descripcion',
-    'descripción',
-    'material',
-    'materiales',
-    'матеріал',
+    'concepto',
+    'designacion',
+    'partida',
   ],
   quantity: [
     'qty',
@@ -87,14 +93,10 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'к-сть',
     'ксть',
     'кол',
-    'medicion',
-    'medición',
-    'medicion / cant',
-    'medición / cant',
-    'medición / cant.',
-    'cant',
     'cantidad',
-    'cant.',
+    'cant',
+    'medicion',
+    'medicion / cant',
   ],
   unit: [
     'unit',
@@ -106,8 +108,8 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'um',
     'од вим',
     'unidad',
-    'unidades',
     'ud',
+    'unid',
   ],
   price: [
     'price',
@@ -119,17 +121,13 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'ціна',
     'ставка',
     'ціна од',
-    'arbeit',
-    'lohn',
-    'labor',
-    'робота',
-    'ціна роботи',
     'arbeitpreis',
     'lohnpreis',
     'precio',
-    'precio, sin iva',
     'precio sin iva',
-    'p. unitario',
+    'precio, sin iva',
+    'precio unitario',
+    'pu',
   ],
   material: [
     'materialpreis',
@@ -138,6 +136,8 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'werkstoff',
     'mat price',
     'material price',
+    'material',
+    'materiales',
   ],
   total: [
     'total',
@@ -148,72 +148,56 @@ const HEADER_MAP: Record<ColKey, string[]> = {
     'сума',
     'всього',
     'разом',
-    'total, €',
     'total €',
     'importe',
   ],
-  notes: [
+  note: [
+    'observaciones',
+    'notas',
+    'nota',
+    'comentarios',
+    'примітка',
+    'bemerkung',
     'notes',
     'note',
-    'bemerkung',
-    'bemerkungen',
-    'observaciones',
-    'observacion',
-    'observación',
-    'comentario',
     'comments',
-    'примітка',
-    'нотатки',
   ],
-  pos: ['pos', 'nr', 'no', 'nº', 'n°', '#', '№', 'pos.', 'позиция'],
+  index: ['#', '№', 'nº', 'n°', 'no', 'no.', 'num', 'pos', 'pos.', 'п/п', 'nr'],
 };
 
-function normHeader(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ');
-}
+const HEADER_MAP: Record<ColKey, string[]> = (
+  Object.keys(HEADER_ALIASES_RAW) as ColKey[]
+).reduce(
+  (acc, key) => {
+    acc[key] = HEADER_ALIASES_RAW[key].map((a) => normHeader(a)).filter(Boolean);
+    return acc;
+  },
+  {} as Record<ColKey, string[]>,
+);
 
-function headerAliasHit(header: string, alias: string): boolean {
-  const h = normHeader(header);
-  const a = normHeader(alias);
-  if (!a) return false;
-  if (h === a) return true;
-  // Short aliases must be whole tokens — avoid "cantidades"→quantity via "cant",
-  // "menge"→unit via "me", notes text matching column names by substring.
-  if (a.length <= 5) {
+function headerAliasHit(headerNorm: string, aliasNorm: string): boolean {
+  if (!aliasNorm) return false;
+  if (headerNorm === aliasNorm) return true;
+  if (aliasNorm.length <= 5) {
     return new RegExp(
-      `(^|[^a-zа-яіїєґ0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-zа-яіїєґ0-9]|$)`,
+      `(^|[^a-zа-яіїєґ0-9])${aliasNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-zа-яіїєґ0-9]|$)`,
       'i',
-    ).test(h);
+    ).test(headerNorm);
   }
-  return h.includes(a);
-}
-
-/** True when the cell is exactly a known column header label (not a long description). */
-function isExactHeaderLabel(cell: string): boolean {
-  const h = normHeader(cell);
-  if (!h || h.length > 40) return false;
-  return (Object.keys(HEADER_MAP) as ColKey[]).some((key) =>
-    HEADER_MAP[key].some((a) => normHeader(a) === h),
-  );
+  return headerNorm.includes(aliasNorm);
 }
 
 function matchCol(header: string): ColKey | null {
   const h = normHeader(header);
   if (!h) return null;
-  // Prefer specific columns before generic "description" (Material header on materials sheet)
   const order: ColKey[] = [
-    'notes',
-    'material',
+    'note',
+    'index',
     'quantity',
     'unit',
     'total',
+    'material',
     'price',
-    'pos',
     'description',
   ];
   for (const key of order) {
@@ -222,7 +206,6 @@ function matchCol(header: string): ColKey | null {
   return null;
 }
 
-/** Parse locale numbers: 3,500.00 | 3.500,00 | 3500 | 9.95 */
 /** Parse a numeric cell. Never extracts digits from text that contains letters. */
 export function parseNumber(raw: unknown): number {
   if (typeof raw === 'number') {
@@ -232,28 +215,23 @@ export function parseNumber(raw: unknown): number {
     .trim()
     .replace(/[€$£\s\u00a0]/g, '');
   if (!s) return 0;
-  // Any letter → not a number (do not strip letters to salvage digits)
   if (/\p{L}/u.test(s)) return 0;
-  // Keep only digits, separators, and leading minus
   s = s.replace(/[^\d,.\-]/g, '');
   if (!s || s === '-' || s === '.' || s === ',') return 0;
 
   if (s.includes(',') && s.includes('.')) {
-    // Decimal separator is the one that appears last
     if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
       s = s.replace(/\./g, '').replace(',', '.');
     } else {
       s = s.replace(/,/g, '');
     }
   } else if (s.includes(',')) {
-    // Thousands: 1,234 or 1,234,567 — otherwise decimal
     if (/^\d{1,3}(,\d{3})+$/.test(s)) {
       s = s.replace(/,/g, '');
     } else {
       s = s.replace(',', '.');
     }
   } else if (s.includes('.')) {
-    // Two or more thousand-group dots: 1.234.567 — otherwise decimal
     if (/^\d{1,3}(\.\d{3}){2,}$/.test(s)) {
       s = s.replace(/\./g, '');
     }
@@ -263,137 +241,28 @@ export function parseNumber(raw: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-const METRIC_TOKEN =
-  /^(m2|m²|m3|m³|м2|м²|м3|м³|qm|sqm|lm|ml|lfm|lf|ud|uds|u|pcs|stk|шт|h|hr|std|stunde|global|pa|pauschal|паушал|ft2|ft²|metro|metros)$/i;
-
-/**
- * Classify a cell as word / number / metric (unit) / qty+unit / date.
- * Used so parsing never invents roles from position alone.
- */
-export function classifyCellKind(raw: unknown): CellKind {
-  const text = String(raw ?? '').trim();
-  if (!text) return 'empty';
-
-  if (/^\d{1,2}[-./]\d{1,2}[-./]\d{2,4}$/.test(text) || /^\d{4}-\d{2}-\d{2}/.test(text)) {
-    return 'date';
-  }
-
-  // Numeric money / qty (3,500.00 · 9.95 · 3500) — before qty+unit
-  if (!/[a-zA-Zа-яА-Яіїєґ]/u.test(text) && /[\d]/.test(text)) {
-    const asNum = parseNumber(text);
-    if (asNum !== 0 || /^0([.,]0+)?$/.test(text.replace(/\s/g, ''))) return 'number';
-  }
-
-  const qtyUnit = splitQtyUnit(text);
-  if (qtyUnit.unit && qtyUnit.quantity !== 0 && !qtyUnit.restText) return 'qty_unit';
-
-  const unitOnly = normalizeInvoiceUnit(text, 'pcs');
-  const asUnit = compactUnitText(text);
-  if (METRIC_TOKEN.test(asUnit) || (asUnit.length <= 12 && unitOnly && METRIC_TOKEN.test(asUnit))) {
-    // Only treat as metric when the whole cell is a known unit token
-    if (/^[a-zA-Zа-яА-Яіїєґ0-9²³./\-\s]+$/u.test(text) && !/\d{2,}/.test(text.replace(/[²³23]/g, ''))) {
-      if (
-        /^(m[²³23]?|м[²³23]?|qm|lm|ml|lfm|ud|uds|u|pcs|stk|шт|h|hr|std|global|pa|pauschal|ft2|metro|metros|unidad|unidades)$/i.test(
-          asUnit,
-        )
-      ) {
-        return 'metric';
-      }
-    }
-  }
-
-  if (/[a-zA-Zа-яА-Яіїєґ]/u.test(text) && parseNumber(text) === 0) return 'word';
-  if (/[a-zA-Zа-яА-Яіїєґ]/u.test(text) && parseNumber(text) !== 0) return 'mixed';
-  return parseNumber(text) !== 0 ? 'number' : 'word';
+function cellEmpty(raw: unknown): boolean {
+  if (raw == null) return true;
+  if (typeof raw === 'number') return !Number.isFinite(raw);
+  return String(raw).trim() === '';
 }
 
-/** Footer / summary rows must not become line items. */
-export function isTotalOrFooterRow(row: unknown[], descIdx: number): boolean {
-  const desc = compactUnitText(String(row[descIdx] ?? ''));
-  if (!desc) {
-    // Row with only a total in the last numeric cells and blank description
-    const words = row
-      .map((c) => String(c ?? '').trim())
-      .filter(Boolean)
-      .map((c) => compactUnitText(c));
-    if (words.some((w) => /^(total|summe|gesamt|всього|разом|subtotal|suma)$/.test(w))) {
-      return true;
-    }
-  }
-  return /^(total|summe|gesamt|всього|разом|subtotal|suma|итого|gesamtbetrag|importe\s*total)$/.test(
-    desc,
-  );
-}
-
-/**
- * Deterministic document type from file name + sheet titles + header cells.
- * Never invents: unknown keywords → invoice (default sales form).
- */
-export function detectDocumentType(
-  fileName: string,
-  titles: string[] = [],
-): ImportedDocumentType {
-  const blob = compactUnitText([fileName, ...titles].join(' '));
-
-  // Estimate / quote / presupuesto / кошторис / Angebot (non-binding quote)
-  if (
-    /\b(presupuesto|presupuest|estimate|quotation|quote|кошторис|пропозиц|angebot|kostenvoranschlag|devis|or[cç]amento)\b/.test(
-      blob,
-    )
-  ) {
-    return 'estimate';
-  }
-
-  // Proposal / Angebot binding / пропозиція
-  if (/\b(proposal|vorschlag|пропозиція|proposta|oferta\s*comercial)\b/.test(blob)) {
-    return 'proposal';
-  }
-
-  // Explicit invoice
-  if (
-    /\b(invoice|rechnung|factura|рахунок|счет|facture|nota\s*de\s*cobro)\b/.test(blob)
-  ) {
-    return 'invoice';
-  }
-
-  return 'invoice';
-}
-
-function detectInvoiceLanguage(fileName: string, titles: string[]): string | undefined {
-  const blob = compactUnitText([fileName, ...titles].join(' '));
-  if (/\b(presupuesto|trabajo|materiales|mano\s*de\s*obra|unidad|medicion|precio)\b/.test(blob)) {
-    return 'es';
-  }
-  if (/\b(rechnung|leistung|menge|einheit|angebot)\b/.test(blob)) return 'de';
-  if (/\b(рахунок|кошторис|робота|матеріал|одиниця)\b/.test(blob)) return 'uk';
-  return undefined;
-}
-
-function toItem(
-  partial: {
-    description?: string;
-    quantity?: number;
-    unit?: string;
-    price?: number;
-    material?: number | string;
-    notes?: string;
-  },
-  sheetKind: 'labor' | 'materials' | 'unknown' = 'unknown',
-): PrefillInvoiceItem | null {
-  let description = String(partial.description || '').trim();
+function toItem(partial: {
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  price?: number;
+  material?: number | string;
+}): PrefillInvoiceItem | null {
+  let description = String(partial.description || '')
+    .trim()
+    .replace(/\s+/g, ' ');
   let quantity = Number(partial.quantity) || 0;
   let price = Number(partial.price) || 0;
   let materialNum =
     typeof partial.material === 'number'
       ? partial.material
       : parseNumber(partial.material);
-
-  const note = String(partial.notes || '').trim();
-  if (note && description && !description.includes(note)) {
-    description = `${description} — ${note}`;
-  } else if (note && !description) {
-    description = note;
-  }
 
   // "Material: 250" inline in description
   const matInline = description.match(
@@ -406,34 +275,11 @@ function toItem(
 
   if (!description && quantity <= 0 && price <= 0 && materialNum <= 0) return null;
 
-  const unit = normalizeInvoiceUnit(partial.unit, quantity > 0 ? 'm²' : 'pcs');
+  const unit = normalizeInvoiceUnit(partial.unit, 'pcs');
   const qty = quantity || (price > 0 || materialNum > 0 ? 1 : 0);
 
-  // Materials *sheet* = real priced positions (qty × unit price), NOT Lexware companions.
-  // Lexware "Material" companion only when a labor sheet row is a material-only label.
-  if (sheetKind === 'materials' && materialNum <= 0 && (price > 0 || qty > 0)) {
-    const unitPrice = price > 0 ? price : 0;
-    const lineQty = qty || 1;
-    return {
-      quantity: lineQty,
-      quantityDisplay: String(lineQty),
-      unit,
-      price: unitPrice,
-      priceDisplay: unitPrice ? String(unitPrice) : '',
-      material: '',
-      materialDisplay: '',
-      description: description || 'Material',
-      total: calculateLineTotal(lineQty, unitPrice, 0),
-    };
-  }
-
-  if (
-    sheetKind !== 'materials' &&
-    isMaterialOnlyLabel(description) &&
-    materialNum <= 0 &&
-    price > 0
-  ) {
-    const matAmount = qty > 0 ? qty * price : price;
+  if (isMaterialOnlyLabel(description) && materialNum <= 0 && price > 0 && qty <= 1) {
+    const matAmount = price;
     return {
       quantity: 1,
       quantityDisplay: '1',
@@ -447,20 +293,21 @@ function toItem(
     };
   }
 
+  const roundedPrice = Math.round(price * 10000) / 10000;
+
   return {
     quantity: qty,
     quantityDisplay: String(qty || ''),
     unit,
-    price,
-    priceDisplay: price ? String(price) : '',
+    price: roundedPrice,
+    priceDisplay: roundedPrice ? String(roundedPrice) : '',
     material: materialNum > 0 ? String(materialNum) : '',
     materialDisplay: materialNum > 0 ? String(materialNum) : '',
     description: description || 'Position',
-    total: calculateLineTotal(qty, price, materialNum || 0),
+    total: calculateLineTotal(qty, roundedPrice, materialNum || 0),
   };
 }
 
-/** Attach material-only rows onto the previous work line (German Lexware style). */
 function coalesceMaterialRows(items: PrefillInvoiceItem[]): PrefillInvoiceItem[] {
   const out: PrefillInvoiceItem[] = [];
   for (const item of items) {
@@ -489,119 +336,71 @@ function coalesceMaterialRows(items: PrefillInvoiceItem[]): PrefillInvoiceItem[]
   return out;
 }
 
-function detectHeaderMap(row: unknown[]): Partial<Record<ColKey, number>> | null {
+/** Build column map from a header row. Material→description when description missing. */
+function buildColMap(row: unknown[]): {
+  map: Partial<Record<ColKey, number>>;
+  keys: ColKey[];
+  labels: string[];
+} {
   const map: Partial<Record<ColKey, number>> = {};
-  let hits = 0;
+  const keys: ColKey[] = [];
+  const labels: string[] = [];
+
   row.forEach((cell, idx) => {
-    const key = matchCol(String(cell ?? ''));
-    if (key && map[key] === undefined) {
+    const label = String(cell ?? '').trim();
+    if (!label) return;
+    const key = matchCol(label);
+    if (!key) return;
+    labels.push(label);
+
+    if (key === 'material' && map.description === undefined) {
+      map.description = idx;
+      if (!keys.includes('description')) keys.push('description');
+      return;
+    }
+    if (map[key] === undefined) {
       map[key] = idx;
-      hits += 1;
+      keys.push(key);
     }
   });
-  // "Material" / "Trabajo" count as description
-  if (map.description !== undefined && hits >= 2) return map;
-  if (
-    map.description !== undefined &&
-    (map.price !== undefined || map.total !== undefined || map.quantity !== undefined)
-  ) {
-    return map;
-  }
-  return null;
+
+  return { map, keys, labels };
 }
 
-/**
- * Build line items from rows under a known header map.
- * Recalculates total as qty × price (+ material); sheet total rows are skipped.
- */
-function rowsToItems(
-  rows: unknown[][],
-  colMap: Partial<Record<ColKey, number>>,
-  sheetKind: 'labor' | 'materials' | 'unknown',
-): PrefillInvoiceItem[] {
-  const items: PrefillInvoiceItem[] = [];
-  const descIdx = colMap.description ?? 0;
+function isValidHeaderMap(map: Partial<Record<ColKey, number>>, keys: ColKey[]): boolean {
+  if (map.description === undefined) return false;
+  const unique = new Set(keys);
+  if (unique.size < 3) return false;
+  return (
+    map.quantity !== undefined || map.price !== undefined || map.total !== undefined
+  );
+}
 
-  for (const row of rows) {
-    if (!Array.isArray(row) || row.every((c) => String(c ?? '').trim() === '')) continue;
-    if (isTotalOrFooterRow(row, descIdx)) continue;
-
-    let description = String(row[descIdx] ?? '').trim();
-    // Skip repeated header row only when description is an exact header label
-    // (e.g. "Material" / "Trabajo") — never skip "Material para mochetas…"
-    if (isExactHeaderLabel(description)) {
-      const maybeHeader = detectHeaderMap(row);
-      if (maybeHeader) continue;
-    }
-
-    let quantity = 0;
-    let unit: InvoiceUnit | string = sheetKind === 'materials' ? 'Pauschal' : 'm²';
-
-    if (colMap.quantity !== undefined) {
-      const split = splitQtyUnit(row[colMap.quantity]);
-      quantity = split.quantity;
-      if (split.unit) unit = split.unit;
-    }
-
-    if (colMap.unit !== undefined) {
-      const uRaw = String(row[colMap.unit] ?? '').trim();
-      if (uRaw) unit = normalizeInvoiceUnit(uRaw, unit as InvoiceUnit);
-    }
-
-    if (colMap.unit === undefined) {
-      const unitFromDesc = description.match(
-        /\b(m[²³23]|м[²³23]|qm|lm|ml|lfm|ud|uds|пог\.?\s*м|м\.?\s*п|погонн\w*|шт|pcs|stk|h|std|global)\b/i,
-      );
-      if (unitFromDesc) {
-        unit = normalizeInvoiceUnit(unitFromDesc[1], unit as InvoiceUnit);
-      }
-    }
-
-    let price = colMap.price !== undefined ? parseNumber(row[colMap.price]) : 0;
-    const lineTotalCell =
-      colMap.total !== undefined ? parseNumber(row[colMap.total]) : 0;
-    let material =
-      colMap.material !== undefined ? parseNumber(row[colMap.material]) : 0;
-    const notes =
-      colMap.notes !== undefined ? String(row[colMap.notes] ?? '').trim() : '';
-
-    // If unit price missing but line total present → derive price = total / qty
-    if (price <= 0 && lineTotalCell > 0 && material <= 0) {
-      quantity = quantity > 0 ? quantity : 1;
-      price = lineTotalCell / quantity;
-    } else if (price <= 0 && lineTotalCell > 0 && material > 0) {
-      quantity = quantity > 0 ? quantity : 1;
-      const laborPart = lineTotalCell - material;
-      price = laborPart > 0 ? laborPart / quantity : 0;
-    }
-
-    // Prefer qty × unit price over a mismatched Total cell (recalculate)
-    if (quantity > 0 && price > 0 && lineTotalCell > 0) {
-      const expected =
-        sheetKind === 'materials'
-          ? quantity * price
-          : quantity * price + material;
-      // If Total cell disagrees with qty×price, trust qty×price (don't invent)
-      if (Math.abs(expected - lineTotalCell) > 0.05 && Math.abs(expected - lineTotalCell) / expected > 0.02) {
-        // keep qty & price; total recalculated in toItem
-      }
-    }
-
-    if (quantity <= 0 && (price > 0 || material > 0)) quantity = 1;
-
-    // Empty description but has numbers — skip (not a real position)
-    if (!description) continue;
-
-    const item = toItem(
-      { description, quantity, unit: String(unit), price, material, notes },
-      sheetKind,
-    );
-    if (item) items.push(item);
+function detectDocumentType(
+  fileName: string,
+  titles: string[] = [],
+): ImportedDocumentType {
+  const blob = [fileName, ...titles].join(' ').toLowerCase();
+  if (
+    /\b(presupuesto|presupuest|estimate|quotation|quote|кошторис|angebot|kostenvoranschlag|devis)\b/.test(
+      blob,
+    )
+  ) {
+    return 'estimate';
   }
+  if (/\b(proposal|vorschlag|пропозиція|proposta)\b/.test(blob)) return 'proposal';
+  if (/\b(invoice|rechnung|factura|рахунок|facture)\b/.test(blob)) return 'invoice';
+  return 'invoice';
+}
 
-  // Only coalesce when mixed labor+material on same sheet (unknown / labor)
-  if (sheetKind === 'materials') return items;
-  return coalesceMaterialRows(items);
+function detectInvoiceLanguage(fileName: string, titles: string[]): string | undefined {
+  const blob = [fileName, ...titles].join(' ').toLowerCase();
+  if (/\b(presupuesto|trabajo|materiales|mano de obra|unidad|medicion|precio)\b/.test(blob)) {
+    return 'es';
+  }
+  if (/\b(rechnung|leistung|menge|einheit|angebot)\b/.test(blob)) return 'de';
+  if (/\b(рахунок|кошторис|робота|матеріал|одиниця)\b/.test(blob)) return 'uk';
+  return undefined;
 }
 
 function guessMetaFromSheet(rows: unknown[][]): Partial<ImportedInvoiceDraft> {
@@ -625,13 +424,11 @@ function guessMetaFromSheet(rows: unknown[][]): Partial<ImportedInvoiceDraft> {
     if (!meta.object_address && labelAddress.test(a)) meta.object_address = b;
   }
 
-  // Title row date in trailing cell (Presupuesto … | 09-10-2026)
   if (!meta.date) {
     for (const row of rows.slice(0, 5)) {
       if (!Array.isArray(row)) continue;
       for (const cell of row) {
-        const kind = classifyCellKind(cell);
-        if (kind === 'date') {
+        if (typeof cell === 'string' || typeof cell === 'number') {
           const n = parseExcelDate(String(cell));
           if (n) {
             meta.date = n;
@@ -662,156 +459,226 @@ function parseExcelDate(raw: string): string {
   return '';
 }
 
-function sheetTitleFromRows(sheetName: string, rows: unknown[][]): string {
-  for (const row of rows.slice(0, 3)) {
-    if (!Array.isArray(row)) continue;
-    for (const cell of row) {
-      const t = String(cell ?? '').trim();
-      if (t && classifyCellKind(t) === 'word' && t.length > 3) {
-        return t;
-      }
-    }
-  }
-  return sheetName;
-}
-
-function parseSheetRows(
-  sheetName: string,
+function rowsToItems(
   rows: unknown[][],
-): { items: PrefillInvoiceItem[]; title: string; sheetKind: 'labor' | 'materials' | 'unknown' } {
-  const title = sheetTitleFromRows(sheetName, rows);
-  const sheetKind = classifySheetKind(`${sheetName} ${title}`);
+  colMap: Partial<Record<ColKey, number>>,
+  warnings: string[],
+): { items: PrefillInvoiceItem[]; fileTotal?: number } {
+  const items: PrefillInvoiceItem[] = [];
+  let fileTotal: number | undefined;
+  const descIdx = colMap.description!;
+  let unknownUnits = 0;
 
-  let headerIdx = -1;
-  let colMap: Partial<Record<ColKey, number>> | null = null;
-  for (let i = 0; i < Math.min(rows.length, 40); i++) {
-    const found = detectHeaderMap(rows[i] || []);
-    if (found) {
-      headerIdx = i;
-      colMap = found;
+  for (let rowNum = 0; rowNum < rows.length; rowNum++) {
+    const row = rows[rowNum];
+    if (!Array.isArray(row)) continue;
+
+    const descriptionRaw = row[descIdx];
+    const description = String(descriptionRaw ?? '')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+    const qtyRaw = colMap.quantity !== undefined ? row[colMap.quantity] : undefined;
+    const priceRaw = colMap.price !== undefined ? row[colMap.price] : undefined;
+    const totalRaw = colMap.total !== undefined ? row[colMap.total] : undefined;
+    const unitRaw = colMap.unit !== undefined ? row[colMap.unit] : undefined;
+    const matRaw = colMap.material !== undefined ? row[colMap.material] : undefined;
+
+    // Never read numbers from columns left of description (index / №)
+    if (
+      cellEmpty(descriptionRaw) &&
+      cellEmpty(qtyRaw) &&
+      cellEmpty(priceRaw) &&
+      cellEmpty(totalRaw)
+    ) {
+      continue;
+    }
+
+    // Total / footer row → capture fileTotal and stop
+    if (/^(total|subtotal|suma|importe total|gesamt|summe|итого|разом|всього)\b/i.test(description)) {
+      if (colMap.total !== undefined) {
+        fileTotal = parseNumber(totalRaw);
+      }
       break;
     }
-  }
-
-  if (colMap && headerIdx >= 0) {
-    return {
-      items: rowsToItems(rows.slice(headerIdx + 1), colMap, sheetKind),
-      title,
-      sheetKind,
-    };
-  }
-
-  // Fallback: positional scan with cell-kind classification (no inventing columns)
-  const items: PrefillInvoiceItem[] = [];
-  for (const row of rows) {
-    if (!Array.isArray(row) || row.length < 2) continue;
-    const cells = row.map((c) => String(c ?? '').trim());
-    if (cells.every((c) => !c)) continue;
-    if (isTotalOrFooterRow(row, 0) || isTotalOrFooterRow(row, 1)) continue;
-
-    const kinds = cells.map((c) => classifyCellKind(c));
-    const wordIdx = kinds.findIndex((k, i) => k === 'word' && !matchCol(cells[i]));
-    if (wordIdx < 0) continue;
-    const description = cells[wordIdx];
-    if (matchCol(description) === 'description') continue;
 
     let quantity = 0;
-    let unit: InvoiceUnit = sheetKind === 'materials' ? 'Pauschal' : 'm²';
-    let price = 0;
-
-    const metricIdx = kinds.findIndex((k) => k === 'metric');
-    if (metricIdx >= 0) unit = normalizeInvoiceUnit(cells[metricIdx]);
-
-    const qtyUnitIdx = kinds.findIndex((k) => k === 'qty_unit');
-    if (qtyUnitIdx >= 0) {
-      const split = splitQtyUnit(cells[qtyUnitIdx]);
-      quantity = split.quantity;
-      if (split.unit) unit = split.unit;
-    }
-
-    const numberIdxs = kinds
-      .map((k, i) => (k === 'number' ? i : -1))
-      .filter((i) => i >= 0);
-
-    // Typical: [pos?] desc unit qty price total
-    if (numberIdxs.length >= 1 && quantity <= 0) {
-      quantity = parseNumber(cells[numberIdxs[0]]);
-      if (numberIdxs.length >= 2) price = parseNumber(cells[numberIdxs[1]]);
-    } else if (numberIdxs.length >= 1) {
-      price = parseNumber(cells[numberIdxs[0]]);
-      if (numberIdxs.length >= 2) {
-        // second number may be price if first was qty already set
-        const n1 = parseNumber(cells[numberIdxs[0]]);
-        const n2 = parseNumber(cells[numberIdxs[1]]);
-        // Prefer: qty already known → n1 is price; else qty=n1 price=n2
-        if (quantity > 0) price = n1;
-        else {
-          quantity = n1;
-          price = n2;
-        }
+    let unit = '';
+    if (colMap.quantity !== undefined) {
+      if (typeof qtyRaw === 'number' || (typeof qtyRaw === 'string' && !/\p{L}/u.test(String(qtyRaw)))) {
+        quantity = parseNumber(qtyRaw);
+      } else if (colMap.unit === undefined) {
+        const split = splitQtyUnit(qtyRaw);
+        quantity = split.quantity;
+        if (split.unit) unit = split.unit;
+      } else {
+        quantity = parseNumber(qtyRaw);
       }
     }
 
-    if (quantity <= 0 && price > 0) quantity = 1;
-    const item = toItem({ description, quantity, unit, price }, sheetKind);
+    if (colMap.unit !== undefined) {
+      const uRaw = String(unitRaw ?? '').trim();
+      if (uRaw) {
+        const asPcs = normalizeInvoiceUnit(uRaw, 'pcs');
+        const asSentinel = normalizeInvoiceUnit(uRaw, 'm³');
+        // Unrecognized → both calls return their fallbacks
+        if (asPcs === 'pcs' && asSentinel === 'm³') unknownUnits += 1;
+        unit = asPcs;
+      }
+    }
+
+    let price = colMap.price !== undefined ? parseNumber(priceRaw) : 0;
+    let total = colMap.total !== undefined ? parseNumber(totalRaw) : 0;
+    const material = colMap.material !== undefined ? parseNumber(matRaw) : 0;
+
+    // Section header: description but no qty/price/total and empty unit
+    if (
+      description &&
+      quantity <= 0 &&
+      price <= 0 &&
+      total <= 0 &&
+      !String(unitRaw ?? '').trim()
+    ) {
+      continue;
+    }
+
+    if (price <= 0 && total > 0) {
+      price = total / (quantity || 1);
+    }
+
+    if (price > 0 && total > 0 && quantity > 0) {
+      const expected = quantity * price;
+      if (Math.abs(expected - total) > 0.02) {
+        price = total / quantity;
+        warnings.push(
+          `Рядок ${rowNum + 1}: розбіжність qty×price і Total — взято Total/qty`,
+        );
+      }
+    }
+
+    if (!description) continue;
+
+    const item = toItem({
+      description,
+      quantity,
+      unit: unit || String(unitRaw ?? ''),
+      price,
+      material,
+    });
     if (item) items.push(item);
   }
 
-  return {
-    items: sheetKind === 'materials' ? items : coalesceMaterialRows(items),
-    title,
-    sheetKind,
-  };
+  if (unknownUnits > 0) {
+    warnings.push(`Нерозпізнаних одиниць: ${unknownUnits} ( підставлено pcs )`);
+  }
+
+  return { items, fileTotal };
 }
 
 async function parseSpreadsheet(file: File): Promise<ImportedInvoiceDraft> {
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-
-  const allItems: PrefillInvoiceItem[] = [];
-  const titles: string[] = [];
-  let meta: Partial<ImportedInvoiceDraft> = {};
-
-  for (const sheetName of wb.SheetNames) {
-    const sheet = wb.Sheets[sheetName];
-    if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      header: 1,
-      defval: '',
-      raw: false,
-    }) as unknown[][];
-
-    if (!meta.client_name && !meta.date) {
-      meta = { ...meta, ...guessMetaFromSheet(rows) };
-    } else {
-      const more = guessMetaFromSheet(rows);
-      meta = {
-        ...more,
-        ...meta,
-        date: meta.date || more.date,
-        client_name: meta.client_name || more.client_name,
-      };
-    }
-
-    const parsed = parseSheetRows(sheetName, rows);
-    titles.push(parsed.title, sheetName);
-    allItems.push(...parsed.items);
+  const nameLower = file.name.toLowerCase();
+  const isCsv = nameLower.endsWith('.csv') || file.type === 'text/csv';
+  let wb: XLSX.WorkBook;
+  if (isCsv) {
+    // UTF-8 string + FS so UA headers (Опис;Кількість;Од;Ціна;Сума) round-trip
+    const text = new TextDecoder('utf-8').decode(buf);
+    const firstLine = text.split(/\r?\n/)[0] || '';
+    const semis = (firstLine.match(/;/g) || []).length;
+    const commas = (firstLine.match(/,/g) || []).length;
+    wb = XLSX.read(text, {
+      type: 'string',
+      cellDates: true,
+      codepage: 65001,
+      FS: semis > commas ? ';' : undefined,
+    });
+  } else {
+    wb = XLSX.read(buf, { type: 'array', cellDates: true });
   }
 
-  if (allItems.length === 0) {
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) {
+    throw new Error('Spreadsheet has no sheets');
+  }
+  const skippedSheets = wb.SheetNames.slice(1);
+  const sheet = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: '',
+    raw: true,
+  }) as unknown[][];
+
+  const meta = guessMetaFromSheet(rows);
+  const warnings: string[] = [];
+
+  let headerIdx = -1;
+  let colMap: Partial<Record<ColKey, number>> | null = null;
+  let recognizedLabels: string[] = [];
+
+  for (let i = 0; i < Math.min(rows.length, 40); i++) {
+    const { map, keys, labels } = buildColMap(rows[i] || []);
+    if (isValidHeaderMap(map, keys)) {
+      headerIdx = i;
+      colMap = map;
+      recognizedLabels = labels;
+      break;
+    }
+    if (labels.length) recognizedLabels = labels;
+  }
+
+  if (!colMap || headerIdx < 0) {
+    const listed = recognizedLabels.length
+      ? recognizedLabels.join(', ')
+      : '(немає)';
+    throw new Error(
+      `Не знайдено заголовки таблиці. Потрібні колонки: назва, одиниця, кількість, ціна (і/або сума). Розпізнані: ${listed}`,
+    );
+  }
+
+  const { items: rawItems, fileTotal } = rowsToItems(
+    rows.slice(headerIdx + 1),
+    colMap,
+    warnings,
+  );
+
+  const hasMaterialOnly = rawItems.some((it) => isMaterialOnlyLabel(it.description));
+  const items = hasMaterialOnly ? coalesceMaterialRows(rawItems) : rawItems;
+
+  if (items.length === 0) {
     throw new Error('No invoice lines found in spreadsheet');
   }
 
-  const document_type = detectDocumentType(file.name, titles);
-  const invoice_language = detectInvoiceLanguage(file.name, titles);
+  const sum = items.reduce((s, it) => s + (Number(it.total) || 0), 0);
+  if (fileTotal != null && Math.abs(sum - fileTotal) > 0.05) {
+    warnings.push(
+      `Сума позицій ${sum.toFixed(2)} не збігається з підсумком у файлі ${fileTotal.toFixed(2)}`,
+    );
+  }
+
+  const titleCell = rows
+    .slice(0, headerIdx + 1)
+    .flat()
+    .map((c) => String(c ?? '').trim())
+    .find((t) => t.length > 3 && /[a-zA-Zа-яА-Я]/u.test(t));
+  const document_type = detectDocumentType(file.name, [
+    sheetName,
+    titleCell || '',
+  ]);
+  const invoice_language = detectInvoiceLanguage(file.name, [
+    sheetName,
+    titleCell || '',
+  ]);
 
   return {
     ...meta,
-    items: allItems,
+    items,
     currency: meta.currency || 'EUR',
     sourceFileName: file.name,
     document_type,
     invoice_language: invoice_language || meta.invoice_language,
+    importedSheet: sheetName,
+    skippedSheets: skippedSheets.length ? skippedSheets : undefined,
+    warnings: warnings.length ? warnings : undefined,
     notes:
       meta.notes ||
       `Imported from ${file.name}` +
@@ -911,7 +778,7 @@ function parsePdfLineItems(text: string): PrefillInvoiceItem[] {
       const item = toItem({
         description: m2[1],
         quantity: parseNumber(m2[2]),
-        unit: 'm²',
+        unit: 'pcs',
         price: parseNumber(m2[3]),
       });
       if (item) items.push(item);
