@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Plus, X } from 'lucide-react';
+import { Building2, Check, Trash2, X } from 'lucide-react';
 import { CpcFilterChips } from '../components/cpc/CpcFilterChips';
 import { CpcPageHeader } from '../components/cpc/CpcPageHeader';
 import { CpcSearch } from '../components/cpc/CpcSearch';
@@ -14,12 +14,14 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { Button } from '../components/ui/Button';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { formatCurrency, parseMoneyInput } from '../lib/moneyMask';
 import { computeProjectMetrics } from '../lib/projectMetrics';
 import {
   createProject,
+  deleteProjects,
   listProjects,
   uploadProjectReceipt,
   ProjectsSchemaMissingError,
@@ -48,6 +50,10 @@ export default function Projects() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectsToDelete, setProjectsToDelete] = useState<string[]>([]);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [name, setName] = useState('');
   const [clientId, setClientId] = useState('');
@@ -257,11 +263,127 @@ export default function Projects() {
     { key: 'paid' as const, label: 'Оплачені', count: statusCounts.paid },
   ];
 
+  const selectionCount = selectedIds.size;
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every(({ project }) => selectedIds.has(project.id));
+
+  const toggleProjectSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const toggleSelectAllFiltered = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (filtered.length === 0) return prev;
+      const allSelected = filtered.every(({ project }) => prev.has(project.id));
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const { project } of filtered) next.delete(project.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const { project } of filtered) next.add(project.id);
+      return next;
+    });
+  }, [filtered]);
+
+  const openDeleteDialog = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setProjectsToDelete(ids);
+    setDeleteDialogOpen(true);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (projectsToDelete.length === 0) return;
+    setDeleteBusy(true);
+    try {
+      await deleteProjects(projectsToDelete);
+      showSuccess(
+        projectsToDelete.length === 1
+          ? t('projectDeleted') || 'Проєкт видалено'
+          : t('projectsDeleted') || `Видалено проєктів: ${projectsToDelete.length}`,
+      );
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of projectsToDelete) next.delete(id);
+        return next;
+      });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      setDeleteDialogOpen(false);
+      setProjectsToDelete([]);
+    } catch (err) {
+      if (err instanceof ProjectsSchemaMissingError) {
+        showError(t('projectsSchemaMissing') || 'Apply Supabase migration for projects');
+      } else {
+        showError(t('projectDeleteFailed') || 'Не вдалося видалити проєкт');
+      }
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [projectsToDelete, qc, showError, showSuccess, t]);
+
   return (
     <div className="cpc-page pb-4">
       <CpcPageHeader title="Проекти" onNew={() => setOpen(true)} newLabel={newLabel} />
       <CpcSearch value={query} onChange={setQuery} placeholder={searchPlaceholder} />
       <CpcFilterChips chips={chips} active={filter} onChange={setFilter} />
+
+      <AnimatePresence>
+        {selectionCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5 cpc-card"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={toggleSelectAllFiltered}
+                className="w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: allFilteredSelected ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                  borderColor: allFilteredSelected ? 'var(--cpc-copper)' : 'var(--cpc-line)',
+                  color: allFilteredSelected ? 'var(--cpc-on-copper)' : 'transparent',
+                }}
+                title={t('selectAll') || 'Обрати всі'}
+              >
+                <Check size={12} className={allFilteredSelected ? 'opacity-100' : 'opacity-0'} />
+              </button>
+              <p className="text-sm truncate" style={{ color: 'var(--cpc-text)' }}>
+                Обрано: {selectionCount}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => openDeleteDialog(Array.from(selectedIds))}
+                disabled={deleteBusy}
+                className="cpc-icon-btn disabled:opacity-50"
+                style={{ color: '#f0a8a8' }}
+                title={t('deleteSelected') || 'Видалити'}
+              >
+                <Trash2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                disabled={deleteBusy}
+                className="cpc-icon-btn disabled:opacity-50"
+                title={t('clearSelection') || 'Скинути'}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {schemaMissing && (
         <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm">
@@ -308,69 +430,104 @@ export default function Projects() {
               budgetCap > 0
                 ? Math.min(100, Math.round((metrics.expenses / budgetCap) * 100))
                 : progressPct;
+            const isSelected = selectedIds.has(project.id);
             return (
-              <motion.button
+              <motion.div
                 key={project.id}
-                type="button"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i * 0.02, 0.12) }}
-                onClick={() => navigate(`/projects/${project.id}`)}
-                className="cpc-card w-full text-left active:scale-[0.99] transition-transform"
+                className="cpc-card flex items-start gap-2"
+                style={{
+                  background: isSelected ? 'rgba(200,121,74,0.12)' : 'var(--cpc-card)',
+                }}
               >
-                <div className="flex items-start justify-between gap-2 mb-0.5">
-                  <p
-                    className="font-semibold text-[14px] leading-snug truncate min-w-0"
-                    style={{ color: 'var(--cpc-text)' }}
-                  >
-                    {project.name}
-                  </p>
-                  <CpcStatusBadge
-                    label={projectStatusLabel(project.status)}
-                    tone={projectStatusTone(project.status)}
-                  />
-                </div>
-                <p className="cpc-muted text-[12px] mb-2 truncate">{client}</p>
-
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="cpc-muted text-[11px] tabular-nums">
-                    Витрати {formatCompact(metrics.expenses, project.currency)}
-                    {budgetCap > 0
-                      ? ` / ${formatCompact(budgetCap, project.currency)}`
-                      : ''}
-                  </span>
-                  <span
-                    className="text-[11px] font-medium tabular-nums"
-                    style={{ color: 'var(--cpc-text)' }}
-                  >
-                    {spentPct}%
-                  </span>
-                </div>
-                <div
-                  className="cpc-progress mb-2.5"
-                  role="progressbar"
-                  aria-valuenow={spentPct}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
+                <button
+                  type="button"
+                  onClick={() => toggleProjectSelection(project.id)}
+                  className="w-5 h-5 mt-0.5 rounded-md border flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-bg)',
+                    borderColor: isSelected ? 'var(--cpc-copper)' : 'var(--cpc-line)',
+                    color: isSelected ? 'var(--cpc-on-copper)' : 'transparent',
+                  }}
+                  aria-label="Обрати проєкт"
+                  aria-pressed={isSelected}
                 >
-                  <span style={{ width: `${spentPct}%` }} />
-                </div>
+                  {isSelected && <Check size={12} />}
+                </button>
 
-                <div className="flex items-center justify-between gap-2 text-[12px]">
-                  <span className="cpc-muted">
-                    Кошторис{' '}
-                    <b className="font-medium" style={{ color: 'var(--cpc-text)' }}>
-                      {formatCompact(metrics.estimateTotal, project.currency)}
-                    </b>
-                  </span>
-                  <span className="cpc-muted">
-                    Прибуток{' '}
-                    <b className="font-medium cpc-copper tabular-nums">
-                      {formatCompact(metrics.projectedProfit, project.currency)}
-                    </b>
-                  </span>
-                </div>
-              </motion.button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                  className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 active:scale-[0.99] transition-transform"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-0.5">
+                    <p
+                      className="font-semibold text-[14px] leading-snug truncate min-w-0"
+                      style={{ color: 'var(--cpc-text)' }}
+                    >
+                      {project.name}
+                    </p>
+                    <CpcStatusBadge
+                      label={projectStatusLabel(project.status)}
+                      tone={projectStatusTone(project.status)}
+                    />
+                  </div>
+                  <p className="cpc-muted text-[12px] mb-2 truncate">{client}</p>
+
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="cpc-muted text-[11px] tabular-nums">
+                      Витрати {formatCompact(metrics.expenses, project.currency)}
+                      {budgetCap > 0
+                        ? ` / ${formatCompact(budgetCap, project.currency)}`
+                        : ''}
+                    </span>
+                    <span
+                      className="text-[11px] font-medium tabular-nums"
+                      style={{ color: 'var(--cpc-text)' }}
+                    >
+                      {spentPct}%
+                    </span>
+                  </div>
+                  <div
+                    className="cpc-progress mb-2.5"
+                    role="progressbar"
+                    aria-valuenow={spentPct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <span style={{ width: `${spentPct}%` }} />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 text-[12px]">
+                    <span className="cpc-muted">
+                      Кошторис{' '}
+                      <b className="font-medium" style={{ color: 'var(--cpc-text)' }}>
+                        {formatCompact(metrics.estimateTotal, project.currency)}
+                      </b>
+                    </span>
+                    <span className="cpc-muted">
+                      Прибуток{' '}
+                      <b className="font-medium cpc-copper tabular-nums">
+                        {formatCompact(metrics.projectedProfit, project.currency)}
+                      </b>
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openDeleteDialog([project.id])}
+                  disabled={deleteBusy}
+                  className="cpc-icon-btn flex-shrink-0 disabled:opacity-50"
+                  style={{ color: '#f0a8a8' }}
+                  title={t('delete') || 'Видалити'}
+                  aria-label={t('delete') || 'Видалити'}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </motion.div>
             );
           })}
         </div>
@@ -508,6 +665,30 @@ export default function Projects() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => {
+          if (deleteBusy) return;
+          setDeleteDialogOpen(false);
+          setProjectsToDelete([]);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title={
+          projectsToDelete.length === 1
+            ? t('deleteProject') || 'Видалити проєкт'
+            : t('deleteSelected') || 'Видалити обрані'
+        }
+        description={
+          projectsToDelete.length === 1
+            ? t('projectDeleteConfirm') ||
+              'Видалити цей проєкт? Роботи, витрати й аванси цього об’єкта також зникнуть.'
+            : t('projectsDeleteConfirm') ||
+              `Видалити обрані проєкти (${projectsToDelete.length})? Пов’язані роботи та витрати також зникнуть.`
+        }
+        confirmText={deleteBusy ? t('deleting') || 'Видалення…' : t('delete') || 'Видалити'}
+        type="danger"
+      />
     </div>
   );
 }

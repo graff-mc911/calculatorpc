@@ -187,6 +187,26 @@ export async function deleteProject(id: string): Promise<void> {
   }
 }
 
+/** Delete one or many projects owned by the current user. */
+export async function deleteProjects(ids: string[]): Promise<void> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return;
+  if (unique.length === 1) {
+    await deleteProject(unique[0]);
+    return;
+  }
+  const uid = await requireUserId();
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .in('id', unique)
+    .eq('user_id', uid);
+  if (error) {
+    if (isMissingRelation(error)) throw new ProjectsSchemaMissingError();
+    throw error;
+  }
+}
+
 export async function fetchProjectBundle(projectId: string): Promise<ProjectBundle> {
   const uid = await requireUserId();
 
