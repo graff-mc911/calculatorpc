@@ -293,8 +293,9 @@ export const InvoiceForm: React.FC = () => {
       work_period_end: draft.date || prev.work_period_end,
       document_number: draft.document_number || prev.document_number,
       currency: asCpcCurrency(draft.currency || 'EUR', 'EUR'),
-      document_type: 'invoice',
-      invoice_language: language || draft.invoice_language || 'en',
+      document_type: draft.document_type || 'invoice',
+      invoice_language:
+        draft.invoice_language || language || prev.invoice_language || 'en',
       object_address: draft.object_address || prev.object_address,
       notes: draft.notes || prev.notes,
     }));
